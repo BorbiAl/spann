@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: spann-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: spann-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: spann-backend-worker
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: ["celery", "-A", "app.tasks.worker.celery_app", "worker", "--loglevel=INFO"]
+
+  backend-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: spann-backend-beat
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: ["celery", "-A", "app.tasks.worker.celery_app", "beat", "--loglevel=INFO"]
+
+  chat-server:
+    build:
+      context: ./chat-server
+      dockerfile: Dockerfile
+    container_name: spann-chat-server
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  mesh-relay:
+    build:
+      context: ./mesh-relay
+      dockerfile: Dockerfile
+    container_name: spann-mesh-relay
+    env_file:
+      - .env
+    ports:
+      - "8090:8090"
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8090/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  mesh-daemon:
+    build:
+      context: ./mesh-daemon
+      dockerfile: Dockerfile
+    container_name: spann-mesh-daemon
+    env_file:
+      - .env
+    ports:
+      - "7070:7070"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7070/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5

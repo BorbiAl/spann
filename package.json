@@ -1,0 +1,38 @@
+{
+  "name": "spann",
+  "version": "1.0.0",
+  "description": "A team communication platform that works everywhere and understands everyone, combining real-time chat with AI-powered language translation, cultural adaptation, and communication coaching — so global teams collaborate without barriers. When infrastructure fails, our peer-to-peer mesh network keeps teams connected offline via Bluetooth and Wi-Fi.",
+  "main": "server/index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server/index.js",
+    "backend": "node server/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BorbiAl/spann.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/BorbiAl/spann/issues"
+  },
+  "homepage": "https://github.com/BorbiAl/spann#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}

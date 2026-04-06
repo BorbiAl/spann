@@ -1,0 +1,28 @@
+node_modules/
+dist/
+server/data/state.json
+
+# Local environment files
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Go
+chat-server/chat-server
+chat-server/*.exe
+
+# Rust
+mesh-relay/target/
+
+# C++ / CMake
+mesh-daemon/build/
+cmake-build-*/
+.env.example
