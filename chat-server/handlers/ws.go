@@ -85,6 +85,7 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 		claims.UserID,
 		claims.Name,
 		h.Config.MessageByteLimit,
+		h.Config.MessageRatePerMin,
 		h.Config.PingPeriod,
 		h.Config.PongWait,
 		h.Config.WriteWait,

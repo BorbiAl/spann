@@ -1,6 +1,8 @@
 use deadpool_redis::{redis::AsyncCommands, Pool};
 use serde_json::Value;
 
+const MAX_QUEUE_SIZE_PER_NODE: isize = 1000;
+
 #[derive(Clone)]
 pub struct MessageQueue {
     pool: Pool,
@@ -26,6 +28,10 @@ impl MessageQueue {
             .rpush(key, payload_json)
             .await
             .map_err(|error| format!("redis enqueue error: {error}"))?;
+        let _: () = connection
+            .ltrim(format!("mesh:queue:{node_id}"), -MAX_QUEUE_SIZE_PER_NODE, -1)
+            .await
+            .map_err(|error| format!("redis queue trim error: {error}"))?;
         Ok(())
     }
 

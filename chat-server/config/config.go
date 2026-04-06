@@ -21,6 +21,7 @@ type Config struct {
 	RedisURL         string
 	JWTSecret        string
 	MessageByteLimit int64
+	MessageRatePerMin int
 	PingPeriod       time.Duration
 	PongWait         time.Duration
 	WriteWait        time.Duration
@@ -33,6 +34,7 @@ func Load() Config {
 		RedisURL:         getEnv("REDIS_URL", DefaultRedisURL),
 		JWTSecret:        getEnv("JWT_SECRET", ""),
 		MessageByteLimit: int64(getEnvInt("CHAT_MESSAGE_LIMIT_BYTES", DefaultMessageBytes)),
+		MessageRatePerMin: getEnvInt("CHAT_MESSAGE_RATE_PER_MINUTE", 60),
 		PingPeriod:       time.Duration(getEnvInt("CHAT_PING_PERIOD_SECONDS", DefaultPingPeriodSec)) * time.Second,
 		PongWait:         time.Duration(getEnvInt("CHAT_PONG_WAIT_SECONDS", DefaultPongWaitSec)) * time.Second,
 		WriteWait:        time.Duration(getEnvInt("CHAT_WRITE_WAIT_SECONDS", DefaultWriteWaitSec)) * time.Second,

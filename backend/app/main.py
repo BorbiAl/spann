@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from logging.config import dictConfig
+from time import monotonic
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -63,6 +64,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name, version="1.0.0")
+APP_START_MONOTONIC = monotonic()
 
 app.add_middleware(
     CORSMiddleware,
@@ -166,7 +168,13 @@ async def on_shutdown() -> None:
 async def health() -> object:
     """Container health endpoint."""
 
-    return success_response({"status": "ok"})
+    return success_response(
+        {
+            "status": "ok",
+            "version": app.version,
+            "uptime": int(monotonic() - APP_START_MONOTONIC),
+        }
+    )
 
 
 app.include_router(auth.router)

@@ -89,7 +89,7 @@ void Logger::Log(const std::string& level,
   }
   output << "}";
 
-  std::cout << output.str() << std::endl;
+  std::cout << output.str() << '\n';
 }
 
 }  // namespace spann::utils

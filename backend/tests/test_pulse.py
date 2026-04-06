@@ -11,7 +11,7 @@ def test_get_channel_pulse(client, auth_headers, monkeypatch):
 
     monkeypatch.setattr("app.routers.pulse.db.get_pulse_snapshot", fake_get_snapshot)
 
-    response = client.get("/pulse/ch-1", headers=auth_headers)
+    response = client.get("/pulse/33333333-3333-4333-8333-333333333333", headers=auth_headers)
 
     assert response.status_code == 200
     assert response.json()["data"]["label"] == "neutral"

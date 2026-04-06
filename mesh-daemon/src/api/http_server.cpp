@@ -6,8 +6,8 @@
 
 namespace spann::api {
 
-HttpServer::HttpServer(const std::uint16_t port, Handlers& handlers)
-    : port_(port), handlers_(handlers) {}
+HttpServer::HttpServer(std::string bind_address, const std::uint16_t port, Handlers& handlers)
+  : bind_address_(std::move(bind_address)), port_(port), handlers_(handlers) {}
 
 HttpServer::~HttpServer() { Stop(); }
 
@@ -49,8 +49,8 @@ void HttpServer::Start() {
   });
 
   thread_ = std::thread([this]() {
-    utils::Logger::Instance().Info("http_server_started", {{"port", std::to_string(port_)}});
-    app_.port(port_).multithreaded().run();
+    utils::Logger::Instance().Info("http_server_started", {{"bind", bind_address_}, {"port", std::to_string(port_)}});
+    app_.bindaddr(bind_address_).port(port_).multithreaded().run();
   });
 }
 

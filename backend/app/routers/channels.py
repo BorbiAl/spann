@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
+from uuid import UUID
 
 from app.database import db
 from app.schemas.common import error_response, success_response
@@ -16,20 +17,17 @@ class ChannelCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    workspace_id: str = Field(min_length=1, max_length=128)
+    workspace_id: UUID
     name: str = Field(min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=500)
     tone: str = Field(default="neutral", min_length=2, max_length=64)
 
 
 @router.get("/channels")
-async def list_channels(workspace_id: str, request: Request):
+async def list_channels(workspace_id: UUID, request: Request):
     """List channels for the specified workspace."""
 
-    if not workspace_id.strip():
-        return error_response(status_code=400, code="BAD_REQUEST", message="workspace_id is required.")
-
-    rows = await db.list_channels(workspace_id)
+    rows = await db.list_channels(str(workspace_id))
     return success_response(rows)
 
 
@@ -39,7 +37,7 @@ async def create_channel(payload: ChannelCreateRequest, request: Request):
 
     user_id = request.state.user_id
     channel = await db.create_channel(
-        workspace_id=payload.workspace_id,
+        workspace_id=str(payload.workspace_id),
         name=payload.name,
         description=payload.description,
         tone=payload.tone,

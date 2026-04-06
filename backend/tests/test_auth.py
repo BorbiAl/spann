@@ -8,7 +8,7 @@ def test_login_success(client, monkeypatch):
 
     async def fake_authenticate(email: str, password: str):
         return {
-            "user": {"id": "user-123", "email": email, "display_name": "Test User"},
+            "user": {"id": "11111111-1111-4111-8111-111111111111", "email": email, "display_name": "Test User"},
             "supabase_access_token": "supabase-token",
         }
 
@@ -21,7 +21,7 @@ def test_login_success(client, monkeypatch):
     assert body["status"] == 200
     assert body["error"] is None
     assert "token" in body["data"]
-    assert body["data"]["user"]["id"] == "user-123"
+    assert body["data"]["user"]["id"] == "11111111-1111-4111-8111-111111111111"
 
 
 def test_magic_link_returns_accepted(client, monkeypatch):

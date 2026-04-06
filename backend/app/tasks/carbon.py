@@ -13,7 +13,12 @@ from app.tasks.worker import celery_app
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(name="app.tasks.carbon.recalculate_carbon_leaderboard")
+@celery_app.task(
+    name="app.tasks.carbon.recalculate_carbon_leaderboard",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
 def recalculate_carbon_leaderboard(workspace_id: str | None = None) -> dict[str, int]:
     """Recalculate carbon leaderboard aggregates and cache via Redis."""
 

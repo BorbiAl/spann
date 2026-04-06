@@ -19,7 +19,11 @@ def test_get_leaderboard(client, auth_headers, monkeypatch):
 
     monkeypatch.setattr("app.routers.carbon.db.get_carbon_leaderboard", fake_get_leaderboard)
 
-    response = client.get("/carbon/leaderboard", params={"workspace_id": "ws-1"}, headers=auth_headers)
+    response = client.get(
+        "/carbon/leaderboard",
+        params={"workspace_id": "22222222-2222-4222-8222-222222222222"},
+        headers=auth_headers,
+    )
 
     assert response.status_code == 200
     assert response.json()["data"][0]["total_score"] == 42
@@ -39,7 +43,11 @@ def test_log_carbon_entry(client, auth_headers, monkeypatch):
     response = client.post(
         "/carbon/log",
         headers=auth_headers,
-        json={"workspace_id": "ws-1", "commute_mode": "bike", "distance_km": 4.2},
+        json={
+            "workspace_id": "22222222-2222-4222-8222-222222222222",
+            "commute_mode": "bike",
+            "distance_km": 4.2,
+        },
     )
 
     assert response.status_code == 201

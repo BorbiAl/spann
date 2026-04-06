@@ -11,6 +11,8 @@ class _NoopRateLimiter:
 def test_get_channel_messages(client, auth_headers, monkeypatch):
     """Message history endpoint returns cursor payload."""
 
+    channel_id = "33333333-3333-4333-8333-333333333333"
+
     async def fake_get_channel(channel_id: str):
         return {"id": channel_id, "tone": "neutral"}
 
@@ -21,7 +23,7 @@ def test_get_channel_messages(client, auth_headers, monkeypatch):
     monkeypatch.setattr("app.routers.messages.db.get_channel", fake_get_channel)
     monkeypatch.setattr("app.routers.messages.db.list_messages", fake_list_messages)
 
-    response = client.get("/channels/ch-1/messages", headers=auth_headers)
+    response = client.get(f"/channels/{channel_id}/messages", headers=auth_headers)
 
     assert response.status_code == 200
     assert response.json()["data"]["messages"][0]["id"] == "m-1"
@@ -53,7 +55,7 @@ def test_create_message(client, auth_headers, monkeypatch):
     response = client.post(
         "/messages",
         headers=auth_headers,
-        json={"channel_id": "ch-1", "text": "Hello team"},
+        json={"channel_id": "33333333-3333-4333-8333-333333333333", "text": "Hello team"},
     )
 
     assert response.status_code == 201

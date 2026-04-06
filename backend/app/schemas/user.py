@@ -10,12 +10,16 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 class LoginRequest(BaseModel):
     """Credentials for email/password login."""
 
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
 
 
 class MagicLinkRequest(BaseModel):
     """Request payload for sending a magic link email."""
+
+    model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
 

@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import jwt
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.config import settings
 from app.database import db
+from app.middleware.rate_limit import rate_limiter
 from app.schemas.common import error_response, success_response
 from app.schemas.user import LoginRequest, MagicLinkRequest
 
@@ -29,8 +30,15 @@ def _build_access_token(*, user_id: str, email: str) -> str:
 
 
 @router.post("/login")
-async def login(payload: LoginRequest):
+async def login(payload: LoginRequest, request: Request):
     """Authenticate credentials via Supabase Auth and issue API JWT."""
+
+    source_ip = request.client.host if request.client else "unknown"
+    await rate_limiter.enforce(
+        identity=source_ip,
+        bucket="auth",
+        limit=settings.auth_rate_limit_per_minute,
+    )
 
     auth_result = await db.authenticate_user(payload.email, payload.password)
     if auth_result is None:
@@ -52,8 +60,15 @@ async def login(payload: LoginRequest):
 
 
 @router.post("/magic-link")
-async def send_magic_link(payload: MagicLinkRequest):
+async def send_magic_link(payload: MagicLinkRequest, request: Request):
     """Send a passwordless sign-in link using Supabase email OTP."""
+
+    source_ip = request.client.host if request.client else "unknown"
+    await rate_limiter.enforce(
+        identity=source_ip,
+        bucket="auth",
+        limit=settings.auth_rate_limit_per_minute,
+    )
 
     await db.send_magic_link(payload.email)
     return success_response(

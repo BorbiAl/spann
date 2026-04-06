@@ -3,6 +3,7 @@ package hub
 import (
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,9 +20,12 @@ type Client struct {
 	UserName        string
 	Channels        map[string]bool
 	MessageByteLimit int64
+	MessageRatePerMin int
 	PingPeriod      time.Duration
 	PongWait        time.Duration
 	WriteWait       time.Duration
+	rateMu          sync.Mutex
+	rateWindow      []time.Time
 }
 
 // NewClient builds a websocket client with heartbeat and write buffer defaults.
@@ -32,6 +36,7 @@ func NewClient(
 	userID string,
 	userName string,
 	messageByteLimit int64,
+	messageRatePerMin int,
 	pingPeriod time.Duration,
 	pongWait time.Duration,
 	writeWait time.Duration,
@@ -45,10 +50,41 @@ func NewClient(
 		UserName:        userName,
 		Channels:        make(map[string]bool),
 		MessageByteLimit: messageByteLimit,
+		MessageRatePerMin: messageRatePerMin,
 		PingPeriod:      pingPeriod,
 		PongWait:        pongWait,
 		WriteWait:       writeWait,
+		rateWindow:      make([]time.Time, 0, 64),
 	}
+}
+
+// AllowMessageSend enforces max messages per minute per websocket client.
+func (c *Client) AllowMessageSend(now time.Time) bool {
+	limit := c.MessageRatePerMin
+	if limit <= 0 {
+		limit = 60
+	}
+
+	cutoff := now.Add(-1 * time.Minute)
+
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+
+	writeIdx := 0
+	for _, ts := range c.rateWindow {
+		if ts.After(cutoff) {
+			c.rateWindow[writeIdx] = ts
+			writeIdx++
+		}
+	}
+	c.rateWindow = c.rateWindow[:writeIdx]
+
+	if len(c.rateWindow) >= limit {
+		return false
+	}
+
+	c.rateWindow = append(c.rateWindow, now)
+	return true
 }
 
 // ReadPump reads inbound events and dispatches them to handlers.

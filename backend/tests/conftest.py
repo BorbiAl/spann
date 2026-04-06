@@ -26,7 +26,7 @@ def auth_headers() -> dict[str, str]:
     now = datetime.now(UTC)
     token = jwt.encode(
         {
-            "sub": "user-123",
+            "sub": "11111111-1111-4111-8111-111111111111",
             "email": "tester@example.com",
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=30)).timestamp()),

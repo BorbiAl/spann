@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,8 +13,8 @@ class MessageCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    channel_id: str = Field(min_length=1, max_length=128)
-    text: str = Field(min_length=1, max_length=2000)
+    channel_id: UUID
+    text: str = Field(min_length=1, max_length=4096)
 
 
 class MessageResponse(BaseModel):

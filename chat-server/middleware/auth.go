@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -13,6 +14,11 @@ import (
 type Claims struct {
 	UserID string
 	Name   string
+}
+
+type wsClaims struct {
+	Name string `json:"name"`
+	jwt.RegisteredClaims
 }
 
 // ValidateWSJWT validates JWT from Authorization header or token query string.
@@ -33,7 +39,14 @@ func ValidateWSJWT(r *http.Request, secret string) (Claims, error) {
 		return Claims{}, errors.New("missing token")
 	}
 
-	parsed, err := jwt.Parse(token, func(token *jwt.Token) (any, error) {
+	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuedAt(),
+	)
+
+	parsedClaims := &wsClaims{}
+	parsed, err := parser.ParseWithClaims(token, parsedClaims, func(token *jwt.Token) (any, error) {
 		if token.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, fmt.Errorf("unexpected signing method: %s", token.Method.Alg())
 		}
@@ -45,21 +58,16 @@ func ValidateWSJWT(r *http.Request, secret string) (Claims, error) {
 	if !parsed.Valid {
 		return Claims{}, errors.New("invalid token")
 	}
-
-	claims, ok := parsed.Claims.(jwt.MapClaims)
-	if !ok {
-		return Claims{}, errors.New("invalid claims")
+	if parsedClaims.ExpiresAt == nil || parsedClaims.ExpiresAt.Time.Before(time.Now().UTC()) {
+		return Claims{}, errors.New("token expired")
 	}
 
-	sub, ok := claims["sub"].(string)
-	if !ok || strings.TrimSpace(sub) == "" {
+	sub := strings.TrimSpace(parsedClaims.Subject)
+	if sub == "" {
 		return Claims{}, errors.New("missing subject claim")
 	}
 
-	name := ""
-	if value, exists := claims["name"]; exists {
-		name, _ = value.(string)
-	}
+	name := strings.TrimSpace(parsedClaims.Name)
 	if name == "" {
 		name = sub
 	}

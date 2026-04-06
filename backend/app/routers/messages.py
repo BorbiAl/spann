@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
+from uuid import UUID
 
 from app.config import settings
 from app.database import db
@@ -16,7 +17,7 @@ router = APIRouter(tags=["messages"])
 
 @router.get("/channels/{channel_id}/messages")
 async def get_channel_messages(
-    channel_id: str,
+    channel_id: UUID,
     request: Request,
     cursor: str | None = None,
     limit: int = 25,
@@ -30,11 +31,12 @@ async def get_channel_messages(
         limit=settings.messages_rate_limit_per_minute,
     )
 
-    channel = await db.get_channel(channel_id)
+    channel_id_text = str(channel_id)
+    channel = await db.get_channel(channel_id_text)
     if channel is None:
         return error_response(status_code=404, code="CHANNEL_NOT_FOUND", message="Channel does not exist.")
 
-    data = await db.list_messages(channel_id=channel_id, cursor=cursor, limit=limit)
+    data = await db.list_messages(channel_id=channel_id_text, cursor=cursor, limit=limit)
     return success_response(data)
 
 
@@ -57,12 +59,12 @@ async def create_message(payload: MessageCreateRequest, request: Request):
             message=f"Message size {byte_size} bytes exceeds limit of {settings.max_message_bytes} bytes.",
         )
 
-    channel = await db.get_channel(payload.channel_id)
+    channel = await db.get_channel(str(payload.channel_id))
     if channel is None:
         return error_response(status_code=404, code="CHANNEL_NOT_FOUND", message="Channel does not exist.")
 
     created = await db.create_message(
-        channel_id=payload.channel_id,
+        channel_id=str(payload.channel_id),
         user_id=user_id,
         text=payload.text,
     )
@@ -70,7 +72,7 @@ async def create_message(payload: MessageCreateRequest, request: Request):
     prefs = await db.get_user_preferences(user_id)
     trigger_coaching_task(
         message_id=created["id"],
-        channel_id=payload.channel_id,
+        channel_id=str(payload.channel_id),
         user_id=user_id,
         text=payload.text,
         tone=channel.get("tone", "neutral"),

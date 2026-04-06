@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,7 +35,8 @@ class Settings(BaseSettings):
     request_id_header: str = "X-Request-ID"
 
     translate_rate_limit_per_minute: int = 100
-    messages_rate_limit_per_minute: int = 1000
+    messages_rate_limit_per_minute: int = 60
+    auth_rate_limit_per_minute: int = 10
     default_public_rate_limit_per_minute: int = 300
 
     max_message_bytes: int = 4096
@@ -46,6 +47,14 @@ class Settings(BaseSettings):
     celery_result_backend: str = Field(default="redis://redis:6379/1", alias="CELERY_RESULT_BACKEND")
 
     next_public_api_url: str = Field(default="http://localhost:8000", alias="NEXT_PUBLIC_API_URL")
+
+    @model_validator(mode="after")
+    def validate_security_defaults(self) -> "Settings":
+        """Block insecure production settings early at startup."""
+
+        if self.env.lower() == "production" and "*" in self.cors_origins:
+            raise ValueError("ALLOWED_ORIGINS cannot include '*' in production")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

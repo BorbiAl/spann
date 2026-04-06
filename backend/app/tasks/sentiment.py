@@ -11,7 +11,12 @@ from app.tasks.worker import celery_app
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(name="app.tasks.sentiment.score_active_channels")
+@celery_app.task(
+    name="app.tasks.sentiment.score_active_channels",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
 def score_active_channels_task() -> dict[str, int]:
     """Periodically recompute sentiment for active channels."""
 
@@ -20,7 +25,12 @@ def score_active_channels_task() -> dict[str, int]:
     return result
 
 
-@celery_app.task(name="app.tasks.sentiment.score_single_channel")
+@celery_app.task(
+    name="app.tasks.sentiment.score_single_channel",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
 def score_single_channel_task(channel_id: str) -> dict[str, str]:
     """Run sentiment scoring for one channel on demand."""
 

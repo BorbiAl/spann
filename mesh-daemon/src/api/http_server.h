@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <string>
 #include <thread>
 
 #include <crow.h>
@@ -11,13 +12,14 @@ namespace spann::api {
 
 class HttpServer {
  public:
-  HttpServer(std::uint16_t port, Handlers& handlers);
+  HttpServer(std::string bind_address, std::uint16_t port, Handlers& handlers);
   ~HttpServer();
 
   void Start();
   void Stop();
 
  private:
+  std::string bind_address_;
   std::uint16_t port_;
   Handlers& handlers_;
   crow::SimpleApp app_;

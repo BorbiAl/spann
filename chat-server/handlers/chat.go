@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"strings"
+	"time"
 
 	"spann/chat-server/hub"
 	"spann/chat-server/models"
@@ -22,6 +23,10 @@ func HandleMessageSend(h *WSHandler, client *hub.Client, event models.ClientEven
 	}
 	if int64(len([]byte(text))) > h.Config.MessageByteLimit {
 		client.SendError(4004, "message exceeds 4096 byte limit")
+		return
+	}
+	if !client.AllowMessageSend(time.Now().UTC()) {
+		client.SendError(4290, "rate limit exceeded: max 60 messages per minute")
 		return
 	}
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,9 +13,9 @@ class CarbonLogRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    workspace_id: str = Field(min_length=1, max_length=128)
+    workspace_id: UUID
     commute_mode: str = Field(min_length=2, max_length=32)
-    distance_km: float = Field(gt=0, le=300)
+    distance_km: float = Field(gt=0, le=1000)
 
 
 class CarbonLogResponse(BaseModel):

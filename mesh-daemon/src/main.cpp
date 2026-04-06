@@ -39,6 +39,7 @@ int main() {
 
   const auto node_name = GetEnvOrDefault("NODE_NAME", "spann-mesh-node");
   const auto db_path = GetEnvOrDefault("MESH_DB_PATH", "/tmp/spann-mesh-db");
+  const auto api_bind = GetEnvOrDefault("MESH_DAEMON_BIND", "127.0.0.1");
   const std::uint16_t port = static_cast<std::uint16_t>(std::stoi(GetEnvOrDefault("MESH_DAEMON_PORT", "7070")));
 
   spann::utils::Logger::Instance().Info("mesh_daemon_starting", {{"port", std::to_string(port)}});
@@ -113,7 +114,7 @@ int main() {
   };
 
   spann::api::Handlers handlers(failover, scanner, message_store, router, sync_callback);
-  spann::api::HttpServer http_server(port, handlers);
+  spann::api::HttpServer http_server(api_bind, port, handlers);
   http_server.Start();
 
   while (g_running.load()) {
