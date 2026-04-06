@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     supabase_url: str = Field(alias="SUPABASE_URL")
     supabase_anon_key: str = Field(alias="SUPABASE_ANON_KEY")
-    supabase_service_key: str = Field(alias="SUPABASE_SERVICE_KEY")
+    supabase_service_key: str | None = Field(default=None, alias="SUPABASE_SERVICE_KEY")
 
     groq_api_key: str = Field(alias="GROQ_API_KEY")
     groq_model: str = "llama-3.1-70b-versatile"
@@ -52,6 +52,12 @@ class Settings(BaseSettings):
         """Return CORS origins as a normalized list."""
 
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def supabase_api_key(self) -> str:
+        """Return service role key when available, otherwise fall back to publishable key."""
+
+        return (self.supabase_service_key or self.supabase_anon_key).strip()
 
 
 @lru_cache(maxsize=1)

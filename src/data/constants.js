@@ -225,7 +225,11 @@ export function incrementReaction(reactions, emoji) {
 	return next;
 }
 
-export const API_BASE = window.SPANN_API_BASE || "http://localhost:3001/api";
+const runtimeApiBase = typeof window !== "undefined" ? window.SPANN_API_BASE : "";
+const envApiBase = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
+
+// Prefer runtime override, then Vite env, then relative API path handled by Vite proxy.
+export const API_BASE = String(runtimeApiBase || envApiBase || "/api").replace(/\/+$/, "");
 
 export async function apiRequest(path, options = {}) {
 	const response = await fetch(`${API_BASE}${path}`, {

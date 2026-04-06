@@ -10,8 +10,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server/index.js",
-    "backend": "node server/index.js",
+    "start": "npm run backend",
+    "backend": "python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000",
+    "backend:legacy": "node server/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -29,10 +30,11 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "vite": "^5.4.10"
+    "@ljharb/tsconfig": "^0.3.2",
+    "vite": "^8.0.5"
   }
 }

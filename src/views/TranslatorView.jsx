@@ -1,6 +1,16 @@
 import React, { useState } from "react";
 import { CULTURES, apiRequest } from "../data/constants";
 
+const CULTURE_TO_LOCALE = {
+	American: "en-US",
+	British: "en-GB",
+	Bulgarian: "bg-BG",
+	Japanese: "ja-JP",
+	German: "de-DE",
+	Brazilian: "pt-BR",
+	Arabic: "ar-SA"
+};
+
 export default function TranslatorView() {
 	const [sourceCulture, setSourceCulture] = useState("🇺🇸 American");
 	const [targetCulture, setTargetCulture] = useState("🇧🇬 Bulgarian");
@@ -24,27 +34,37 @@ export default function TranslatorView() {
 		}
 
 		setIsTranslating(true);
+		const sourceLabel = cultureLabel(sourceCulture);
+		const targetLabel = cultureLabel(targetCulture);
 
 		try {
-			const payload = await apiRequest("/translator/adapt", {
+			const payload = await apiRequest("/translate", {
 				method: "POST",
 				body: JSON.stringify({
-					inputText: trimmed,
-					sourceCulture,
-					targetCulture
+					phrase: trimmed,
+					source_locale: CULTURE_TO_LOCALE[sourceLabel] || "en-US",
+					target_locale: CULTURE_TO_LOCALE[targetLabel] || "en-US",
+					source_culture: sourceLabel || sourceCulture,
+					target_culture: targetLabel || targetCulture,
+					workplace_tone: "neutral"
 				})
 			});
 
-			if (payload && payload.result) {
-				setResult(payload.result);
+			const apiResult = payload?.data || payload?.result;
+			if (apiResult && apiResult.literal && apiResult.cultural) {
+				setResult({
+					literal: apiResult.literal,
+					cultural: apiResult.cultural,
+					note:
+						apiResult.explanation ||
+						apiResult.note ||
+						`Adjusted for ${targetLabel || targetCulture} communication norms and tone.`
+				});
 				return;
 			}
 
 			throw new Error("Missing translation result");
 		} catch (error) {
-			const sourceLabel = cultureLabel(sourceCulture);
-			const targetLabel = cultureLabel(targetCulture);
-
 			if (trimmed.toLowerCase() === "break a leg!" && sourceLabel === "American" && targetLabel === "Bulgarian") {
 				setResult({
 					literal: "Счупи крак!",

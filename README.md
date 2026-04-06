@@ -9,13 +9,22 @@ A team communication platform that works everywhere and understands everyone, co
 npm install
 ```
 
-### 2) Start backend API (terminal 1)
+### 2) Start FastAPI backend from backend/ (terminal 1)
+
+If you use a virtual environment, activate it first.
+
+```bash
+# Windows PowerShell example
+./.venv/Scripts/Activate.ps1
+```
+
+Then run:
 
 ```bash
 npm run backend
 ```
 
-The backend runs on `http://localhost:3001`.
+The backend runs on `http://localhost:8000`.
 
 ### 3) Start frontend dev server (terminal 2)
 
@@ -25,30 +34,17 @@ npm run dev
 
 Open the Vite URL shown in your terminal (usually `http://localhost:5173`).
 
-The frontend will automatically try to connect to `http://localhost:3001/api`.
-If the backend is unavailable, chat interactions gracefully fall back to local state.
+The frontend API base is configured through environment variables and defaults to a relative `/api` path.
+In dev mode, Vite proxies `/api/*` to `VITE_API_PROXY_TARGET` (default: `http://localhost:8000`).
 
 ## API quick check
 
 ```bash
-curl http://localhost:3001/api/health
+curl http://localhost:8000/health
 ```
 
 Expected response includes:
 
 ```json
-{"ok":true,"service":"spann-api"}
+{"data":{"status":"ok"},"error":null,"status":200}
 ```
-
-## Main API routes
-
-- `GET /api/health`
-- `GET /api/chat/state`
-- `GET /api/chat/channels`
-- `GET /api/chat/messages/:channel`
-- `POST /api/chat/messages`
-- `POST /api/chat/reactions`
-- `POST /api/chat/unread/clear`
-- `POST /api/chat/simulate`
-- `POST /api/chat/reset`
-- `POST /api/translator/adapt`

@@ -19,7 +19,10 @@ router = APIRouter(tags=["translate"])
 async def translate(payload: TranslateRequest, request: Request):
     """Translate and culturally adapt text for a target audience."""
 
-    user_id = request.state.user_id
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        user_id = request.client.host if request.client else "anonymous"
+
     await rate_limiter.enforce(
         identity=user_id,
         bucket="translate",

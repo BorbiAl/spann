@@ -19,6 +19,7 @@ UNPROTECTED_PATHS = {
     "/health",
     "/auth/login",
     "/auth/magic-link",
+    "/translate",
     "/docs",
     "/redoc",
     "/openapi.json",

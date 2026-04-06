@@ -52,7 +52,7 @@ class DatabaseClient:
 
         async with self._lock:
             if self._client is None:
-                self._client = await acreate_client(settings.supabase_url, settings.supabase_service_key)
+                self._client = await acreate_client(settings.supabase_url, settings.supabase_api_key)
                 logger.info("supabase_client_initialized")
 
         return self._client
