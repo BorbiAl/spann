@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import jwt
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import db
@@ -53,7 +54,7 @@ def _build_refresh_token() -> tuple[str, str]:
 
 
 @router.post("/login")
-async def login(payload: LoginRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)):
+async def login(payload: LoginRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)) -> JSONResponse:
     """Authenticate credentials and issue a rotated token pair."""
 
     auth_result = await db.authenticate_user(payload.email, payload.password)
@@ -94,7 +95,7 @@ async def login(payload: LoginRequest, request: Request, _rate_limit: None = Dep
 
 
 @router.post("/refresh")
-async def refresh(payload: RefreshRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)):
+async def refresh(payload: RefreshRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)) -> JSONResponse:
     """Rotate refresh token and issue a fresh access/refresh pair."""
 
     old_token_hash = _hash_refresh_token(payload.refresh_token)
@@ -151,7 +152,7 @@ async def refresh(payload: RefreshRequest, request: Request, _rate_limit: None =
 
 
 @router.post("/logout")
-async def logout(payload: LogoutRequest, request: Request):
+async def logout(payload: LogoutRequest, request: Request) -> JSONResponse:
     """Revoke supplied refresh token for the authenticated user."""
 
     user_id = str(request.state.user_id)
@@ -173,11 +174,11 @@ async def logout(payload: LogoutRequest, request: Request):
 
 
 @router.post("/magic-link")
-async def send_magic_link(payload: MagicLinkRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)):
+async def send_magic_link(payload: MagicLinkRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)) -> JSONResponse:
     """Send a passwordless sign-in link using Supabase email OTP."""
 
     await db.send_magic_link(payload.email)
     return success_response(
         {"message": "Magic link sent if the email is registered."},
-        status_code=202,
+        status_code=200,
     )

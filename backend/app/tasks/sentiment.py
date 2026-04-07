@@ -1,11 +1,13 @@
 """Celery tasks for sentiment pulse updates."""
 
 from __future__ import annotations
+# mypy: disable-error-code=untyped-decorator
 
 import asyncio
 from datetime import UTC, datetime
 import json
 import logging
+from typing import Any
 
 from app.database import db
 from app.services.groq_client import GroqAPIError, GroqTimeoutError
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
     task_time_limit=30,
     task_soft_time_limit=25,
 )
-def score_active_channels_task(self) -> dict[str, int]:
+def score_active_channels_task(self: Any) -> dict[str, int]:
     """Periodically recompute sentiment for active channels."""
 
     try:
@@ -52,7 +54,7 @@ def score_active_channels_task(self) -> dict[str, int]:
     task_time_limit=30,
     task_soft_time_limit=25,
 )
-def score_single_channel_task(self, channel_id: str) -> dict[str, str]:
+def score_single_channel_task(self: Any, channel_id: str) -> dict[str, str]:
     """Run sentiment scoring for one channel on demand."""
 
     minute_bucket = datetime.now(UTC).replace(second=0, microsecond=0)

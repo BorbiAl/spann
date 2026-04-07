@@ -8,7 +8,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict, cast
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -39,6 +39,48 @@ EMISSION_FACTORS_G_PER_KM = {
     "flight": 255.0,
     "remote": 0.0,
 }
+
+
+class UserRow(TypedDict):
+    id: str
+    email: str
+    name: str
+    initials: str
+    color: str
+    locale: str
+    culture: str
+
+
+class MessageRow(TypedDict):
+    id: str
+    channel_id: str
+    user_id: str
+    workspace_id: str
+    text: str
+    text_translated: str | None
+    source_locale: str | None
+    sentiment_score: float | None
+    mesh_origin: bool
+    deleted_at: str | None
+    created_at: str
+    updated_at: str
+
+
+class WorkspaceMemberRow(TypedDict):
+    workspace_id: str
+    user_id: str
+    role: str
+    joined_at: str
+
+
+class CarbonLogRow(TypedDict):
+    id: str
+    user_id: str
+    workspace_id: str
+    transport_type: str
+    kg_co2: float
+    logged_date: str
+    logged_at: str
 
 
 @dataclass(slots=True)
@@ -218,7 +260,7 @@ class DatabaseClient:
         rows = self._extract_data(response) or []
         if not rows:
             return {"locale": "en-US", "coaching_enabled": True, "accessibility_settings": {}}
-        return rows[0]
+        return cast(dict[str, Any], rows[0])
 
     async def update_user_preferences(
         self,
@@ -274,7 +316,7 @@ class DatabaseClient:
         """Insert refresh token metadata row."""
 
         client = await self.client()
-        payload = {
+        payload: dict[str, Any] = {
             "id": str(uuid4()),
             "user_id": self._sanitize_text(user_id, max_len=128),
             "token_hash": self._sanitize_text(token_hash, max_len=128),
@@ -285,9 +327,9 @@ class DatabaseClient:
             "revoked_at": None,
             "device_hint": self._sanitize_optional_text(device_hint, max_len=64),
         }
-        response = await self._execute("create_refresh_token", client.table("refresh_tokens").insert(payload))
+        response = await self._execute("create_refresh_token", client.table("refresh_tokens").insert(cast(Any, payload)))
         rows = self._extract_data(response) or []
-        return rows[0] if rows else payload
+        return cast(dict[str, Any], rows[0]) if rows else payload
 
     async def get_refresh_token_by_hash(self, token_hash: str) -> dict[str, Any] | None:
         """Load refresh token row by hashed token value."""
@@ -475,7 +517,7 @@ class DatabaseClient:
         response = await self._execute(
             "list_channels",
             client.table("channels")
-            .select("id,workspace_id,name,description,tone,created_by,created_at")
+            .select("id,workspace_id,name,description,tone,is_private,created_by,created_at")
             .eq("workspace_id", self._sanitize_text(workspace_id, max_len=128))
             .order("created_at", desc=False),
         )
@@ -489,6 +531,7 @@ class DatabaseClient:
         description: str | None,
         tone: str,
         created_by: str,
+        is_private: bool = False,
     ) -> dict[str, Any]:
         """Create a new channel and return the created record."""
 
@@ -499,6 +542,7 @@ class DatabaseClient:
             "name": self._sanitize_text(name, max_len=settings.max_channel_name_length),
             "description": self._sanitize_optional_text(description, max_len=500),
             "tone": self._sanitize_text(tone, max_len=64),
+            "is_private": bool(is_private),
             "created_by": self._sanitize_text(created_by, max_len=128),
             "created_at": datetime.now(UTC).isoformat(),
         }
@@ -704,10 +748,10 @@ class DatabaseClient:
         }
         response = await self._execute(
             "save_pulse_snapshot",
-            client.table("pulse_snapshots").upsert(payload, on_conflict="channel_id"),
+            client.table("pulse_snapshots").upsert(cast(Any, payload), on_conflict="channel_id"),
         )
         rows = self._extract_data(response) or []
-        return rows[0] if rows else payload
+        return cast(dict[str, Any], rows[0]) if rows else payload
 
     async def pulse_snapshot_exists_for_minute(self, channel_id: str, minute_bucket: datetime) -> bool:
         """Check whether minute-level pulse snapshot already exists."""
@@ -772,15 +816,12 @@ class DatabaseClient:
         response = await self._execute(
             "count_daily_carbon_logs",
             client.table("carbon_logs")
-            .select("id", count="exact")
+            .select("id")
             .eq("user_id", self._sanitize_text(user_id, max_len=128))
             .eq("workspace_id", self._sanitize_text(workspace_id, max_len=128))
             .gte("created_at", day_start.isoformat())
             .lt("created_at", day_end.isoformat()),
         )
-        count_value = getattr(response, "count", None)
-        if isinstance(count_value, int):
-            return count_value
         rows = self._extract_data(response) or []
         return len(rows)
 
@@ -848,10 +889,10 @@ class DatabaseClient:
             }
             update_response = await self._execute(
                 "update_today_carbon_log",
-                client.table("carbon_logs").update(update_payload).eq("id", existing.get("id")),
+                client.table("carbon_logs").update(cast(Any, update_payload)).eq("id", existing.get("id")),
             )
             updated_rows = self._extract_data(update_response) or []
-            updated = updated_rows[0] if updated_rows else {**existing, **update_payload}
+            updated = cast(dict[str, Any], updated_rows[0]) if updated_rows else {**existing, **update_payload}
 
             if score_adjustment != 0 or abs(kg_adjustment) > 1e-9:
                 await self._increment_carbon_score(
@@ -862,7 +903,7 @@ class DatabaseClient:
                 )
             return updated
 
-        payload = {
+        payload: dict[str, Any] = {
             "id": str(uuid4()),
             "user_id": normalized_user_id,
             "workspace_id": normalized_workspace_id,
@@ -872,15 +913,15 @@ class DatabaseClient:
             "created_at": now.isoformat(),
         }
 
-        response = await self._execute("create_carbon_log", client.table("carbon_logs").insert(payload))
+        response = await self._execute("create_carbon_log", client.table("carbon_logs").insert(cast(Any, payload)))
         rows = self._extract_data(response) or []
-        inserted = rows[0] if rows else payload
+        inserted = cast(dict[str, Any], rows[0]) if rows else payload
 
         await self._increment_carbon_score(
-            user_id=inserted["user_id"],
-            workspace_id=inserted["workspace_id"],
-            score_delta=int(inserted["score_delta"]),
-            kg_delta=float(inserted["kg_co2"]),
+            user_id=str(inserted["user_id"]),
+            workspace_id=str(inserted["workspace_id"]),
+            score_delta=int(cast(Any, inserted["score_delta"])),
+            kg_delta=float(cast(Any, inserted["kg_co2"])),
         )
         return inserted
 
@@ -915,7 +956,7 @@ class DatabaseClient:
             await self._execute(
                 "increment_carbon_score_update",
                 client.table("carbon_scores")
-                .update(payload)
+                .update(cast(Any, payload))
                 .eq("user_id", user_id)
                 .eq("workspace_id", workspace_id),
             )
@@ -1004,7 +1045,7 @@ class DatabaseClient:
             if entries:
                 await self._execute(
                     "recalculate_carbon_upsert",
-                    client.table("carbon_scores").upsert(entries, on_conflict="workspace_id,user_id"),
+                    client.table("carbon_scores").upsert(cast(Any, entries), on_conflict="workspace_id,user_id"),
                 )
                 refreshed[ws_id] = sorted(entries, key=lambda row: (-row["total_score"], row["total_kg_co2"]))
 
@@ -1023,9 +1064,23 @@ class DatabaseClient:
             "last_seen": None,
             "revoked": False,
         }
-        response = await self._execute("create_mesh_node", client.table("mesh_nodes").insert(payload))
+        response = await self._execute("create_mesh_node", client.table("mesh_nodes").insert(cast(Any, payload)))
         rows = self._extract_data(response) or []
-        return rows[0] if rows else payload
+        return cast(dict[str, Any], rows[0]) if rows else payload
+
+    async def list_mesh_nodes(self, *, workspace_id: str) -> list[dict[str, Any]]:
+        """List all mesh nodes for a workspace in newest-first order."""
+
+        client = await self.client()
+        response = await self._execute(
+            "list_mesh_nodes",
+            client.table("mesh_nodes")
+            .select("id,node_id,workspace_id,registered_at,last_seen,revoked")
+            .eq("workspace_id", self._sanitize_text(workspace_id, max_len=128))
+            .order("registered_at", desc=True),
+        )
+        rows = self._extract_data(response) or []
+        return cast(list[dict[str, Any]], rows)
 
     async def get_mesh_node(self, node_id: str) -> dict[str, Any] | None:
         """Fetch one mesh node by node_id."""
@@ -1039,7 +1094,21 @@ class DatabaseClient:
             .limit(1),
         )
         rows = self._extract_data(response) or []
-        return rows[0] if rows else None
+        return cast(dict[str, Any], rows[0]) if rows else None
+
+    async def revoke_mesh_node(self, *, node_id: str, workspace_id: str) -> bool:
+        """Revoke one mesh node scoped to workspace ownership."""
+
+        client = await self.client()
+        response = await self._execute(
+            "revoke_mesh_node",
+            client.table("mesh_nodes")
+            .update(cast(Any, {"revoked": True}))
+            .eq("node_id", self._sanitize_text(node_id, max_len=128))
+            .eq("workspace_id", self._sanitize_text(workspace_id, max_len=128)),
+        )
+        rows = self._extract_data(response) or []
+        return bool(rows)
 
     async def update_mesh_node_last_seen(self, node_id: str) -> None:
         """Update last_seen timestamp for verified mesh node."""
@@ -1052,7 +1121,7 @@ class DatabaseClient:
             .eq("node_id", self._sanitize_text(node_id, max_len=128)),
         )
 
-    async def sync_mesh_messages(self, messages: list[dict[str, Any]]) -> int:
+    async def sync_mesh_messages(self, messages: list[dict[str, Any]], *, workspace_id: str, source_node_id: str) -> int:
         """Persist relay-delivered mesh messages for audit and reconciliation."""
 
         if not messages:
@@ -1061,18 +1130,40 @@ class DatabaseClient:
         client = await self.client()
         rows_to_insert: list[dict[str, Any]] = []
         for incoming in messages:
+            channel_id = self._sanitize_text(str(incoming.get("channelId") or incoming.get("channel_id") or ""), max_len=128)
+            user_id = self._sanitize_text(str(incoming.get("userId") or incoming.get("user_id") or ""), max_len=128)
+            text_value = self._sanitize_text(str(incoming.get("text") or ""), max_len=settings.max_message_length)
+            if not channel_id or not user_id or not text_value:
+                continue
+
             message_id = self._sanitize_text(str(incoming.get("id") or uuid4()), max_len=128)
             rows_to_insert.append(
                 {
                     "id": message_id,
-                    "channel_id": self._sanitize_text(str(incoming.get("channelId", "")), max_len=128),
-                    "source_node": self._sanitize_optional_text(str(incoming.get("sourceNode", "")), max_len=128),
-                    "payload": incoming,
+                    "channel_id": channel_id,
+                    "user_id": user_id,
+                    "workspace_id": self._sanitize_text(workspace_id, max_len=128),
+                    "text": text_value,
+                    "text_translated": self._sanitize_optional_text(
+                        str(incoming.get("textTranslated") or incoming.get("text_translated") or "") or None,
+                        max_len=settings.max_message_length,
+                    ),
+                    "source_locale": self._sanitize_optional_text(str(incoming.get("sourceLocale") or incoming.get("source_locale") or "") or None, max_len=16),
+                    "sentiment_score": incoming.get("sentimentScore") or incoming.get("sentiment_score"),
+                    "mesh_origin": True,
+                    "deleted_at": None,
                     "created_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
                 }
             )
 
-        await self._execute("sync_mesh_messages", client.table("mesh_messages").upsert(rows_to_insert, on_conflict="id"))
+        if not rows_to_insert:
+            return 0
+
+        await self._execute(
+            "sync_mesh_messages",
+            client.table("messages").upsert(cast(Any, rows_to_insert), on_conflict="id"),
+        )
         return len(rows_to_insert)
 
 

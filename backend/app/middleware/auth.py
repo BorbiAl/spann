@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import jwt
@@ -39,7 +41,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         response.headers[settings.request_id_header] = request_id
         return response
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         """Authenticate request and enrich context state before routing."""
 
         request_id = request.headers.get(settings.request_id_header, str(uuid4()))
@@ -95,6 +97,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
         user_id = payload.get("sub")
+        issued_at = payload.get("iat")
+        now_ts = int(datetime.now(UTC).timestamp())
+        if isinstance(issued_at, int) and issued_at > now_ts + 30:
+            return self._error_with_request_id(
+                request_id=request_id,
+                status_code=401,
+                code="INVALID_TOKEN",
+                message="Token iat is in the future.",
+            )
+
         if not user_id or not payload.get("jti") or not payload.get("workspace_id"):
             return self._error_with_request_id(
                 request_id=request_id,

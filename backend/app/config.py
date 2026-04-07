@@ -27,20 +27,21 @@ class Settings(BaseSettings):
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
 
-    supabase_url: str = Field(alias="SUPABASE_URL")
-    supabase_anon_key: str = Field(alias="SUPABASE_ANON_KEY")
+    supabase_url: str = Field(default="", alias="SUPABASE_URL")
+    supabase_anon_key: str = Field(default="", alias="SUPABASE_ANON_KEY")
     supabase_service_key: str | None = Field(default=None, alias="SUPABASE_SERVICE_KEY")
     supabase_use_service_role: bool = Field(default=False, alias="SUPABASE_USE_SERVICE_ROLE")
 
-    groq_api_key: str = Field(alias="GROQ_API_KEY")
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_model: str = "llama-3.1-70b-versatile"
 
     redis_url: str = Field(default="redis://valkey:6379/0", alias="REDIS_URL")
 
-    jwt_secret: str = Field(alias="JWT_SECRET")
+    jwt_secret: str = Field(default="", alias="JWT_SECRET")
     jwt_algorithm: str = "HS256"
     jwt_exp_minutes: int = 60
     mesh_sync_shared_token: str = Field(default="", alias="MESH_SYNC_SHARED_TOKEN")
+    app_version: str = Field(default="1.0.0", alias="APP_VERSION")
 
     allowed_origins: str = Field(default="http://localhost:5173", alias="ALLOWED_ORIGINS")
     request_id_header: str = "X-Request-ID"

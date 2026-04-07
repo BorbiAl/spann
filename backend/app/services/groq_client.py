@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from types import TracebackType
 
 import httpx
 
@@ -48,7 +49,12 @@ class GroqClient:
             self._client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         """Close HTTP resources on context exit."""
 
         await self.close()
@@ -150,7 +156,7 @@ class GroqClient:
 
                 self._record_success()
 
-                return content.strip()
+                return str(content).strip()
 
             except httpx.TimeoutException as exc:
                 self._record_failure()

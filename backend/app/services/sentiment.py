@@ -21,7 +21,7 @@ async def save_pulse_snapshot(channel_id: str, score: float, label: str) -> None
     await db.save_pulse_snapshot(channel_id, score, label)
 
 
-async def score_channel(channel_id: str):
+async def score_channel(channel_id: str) -> None:
     """Score one channel using the latest messages and publish pulse updates."""
 
     messages = await get_last_n_messages(channel_id, n=20)

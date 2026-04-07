@@ -38,7 +38,11 @@ class RedisClient:
         """Publish a payload to a Redis pub/sub channel."""
 
         redis = await self._get()
-        subscribers = await redis.publish(channel, payload)
+        subscribers_result = redis.publish(channel, payload)
+        if isinstance(subscribers_result, int):
+            subscribers = subscribers_result
+        else:
+            subscribers = await subscribers_result
         logger.info("redis_publish", extra={"channel": channel, "subscribers": subscribers})
         return subscribers
 
@@ -57,13 +61,20 @@ class RedisClient:
         """Read JSON value by key."""
 
         redis = await self._get()
-        return await redis.get(key)
+        value_result = redis.get(key)
+        if isinstance(value_result, str) or value_result is None:
+            return value_result
+        resolved = await value_result
+        return str(resolved) if resolved is not None else None
 
     async def push_list(self, key: str, payload: str) -> int:
         """Push one JSON payload into Redis list (dead-letter queue)."""
 
         redis = await self._get()
-        return await redis.lpush(key, payload)
+        push_result = redis.lpush(key, payload)
+        if isinstance(push_result, int):
+            return push_result
+        return await push_result
 
     async def close(self) -> None:
         """Close the Redis connection cleanly."""

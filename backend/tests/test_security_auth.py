@@ -59,7 +59,7 @@ def test_wrong_secret_jwt_is_rejected(client):
     token = _token(
         subject="11111111-1111-4111-8111-111111111111",
         expires_delta_minutes=30,
-        secret="wrong-secret",
+        secret="wrong-secret-but-long-enough-for-hs256-tests",
     )
 
     response = client.get(

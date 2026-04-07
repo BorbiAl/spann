@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from uuid import uuid4
 
 import pytest
 
@@ -117,6 +116,6 @@ def test_rate_limit_applies_to_mesh_endpoint(client, make_mesh_request, monkeypa
         raise HTTPException(status_code=429, detail={"code": "RATE_LIMITED", "message": "limited"})
 
     monkeypatch.setattr("app.middleware.rate_limit.rate_limiter.enforce", deny)
-    headers, body = make_mesh_request({"node_id": str(uuid4()), "status": "online"})
-    response = client.post("/mesh/presence", headers=headers, content=body)
+    headers, body = make_mesh_request({"messages": []})
+    response = client.post("/mesh/sync", headers=headers, content=body)
     assert response.status_code == 429

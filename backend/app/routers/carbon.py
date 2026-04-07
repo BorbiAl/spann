@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 
@@ -32,7 +33,7 @@ async def get_leaderboard(
     workspace_id: UUID,
     request: Request,
     _rate_limit: None = Depends(public_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Return carbon leaderboard sorted by score descending."""
 
     user_id = UUID(str(request.state.user_id))
@@ -47,7 +48,7 @@ async def create_carbon_log(
     payload: CarbonLogRequest,
     request: Request,
     _rate_limit: None = Depends(public_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Log a user commute and asynchronously refresh aggregates."""
 
     user_id = str(request.state.user_id)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 
@@ -14,7 +15,29 @@ def test_end_to_end_auth_channel_message_translate_flow(client, auth_headers, mo
         return {"id": "11111111-1111-4111-8111-111111111111", "workspace_id": "22222222-2222-4222-8222-222222222222", "tone": "neutral"}
 
     async def fake_create_message(**kwargs):
-        return {"id": "m-integration-1", **kwargs}
+        now = datetime.now(UTC).isoformat()
+        return {
+            "id": str(uuid4()),
+            "channel_id": kwargs["channel_id"],
+            "user_id": kwargs["user_id"],
+            "workspace_id": kwargs["workspace_id"],
+            "text": kwargs["text"],
+            "text_translated": None,
+            "source_locale": kwargs.get("source_locale"),
+            "sentiment_score": None,
+            "mesh_origin": kwargs.get("mesh_origin", False),
+            "deleted_at": None,
+            "created_at": now,
+            "updated_at": now,
+            "user": {
+                "id": kwargs["user_id"],
+                "name": "Integration User",
+                "initials": "IU",
+                "color": "#22aa66",
+            },
+            "reactions": [],
+            "is_edited": False,
+        }
 
     async def fake_get_user_preferences(_user_id: str):
         return {"locale": "en-US", "coaching_enabled": True, "accessibility_settings": {}}
@@ -23,9 +46,10 @@ def test_end_to_end_auth_channel_message_translate_flow(client, auth_headers, mo
     monkeypatch.setattr("app.routers.channels.db.create_channel", fake_create_channel)
     monkeypatch.setattr("app.routers.messages.db.verify_workspace_access", allow_workspace)
     monkeypatch.setattr("app.routers.messages.db.get_channel", fake_get_channel)
-    monkeypatch.setattr("app.routers.messages.db.create_message", fake_create_message)
+    monkeypatch.setattr("app.routers.messages.message_service.create_message", fake_create_message)
     monkeypatch.setattr("app.routers.messages.db.get_user_preferences", fake_get_user_preferences)
     monkeypatch.setattr("app.routers.messages.trigger_coaching_task", lambda **_kwargs: None)
+    monkeypatch.setattr("app.routers.messages.score_single_channel_task.delay", lambda *_args, **_kwargs: None)
 
     channel = client.post(
         "/channels",

@@ -13,6 +13,12 @@ result_serializer = "json"
 timezone = "UTC"
 enable_utc = True
 
+imports = (
+    "app.tasks.sentiment",
+    "app.tasks.carbon",
+    "app.tasks.coaching",
+)
+
 beat_schedule = {
     "sentiment-score-channels": {
         "task": "app.tasks.sentiment.score_active_channels",

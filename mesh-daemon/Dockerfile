@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ninja-build \
     ca-certificates \
     libleveldb-dev \
+    libsnappy-dev \
     nlohmann-json3-dev \
     libasio-dev \
     && rm -rf /var/lib/apt/lists/*

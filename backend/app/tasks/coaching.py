@@ -1,11 +1,13 @@
 """Celery coaching task with Redis cache and dead-letter fallback."""
 
 from __future__ import annotations
+# mypy: disable-error-code=untyped-decorator
 
 import asyncio
 import hashlib
 import json
 import logging
+from typing import Any
 
 from app.database import db
 from app.services.coaching import generate_coaching_nudge
@@ -44,13 +46,13 @@ async def _publish_nudge(channel_id: str, message_id: str, nudge: str, severity:
     task_soft_time_limit=25,
 )
 def run_coaching(
-    self,
+    self: Any,
     message_id: str,
     text: str,
     channel_tone: str | None = None,
     user_locale: str | None = None,
-    **legacy_kwargs,
-):
+    **legacy_kwargs: object,
+) -> dict[str, str] | None:
     """Generate and publish a coaching nudge after message delivery."""
 
     channel_tone = channel_tone or str(legacy_kwargs.get("tone") or "neutral")
@@ -63,8 +65,14 @@ def run_coaching(
     cached_payload = asyncio.run(redis_client.get_json(cache_key))
     if cached_payload:
         parsed = json.loads(cached_payload)
-        asyncio.run(_publish_nudge(channel_id, message_id, parsed["nudge"], parsed["severity"]))
-        return parsed
+        if not isinstance(parsed, dict):
+            return None
+        parsed_dict = {"nudge": str(parsed.get("nudge", "")), "severity": str(parsed.get("severity", ""))}
+        try:
+            asyncio.run(_publish_nudge(channel_id, message_id, parsed_dict["nudge"], parsed_dict["severity"]))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("coaching_publish_failed", extra={"message_id": message_id, "error": str(exc)})
+        return parsed_dict
 
     try:
         nudge_payload = asyncio.run(
@@ -96,14 +104,17 @@ def run_coaching(
         return None
 
     asyncio.run(redis_client.set_json(cache_key, json.dumps(nudge_payload), ex_seconds=300))
-    asyncio.run(
-        _publish_nudge(
-            channel_id,
-            message_id,
-            nudge_payload["nudge"],
-            nudge_payload["severity"],
+    try:
+        asyncio.run(
+            _publish_nudge(
+                channel_id,
+                message_id,
+                nudge_payload["nudge"],
+                nudge_payload["severity"],
+            )
         )
-    )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("coaching_publish_failed", extra={"message_id": message_id, "error": str(exc)})
 
     logger.info("coaching_nudge_published", extra={"message_id": message_id, "channel_id": channel_id})
     return nudge_payload

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 
 from app.database import db
 from app.middleware.rate_limit import public_rate_limit_dependency
@@ -17,7 +18,7 @@ async def patch_me_preferences(
     payload: UserPreferencesPatchRequest,
     request: Request,
     _rate_limit: None = Depends(public_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Update authenticated user's locale, accessibility, and coaching settings."""
 
     user_id = request.state.user_id

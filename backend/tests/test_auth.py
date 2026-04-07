@@ -110,7 +110,12 @@ def test_expired_token_rejected(client, issue_access_token, test_user):
 
 
 def test_wrong_secret_rejected(client, issue_access_token, test_user):
-    token = issue_access_token(test_user["id"], test_user["workspace_id"], token_secret="wrong-secret", minutes=15)
+    token = issue_access_token(
+        test_user["id"],
+        test_user["workspace_id"],
+        token_secret="wrong-secret-but-long-enough-for-hs256-tests",
+        minutes=15,
+    )
     response = client.patch("/users/me/preferences", headers={"Authorization": f"Bearer {token}"}, json={"locale": "en-US"})
     assert response.status_code == 401
 

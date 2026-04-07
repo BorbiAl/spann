@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from uuid import UUID
 
 from app.database import db
@@ -17,7 +18,7 @@ async def get_channel_pulse(
     channel_id: UUID,
     request: Request,
     _rate_limit: None = Depends(public_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Return the latest pulse score and label for a channel."""
 
     snapshot = await db.get_pulse_snapshot(str(channel_id))

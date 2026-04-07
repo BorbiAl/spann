@@ -12,9 +12,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
 from app.database import db
+from app.middleware.rate_limit import public_rate_limit_dependency
 from app.schemas.common import success_response
 from app.config import settings
 from app.metrics import hash_identifier, mesh_sync_requests_total
@@ -120,11 +122,11 @@ class MeshSyncRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    messages: list[dict] = Field(default_factory=list, max_length=200)
+    messages: list[dict[str, object]] = Field(default_factory=list, max_length=200)
 
 
 @router.post("/register")
-async def register_mesh_node(payload: MeshRegisterRequest, request: Request):
+async def register_mesh_node(payload: MeshRegisterRequest, request: Request) -> JSONResponse:
     """Register a mesh node for the authenticated user's workspace."""
 
     claims = getattr(request.state, "auth", {})
@@ -141,16 +143,53 @@ async def register_mesh_node(payload: MeshRegisterRequest, request: Request):
 
     # Return the signing key once; persist only its hash as required.
     await db.create_mesh_node(workspace_id=workspace_id, node_id=node_id, secret_hash=secret_hash)
-    return success_response({"node_id": node_id, "node_secret": secret_hash}, status_code=201)
+    return success_response({"node_id": node_id, "node_secret": raw_secret}, status_code=201)
+
+
+@router.get("/nodes")
+async def list_mesh_nodes(request: Request) -> JSONResponse:
+    """List mesh nodes for the authenticated user's current workspace."""
+
+    claims = getattr(request.state, "auth", {})
+    user_id = str(getattr(request.state, "user_id", ""))
+    workspace_id = str(claims.get("workspace_id", "")).strip()
+    if not workspace_id:
+        raise HTTPException(status_code=403, detail={"code": "workspace_claim_missing", "message": "workspace_id claim is required."})
+
+    await db.verify_workspace_access(user_id=UUID(user_id), workspace_id=UUID(workspace_id), required_role="member")
+    nodes = await db.list_mesh_nodes(workspace_id=workspace_id)
+    return success_response(nodes)
+
+
+@router.post("/nodes/{node_id}/revoke")
+async def revoke_mesh_node(node_id: str, request: Request) -> JSONResponse:
+    """Revoke one mesh node for the current workspace."""
+
+    claims = getattr(request.state, "auth", {})
+    user_id = str(getattr(request.state, "user_id", ""))
+    workspace_id = str(claims.get("workspace_id", "")).strip()
+    if not workspace_id:
+        raise HTTPException(status_code=403, detail={"code": "workspace_claim_missing", "message": "workspace_id claim is required."})
+
+    await db.verify_workspace_access(user_id=UUID(user_id), workspace_id=UUID(workspace_id), required_role="admin")
+    revoked = await db.revoke_mesh_node(node_id=node_id, workspace_id=workspace_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail={"code": "mesh_node_not_found", "message": "Mesh node not found in workspace."})
+    return success_response({"node_id": node_id, "revoked": True})
 
 
 @router.post("/sync")
 async def sync_mesh_messages(
     payload: MeshSyncRequest,
+    _rate_limit: None = Depends(public_rate_limit_dependency),
     _mesh_ctx: MeshNodeContext = Depends(verify_mesh_node),
-):
+) -> JSONResponse:
     """Persist delivered mesh messages for backend reconciliation."""
 
     mesh_sync_requests_total.labels(node_id=hash_identifier(_mesh_ctx.node_id)).inc()
-    synced = await db.sync_mesh_messages(payload.messages)
+    synced = await db.sync_mesh_messages(
+        payload.messages,
+        workspace_id=_mesh_ctx.workspace_id,
+        source_node_id=_mesh_ctx.node_id,
+    )
     return success_response({"synced": synced}, status_code=201)

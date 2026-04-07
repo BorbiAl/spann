@@ -24,9 +24,9 @@ std::string GenerateUuid() {
   output << "-";
   output << (values[0] & 0xFFFF);
   output << "-";
-  output << (values[1] & 0x0FFF) | 0x4000;
+  output << ((values[1] & 0x0FFF) | 0x4000);
   output << "-";
-  output << (values[2] & 0x3FFF) | 0x8000;
+  output << ((values[2] & 0x3FFF) | 0x8000);
   output << "-";
   output << values[3];
   return output.str();

@@ -32,7 +32,7 @@ class RedisPublisher:
             return value.isoformat()
         raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
-    async def publish(self, channel: str, payload: dict) -> None:
+    async def publish(self, channel: str, payload: dict[str, Any]) -> None:
         """Publish one event payload and never fail request flow on Redis errors."""
 
         request_id = str(payload.get("_request_id") or "unknown")

@@ -6,6 +6,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 
 from app.database import db
 from app.middleware.rate_limit import messages_rate_limit_dependency
@@ -37,7 +38,7 @@ async def create_message(
     request: Request,
     redis_publisher: RedisPublisher = Depends(get_redis_publisher),
     _rate_limit: None = Depends(messages_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Create a message, publish websocket event, and fan out async tasks."""
 
     user_id = str(request.state.user_id)
@@ -110,7 +111,7 @@ async def get_channel_messages(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     _rate_limit: None = Depends(messages_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Return cursor-paginated messages for one channel."""
 
     user_id = str(request.state.user_id)
@@ -150,7 +151,7 @@ async def edit_message(
     request: Request,
     redis_publisher: RedisPublisher = Depends(get_redis_publisher),
     _rate_limit: None = Depends(messages_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Edit one message in-place within the allowed edit window."""
 
     user_id = str(request.state.user_id)
@@ -177,7 +178,7 @@ async def delete_message(
     request: Request,
     redis_publisher: RedisPublisher = Depends(get_redis_publisher),
     _rate_limit: None = Depends(messages_rate_limit_dependency),
-):
+) -> Response:
     """Soft-delete a message (owner or workspace admin/owner)."""
 
     user_id = str(request.state.user_id)
@@ -217,7 +218,7 @@ async def toggle_message_reaction(
     request: Request,
     redis_publisher: RedisPublisher = Depends(get_redis_publisher),
     _rate_limit: None = Depends(messages_rate_limit_dependency),
-):
+) -> JSONResponse:
     """Toggle one reaction for the current user and return reaction summary."""
 
     user_id = str(request.state.user_id)

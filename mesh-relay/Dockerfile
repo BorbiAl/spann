@@ -1,6 +1,6 @@
-FROM alpine:3.22 AS builder
+FROM rust:1.88-alpine3.22 AS builder
 
-RUN apk add --no-cache rust cargo build-base
+RUN apk add --no-cache build-base
 
 WORKDIR /app
 

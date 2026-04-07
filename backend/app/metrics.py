@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from typing import Callable
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
@@ -99,7 +99,7 @@ def hash_identifier(value: str) -> str:
 class MetricsMiddleware(BaseHTTPMiddleware):
     """Collect request-level HTTP metrics for all API endpoints."""
 
-    async def dispatch(self, request: Request, call_next: Callable):
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         start = time.perf_counter()
         method = request.method
         endpoint = request.url.path
@@ -142,5 +142,9 @@ async def refresh_infra_metrics(redis: Redis) -> None:
             pass
 
     for queue_name in ("celery", "celery.priority", "celery.low"):
-        depth = await redis.llen(queue_name)
+        depth_result = redis.llen(queue_name)
+        if isinstance(depth_result, int):
+            depth = depth_result
+        else:
+            depth = await depth_result
         celery_queue_depth.labels(queue_name=queue_name).set(float(depth))
