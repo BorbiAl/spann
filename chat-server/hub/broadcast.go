@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"spann/chat-server/models"
+
+	"github.com/google/uuid"
 )
 
 // BuildMessageEvent creates a typed message:new server event.
@@ -24,6 +25,6 @@ func BuildMessageEvent(channelID string, userID string, userName string, text st
 }
 
 // BroadcastMessage fans out a newly created message event.
-func (h *Hub) BroadcastMessage(channelID string, event models.ServerEvent) {
-	h.BroadcastChannel(context.Background(), channelID, event)
+func (h *Hub) BroadcastMessage(ctx context.Context, channelID string, event models.ServerEvent) {
+	h.BroadcastChannel(ctx, channelID, event)
 }

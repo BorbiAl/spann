@@ -1,15 +1,17 @@
 package handlers
 
 import (
-	"context"
 	"sort"
 	"strings"
 	"sync"
+
+	"spann/chat-server/hub"
+	"spann/chat-server/models"
 )
 
 // TypingTracker holds active typing users per channel.
 type TypingTracker struct {
-	mu      sync.Mutex
+	mu       sync.Mutex
 	channels map[string]map[string]struct{}
 }
 
@@ -70,7 +72,7 @@ func HandleTypingEvent(h *WSHandler, client *hub.Client, event models.ClientEven
 	enabled := event.Event == "typing:start"
 	users := h.TypingTracker.setTyping(channelID, client.UserID, enabled)
 
-	h.Hub.BroadcastChannel(context.Background(), channelID, models.ServerEvent{
+	h.Hub.BroadcastChannel(client.Context, channelID, models.ServerEvent{
 		Event:     "typing:update",
 		ChannelID: channelID,
 		Users:     users,

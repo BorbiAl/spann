@@ -31,6 +31,7 @@ async def generate_coaching_nudge(*, text: str, tone: str, locale: str) -> dict[
             {"role": "user", "content": user_prompt},
         ],
         max_tokens=180,
+        task_type="coaching",
     )
 
     if raw.strip().lower() == "null":

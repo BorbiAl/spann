@@ -17,8 +17,11 @@ logger = logging.getLogger(__name__)
 
 UNPROTECTED_PATHS = {
     "/health",
+    "/metrics",
     "/auth/login",
+    "/auth/refresh",
     "/auth/magic-link",
+    "/mesh/sync",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -27,6 +30,14 @@ UNPROTECTED_PATHS = {
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Validate JWT tokens for all protected API endpoints."""
+
+    @staticmethod
+    def _error_with_request_id(*, request_id: str, status_code: int, code: str, message: str) -> Response:
+        """Build standardized error response while preserving request-id propagation."""
+
+        response = error_response(status_code=status_code, code=code, message=message)
+        response.headers[settings.request_id_header] = request_id
+        return response
 
     async def dispatch(self, request: Request, call_next) -> Response:
         """Authenticate request and enrich context state before routing."""
@@ -44,7 +55,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
-            return error_response(
+            return self._error_with_request_id(
+                request_id=request_id,
                 status_code=401,
                 code="UNAUTHORIZED",
                 message="Missing or invalid Bearer token.",
@@ -52,23 +64,44 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         token = auth_header.split(" ", 1)[1].strip()
         if not token:
-            return error_response(
+            return self._error_with_request_id(
+                request_id=request_id,
                 status_code=401,
                 code="UNAUTHORIZED",
                 message="Authorization token cannot be empty.",
             )
 
         try:
-            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            payload = jwt.decode(
+                token,
+                settings.jwt_secret,
+                algorithms=[settings.jwt_algorithm],
+                options={"require": ["sub", "iat", "exp"]},
+            )
         except jwt.ExpiredSignatureError:
-            return error_response(status_code=401, code="TOKEN_EXPIRED", message="Authentication token expired.")
+            return self._error_with_request_id(
+                request_id=request_id,
+                status_code=401,
+                code="TOKEN_EXPIRED",
+                message="Authentication token expired.",
+            )
         except jwt.InvalidTokenError as exc:
             logger.warning("invalid_jwt", extra={"error": str(exc), "request_id": request_id})
-            return error_response(status_code=401, code="INVALID_TOKEN", message="Authentication token is invalid.")
+            return self._error_with_request_id(
+                request_id=request_id,
+                status_code=401,
+                code="INVALID_TOKEN",
+                message="Authentication token is invalid.",
+            )
 
         user_id = payload.get("sub")
-        if not user_id:
-            return error_response(status_code=401, code="INVALID_TOKEN", message="Token subject is missing.")
+        if not user_id or not payload.get("jti") or not payload.get("workspace_id"):
+            return self._error_with_request_id(
+                request_id=request_id,
+                status_code=401,
+                code="INVALID_TOKEN",
+                message="Token claims are incomplete.",
+            )
 
         request.state.auth = payload
         request.state.user_id = str(user_id)

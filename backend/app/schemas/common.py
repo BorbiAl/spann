@@ -38,11 +38,13 @@ def error_response(
     code: str,
     message: str,
     details: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     """Create a standardized error response envelope."""
 
     return JSONResponse(
         status_code=status_code,
+        headers=headers,
         content={
             "data": None,
             "error": {"code": code, "message": message, "details": details},

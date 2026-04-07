@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	goredis "github.com/go-redis/redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 const (

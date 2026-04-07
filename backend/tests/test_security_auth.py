@@ -6,7 +6,11 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
-from app.config import settings
+
+def _settings():
+    from app.config import settings
+
+    return settings
 
 
 def _token(*, subject: str, expires_delta_minutes: int, secret: str | None = None) -> str:
@@ -17,7 +21,8 @@ def _token(*, subject: str, expires_delta_minutes: int, secret: str | None = Non
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=expires_delta_minutes)).timestamp()),
     }
-    return jwt.encode(payload, secret or settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    cfg = _settings()
+    return jwt.encode(payload, secret or cfg.jwt_secret, algorithm=cfg.jwt_algorithm)
 
 
 def test_protected_route_requires_jwt(client):
@@ -35,6 +40,7 @@ def test_protected_route_requires_jwt(client):
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+    assert response.headers.get(_settings().request_id_header)
 
 
 def test_expired_jwt_is_rejected(client):

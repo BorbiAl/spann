@@ -1,35 +1,39 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"spann/chat-server/models"
+
+	"github.com/gorilla/websocket"
 )
 
 // Client is one websocket connection with read and write goroutines.
 type Client struct {
-	Conn            *websocket.Conn
-	Hub             *Hub
-	Logger          *slog.Logger
-	Send            chan []byte
-	UserID          string
-	UserName        string
-	Channels        map[string]bool
-	MessageByteLimit int64
+	Conn              *websocket.Conn
+	Hub               *Hub
+	Logger            *slog.Logger
+	Context           context.Context
+	Send              chan []byte
+	UserID            string
+	UserName          string
+	Channels          map[string]bool
+	MessageByteLimit  int64
 	MessageRatePerMin int
-	PingPeriod      time.Duration
-	PongWait        time.Duration
-	WriteWait       time.Duration
-	rateMu          sync.Mutex
-	rateWindow      []time.Time
+	PingPeriod        time.Duration
+	PongWait          time.Duration
+	WriteWait         time.Duration
+	rateMu            sync.Mutex
+	rateWindow        []time.Time
 }
 
 // NewClient builds a websocket client with heartbeat and write buffer defaults.
 func NewClient(
+	ctx context.Context,
 	conn *websocket.Conn,
 	hub *Hub,
 	logger *slog.Logger,
@@ -42,19 +46,20 @@ func NewClient(
 	writeWait time.Duration,
 ) *Client {
 	return &Client{
-		Conn:            conn,
-		Hub:             hub,
-		Logger:          logger,
-		Send:            make(chan []byte, 256),
-		UserID:          userID,
-		UserName:        userName,
-		Channels:        make(map[string]bool),
-		MessageByteLimit: messageByteLimit,
+		Conn:              conn,
+		Hub:               hub,
+		Logger:            logger,
+		Context:           ctx,
+		Send:              make(chan []byte, 256),
+		UserID:            userID,
+		UserName:          userName,
+		Channels:          make(map[string]bool),
+		MessageByteLimit:  messageByteLimit,
 		MessageRatePerMin: messageRatePerMin,
-		PingPeriod:      pingPeriod,
-		PongWait:        pongWait,
-		WriteWait:       writeWait,
-		rateWindow:      make([]time.Time, 0, 64),
+		PingPeriod:        pingPeriod,
+		PongWait:          pongWait,
+		WriteWait:         writeWait,
+		rateWindow:        make([]time.Time, 0, 64),
 	}
 }
 

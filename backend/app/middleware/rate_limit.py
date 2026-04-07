@@ -1,55 +1,207 @@
-"""In-process async sliding-window rate limiting helpers."""
+"""Redis-backed distributed sliding-window rate limiting helpers."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
+import math
 import time
-from collections import defaultdict, deque
 from dataclasses import dataclass
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from redis.asyncio import Redis
+
+from app.config import settings
+from app.metrics import rate_limit_hits_total
+
+logger = logging.getLogger(__name__)
+
+RATE_LIMIT_LUA_SCRIPT = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local clear_before = now - window
+redis.call('ZREMRANGEBYSCORE', key, '-inf', clear_before)
+local count = redis.call('ZCARD', key)
+if count < limit then
+  redis.call('ZADD', key, now, now .. '-' .. math.random(1000000))
+  redis.call('EXPIRE', key, window)
+  return {1, limit - count - 1}
+else
+  return {0, 0}
+end
+"""
 
 RATE_WINDOW_SECONDS = 60
 
 
 @dataclass(slots=True)
 class RateLimitBucket:
-    """Holds request timestamps for one identity and bucket."""
+    """Evaluation result returned by the distributed limiter."""
 
-    timestamps: deque[float]
+    allowed: bool
+    limit: int
+    remaining: int
+    reset_epoch_seconds: int
+
+    @property
+    def headers(self) -> dict[str, str]:
+        """Build standard rate limit headers for API responses."""
+
+        return {
+            "X-RateLimit-Limit": str(self.limit),
+            "X-RateLimit-Remaining": str(max(0, self.remaining)),
+            "X-RateLimit-Reset": str(self.reset_epoch_seconds),
+        }
 
 
 class SlidingWindowRateLimiter:
-    """Simple per-key sliding-window limiter safe for asyncio concurrency."""
+    """Redis-backed rate limiter safe for distributed deployments."""
 
     def __init__(self) -> None:
-        self._storage: dict[str, RateLimitBucket] = defaultdict(lambda: RateLimitBucket(timestamps=deque()))
+        self._redis: Redis | None = None
         self._lock = asyncio.Lock()
+        self._script_sha: str | None = None
 
-    async def enforce(self, *, identity: str, bucket: str, limit: int) -> None:
-        """Raise HTTP 429 if the identity has exhausted the bucket window."""
+    async def _get_redis(self) -> Redis:
+        """Return shared Redis client using bounded pool configuration."""
 
-        now = time.monotonic()
-        key = f"{bucket}:{identity}"
+        if self._redis is not None:
+            return self._redis
 
         async with self._lock:
-            rate_bucket = self._storage[key]
-            timestamps = rate_bucket.timestamps
-            window_start = now - RATE_WINDOW_SECONDS
+            if self._redis is None:
+                self._redis = Redis.from_url(
+                    settings.redis_url,
+                    decode_responses=True,
+                    max_connections=20,
+                    socket_timeout=0.5,
+                    socket_connect_timeout=0.5,
+                )
+        return self._redis
 
-            while timestamps and timestamps[0] <= window_start:
-                timestamps.popleft()
+    async def _load_script_if_needed(self, redis: Redis) -> str:
+        """Load and cache script SHA used by evalsha."""
 
-            if len(timestamps) >= limit:
+        if self._script_sha is not None:
+            return self._script_sha
+
+        async with self._lock:
+            if self._script_sha is None:
+                self._script_sha = await redis.script_load(RATE_LIMIT_LUA_SCRIPT)
+        return self._script_sha
+
+    async def enforce(
+        self,
+        *,
+        identity: str,
+        bucket: str,
+        limit: int,
+        request: Request | None = None,
+        window_seconds: int = RATE_WINDOW_SECONDS,
+    ) -> RateLimitBucket:
+        """Enforce per-bucket limits. If Redis fails, allow request and log."""
+
+        now_epoch = int(time.time())
+        now_ms = int(time.time() * 1000)
+        reset_epoch = now_epoch + window_seconds
+
+        safe_bucket = bucket.strip().lower() or "public"
+        safe_identity = identity.strip() or "unknown"
+        key = f"rate:{safe_bucket}:{safe_identity}"
+
+        try:
+            redis = await self._get_redis()
+            script_sha = await self._load_script_if_needed(redis)
+            result = await redis.evalsha(script_sha, 1, key, now_ms, window_seconds * 1000, limit)
+            allowed = int(result[0]) == 1
+            remaining = int(result[1]) if len(result) > 1 else 0
+
+            bucket_result = RateLimitBucket(
+                allowed=allowed,
+                limit=limit,
+                remaining=remaining,
+                reset_epoch_seconds=reset_epoch,
+            )
+            if request is not None:
+                request.state.rate_limit_headers = bucket_result.headers
+
+            if not allowed:
+                rate_limit_hits_total.labels(bucket=safe_bucket).inc()
+                retry_after = max(1, int(math.ceil(bucket_result.reset_epoch_seconds - now_epoch)))
+                headers = dict(bucket_result.headers)
+                headers["Retry-After"] = str(retry_after)
                 raise HTTPException(
                     status_code=429,
                     detail={
                         "code": "RATE_LIMITED",
-                        "message": f"Rate limit exceeded for bucket '{bucket}'. Try again in a minute.",
+                        "message": f"Rate limit exceeded for bucket '{safe_bucket}'.",
                     },
+                    headers=headers,
                 )
 
-            timestamps.append(now)
+            return bucket_result
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            request_id = getattr(request.state, "request_id", None) if request is not None else None
+            logger.error(
+                "rate_limit_fail_open",
+                extra={"bucket": safe_bucket, "identity": safe_identity, "request_id": request_id, "error": str(exc)},
+            )
+            bucket_result = RateLimitBucket(
+                allowed=True,
+                limit=limit,
+                remaining=max(0, limit - 1),
+                reset_epoch_seconds=reset_epoch,
+            )
+            if request is not None:
+                request.state.rate_limit_headers = bucket_result.headers
+            return bucket_result
+
+
+async def auth_rate_limit_dependency(request: Request) -> None:
+    """Apply auth brute-force protection: 10 requests/minute by IP."""
+
+    source_ip = request.client.host if request.client else "unknown"
+    await rate_limiter.enforce(
+        identity=source_ip,
+        bucket="auth",
+        limit=settings.auth_rate_limit_per_minute,
+        request=request,
+    )
+
+
+async def messages_rate_limit_dependency(request: Request) -> None:
+    """Apply message send/read protection: 60 requests/minute by user."""
+
+    user_id = str(getattr(request.state, "user_id", "unknown"))
+    await rate_limiter.enforce(
+        identity=user_id,
+        bucket="messages",
+        limit=settings.messages_rate_limit_per_minute,
+        request=request,
+    )
+
+
+async def translate_rate_limit_dependency(request: Request) -> None:
+    """Apply translation protection: 100 requests/minute by user."""
+
+    user_id = str(getattr(request.state, "user_id", "unknown"))
+    await rate_limiter.enforce(
+        identity=user_id,
+        bucket="translate",
+        limit=settings.translate_rate_limit_per_minute,
+        request=request,
+    )
+
+
+async def public_rate_limit_dependency(request: Request) -> None:
+    """Apply default public route protection: 200 requests/minute by IP."""
+
+    source_ip = request.client.host if request.client else "unknown"
+    await rate_limiter.enforce(identity=source_ip, bucket="public", limit=200, request=request)
 
 
 rate_limiter = SlidingWindowRateLimiter()

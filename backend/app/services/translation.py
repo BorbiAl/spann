@@ -39,6 +39,7 @@ async def translate_culturally(payload: TranslateRequest) -> dict[str, str]:
             {"role": "user", "content": user_prompt},
         ],
         max_tokens=350,
+        task_type="translation",
     )
 
     parsed = json.loads(raw)

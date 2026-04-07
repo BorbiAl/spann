@@ -30,7 +30,7 @@ async def score_channel(channel_id: str):
         response = await groq_client.chat([
             {"role": "system", "content": "Score this message sentiment from -1.0 (very negative) to 1.0 (very positive). Return ONLY a float."},
             {"role": "user", "content": msg["text"]}
-        ])
+        ], task_type="sentiment")
         scores.append(float(response.strip()))
     avg = sum(scores) / len(scores) if scores else 0.0
     label = "positive" if avg > 0.3 else "stressed" if avg < -0.3 else "neutral"

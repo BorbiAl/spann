@@ -1,6 +1,8 @@
 node_modules/
 dist/
 server/data/state.json
+.tmp/
+logs/
 
 # Local environment files
 .env
@@ -25,4 +27,3 @@ mesh-relay/target/
 # C++ / CMake
 mesh-daemon/build/
 cmake-build-*/
-.env.example

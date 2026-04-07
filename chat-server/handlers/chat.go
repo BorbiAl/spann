@@ -32,5 +32,5 @@ func HandleMessageSend(h *WSHandler, client *hub.Client, event models.ClientEven
 
 	h.Hub.JoinChannel(client, channelID)
 	serverEvent := hub.BuildMessageEvent(channelID, client.UserID, client.UserName, text)
-	h.Hub.BroadcastMessage(channelID, serverEvent)
+	h.Hub.BroadcastMessage(client.Context, channelID, serverEvent)
 }

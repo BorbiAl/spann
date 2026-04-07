@@ -19,6 +19,18 @@ use crate::models::message::{
 };
 use crate::AppState;
 
+const OUTBOUND_QUEUE_CAPACITY: usize = 512;
+const MAX_NODE_ID_LEN: usize = 128;
+
+fn is_valid_node_id(value: &str) -> bool {
+    if value.is_empty() || value.len() > MAX_NODE_ID_LEN {
+        return false;
+    }
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == ':')
+}
+
 pub async fn ws_upgrade(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -31,7 +43,7 @@ pub async fn ws_upgrade(
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
-    let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<Message>();
+    let (outbound_tx, mut outbound_rx) = mpsc::channel::<Message>(OUTBOUND_QUEUE_CAPACITY);
     let send_loop = tokio::spawn(async move {
         while let Some(message) = outbound_rx.recv().await {
             if ws_sender.send(message).await.is_err() {
@@ -45,6 +57,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         _ => {
             send_error(&outbound_tx, 4001, "first frame must be register");
             send_loop.abort();
+            let _ = send_loop.await;
             return;
         }
     };
@@ -54,6 +67,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         Err(_) => {
             send_error(&outbound_tx, 4002, "invalid register frame JSON");
             send_loop.abort();
+            let _ = send_loop.await;
             return;
         }
     };
@@ -61,6 +75,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     if register.frame_type != "register" {
         send_error(&outbound_tx, 4003, "first frame type must be register");
         send_loop.abort();
+        let _ = send_loop.await;
+        return;
+    }
+
+    if !is_valid_node_id(register.node_id.as_str()) {
+        send_error(&outbound_tx, 4007, "invalid nodeId format");
+        send_loop.abort();
+        let _ = send_loop.await;
         return;
     }
 
@@ -68,6 +90,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     {
         send_error(&outbound_tx, 4004, &format!("auth failed: {error}"));
         send_loop.abort();
+        let _ = send_loop.await;
         return;
     }
 
@@ -78,7 +101,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     if let Ok(queued) = state.queue.dequeue_all(&node_id).await {
         for payload in queued {
             if let Ok(text) = serde_json::to_string(&payload) {
-                let _ = outbound_tx.send(Message::Text(text.into()));
+                if outbound_tx.try_send(Message::Text(text.into())).is_err() {
+                    warn!(node_id = %node_id, "outbound queue full while replaying queued messages");
+                    break;
+                }
             }
         }
     }
@@ -111,6 +137,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             continue;
         }
 
+        if inbound.to != "broadcast" && !is_valid_node_id(inbound.to.as_str()) {
+            send_error(&outbound_tx, 4008, "invalid destination node id");
+            continue;
+        }
+
         if let Err(error) = enforce_rate_limit(&state.rate_limiter, &node_id) {
             send_error(&outbound_tx, 4291, &error);
             continue;
@@ -123,7 +154,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                     message_id,
                 };
                 if let Ok(serialized) = serde_json::to_string(&ack) {
-                    let _ = outbound_tx.send(Message::Text(serialized.into()));
+                    if outbound_tx.try_send(Message::Text(serialized.into())).is_err() {
+                        warn!(node_id = %node_id, "outbound queue full while sending ack");
+                        break;
+                    }
                 }
             }
             Err(error) => send_error(&outbound_tx, 5001, &error),
@@ -133,10 +167,12 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     state.registry.unregister(&node_id);
     info!(node_id = %node_id, active = state.registry.active_count(), "node disconnected");
 
+    drop(outbound_tx);
     send_loop.abort();
+    let _ = send_loop.await;
 }
 
-fn send_error(sender: &mpsc::UnboundedSender<Message>, code: u16, message: &str) {
+fn send_error(sender: &mpsc::Sender<Message>, code: u16, message: &str) {
     let frame = RelayErrorFrame {
         frame_type: "error",
         code,
@@ -144,6 +180,6 @@ fn send_error(sender: &mpsc::UnboundedSender<Message>, code: u16, message: &str)
     };
 
     if let Ok(serialized) = serde_json::to_string(&frame) {
-        let _ = sender.send(Message::Text(serialized.into()));
+        let _ = sender.try_send(Message::Text(serialized.into()));
     }
 }

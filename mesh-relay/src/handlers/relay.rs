@@ -58,7 +58,7 @@ async fn send_to_node(
 
     if let Some(sender) = state.registry.get_sender(destination_node) {
         sender
-            .send(Message::Text(serialized.into()))
+            .try_send(Message::Text(serialized.into()))
             .map_err(|error| format!("failed to dispatch message to live node: {error}"))?;
 
         info!(from = from_node, to = destination_node, "relay delivered to live node");

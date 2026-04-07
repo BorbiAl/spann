@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 
-broker_url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://redis:6379/0"))
-result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
+broker_url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://valkey:6379/0"))
+result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://valkey:6379/1")
 accept_content = ["json"]
 task_serializer = "json"
 result_serializer = "json"

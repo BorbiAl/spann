@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 
 from app.database import db
-from app.schemas.common import error_response, success_response
+from app.middleware.rate_limit import public_rate_limit_dependency
+from app.schemas.common import success_response
 
 router = APIRouter(tags=["channels"])
 
@@ -24,18 +25,31 @@ class ChannelCreateRequest(BaseModel):
 
 
 @router.get("/channels")
-async def list_channels(workspace_id: UUID, request: Request):
+async def list_channels(
+    workspace_id: UUID,
+    request: Request,
+    _rate_limit: None = Depends(public_rate_limit_dependency),
+):
     """List channels for the specified workspace."""
+
+    user_id = UUID(str(request.state.user_id))
+    await db.verify_workspace_access(user_id=user_id, workspace_id=workspace_id, required_role="member")
 
     rows = await db.list_channels(str(workspace_id))
     return success_response(rows)
 
 
 @router.post("/channels")
-async def create_channel(payload: ChannelCreateRequest, request: Request):
+async def create_channel(
+    payload: ChannelCreateRequest,
+    request: Request,
+    _rate_limit: None = Depends(public_rate_limit_dependency),
+):
     """Create a new channel under a workspace."""
 
-    user_id = request.state.user_id
+    user_id = str(request.state.user_id)
+    await db.verify_workspace_access(user_id=UUID(user_id), workspace_id=payload.workspace_id, required_role="member")
+
     channel = await db.create_channel(
         workspace_id=str(payload.workspace_id),
         name=payload.name,

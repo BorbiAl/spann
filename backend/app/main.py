@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from logging.config import dictConfig
 from time import monotonic
@@ -13,13 +14,14 @@ from pythonjsonlogger import jsonlogger
 
 from app.config import settings
 from app.database import db
+from app.metrics import MetricsMiddleware, metrics_response, refresh_infra_metrics
 from app.middleware.auth import AuthMiddleware
-from app.middleware.rate_limit import rate_limiter
 from app.middleware.request_context import RequestContextMiddleware
 from app.routers import auth, carbon, channels, mesh, messages, pulse, translate, users
 from app.schemas.common import error_response, success_response
 from app.services.groq_client import groq_client
 from app.services.redis_client import redis_client
+from app.services.redis_publisher import RedisPublisher
 
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
@@ -54,7 +56,7 @@ def configure_logging() -> None:
             },
             "root": {
                 "handlers": ["console"],
-                "level": "INFO",
+                "level": settings.log_level.upper(),
             },
         }
     )
@@ -65,6 +67,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name, version="1.0.0")
 APP_START_MONOTONIC = monotonic()
+METRICS_TASK: asyncio.Task | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -74,35 +77,8 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", settings.request_id_header],
 )
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(MetricsMiddleware)
 app.add_middleware(AuthMiddleware)
-
-
-@app.middleware("http")
-async def enforce_public_rate_limit(request: Request, call_next):
-    """Apply baseline rate limit to all public-facing endpoints."""
-
-    if request.url.path in {"/health", "/docs", "/redoc", "/openapi.json"}:
-        return await call_next(request)
-
-    user_id = getattr(request.state, "user_id", None)
-    source_ip = request.client.host if request.client else "unknown"
-    identity = str(user_id or source_ip)
-
-    try:
-        await rate_limiter.enforce(
-            identity=identity,
-            bucket="public",
-            limit=settings.default_public_rate_limit_per_minute,
-        )
-    except HTTPException as exc:
-        detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
-        return error_response(
-            status_code=429,
-            code=detail.get("code", "RATE_LIMITED"),
-            message=detail.get("message", "Rate limit exceeded."),
-        )
-
-    return await call_next(request)
 
 
 @app.exception_handler(HTTPException)
@@ -119,7 +95,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         message = str(detail)
         details = None
 
-    return error_response(status_code=exc.status_code, code=code, message=message, details=details)
+    return error_response(
+        status_code=exc.status_code,
+        code=code,
+        message=message,
+        details=details,
+        headers=exc.headers,
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -151,17 +133,47 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 async def on_startup() -> None:
     """Initialize external clients and verify critical dependencies."""
 
+    global METRICS_TASK
+
     healthy = await db.healthcheck()
     if not healthy:
         logger.warning("startup_supabase_unhealthy")
+
+    if not hasattr(app.state, "redis_publisher"):
+        app.state.redis_publisher = RedisPublisher(settings.redis_url)
+
+    async def _metrics_loop() -> None:
+        while True:
+            try:
+                redis = await redis_client.get_client()
+                await refresh_infra_metrics(redis)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("metrics_refresh_failed", extra={"error": str(exc)})
+            await asyncio.sleep(10)
+
+    METRICS_TASK = asyncio.create_task(_metrics_loop(), name="metrics-refresh-loop")
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     """Close outgoing network clients cleanly."""
 
+    global METRICS_TASK
+
+    if METRICS_TASK is not None:
+        METRICS_TASK.cancel()
+        try:
+            await METRICS_TASK
+        except asyncio.CancelledError:
+            pass
+        METRICS_TASK = None
+
     await groq_client.close()
     await redis_client.close()
+
+    publisher = getattr(app.state, "redis_publisher", None)
+    if publisher is not None:
+        await publisher.close()
 
 
 @app.get("/health")
@@ -175,6 +187,13 @@ async def health() -> object:
             "uptime": int(monotonic() - APP_START_MONOTONIC),
         }
     )
+
+
+@app.get("/metrics")
+async def metrics() -> object:
+    """Prometheus scraping endpoint for operational telemetry."""
+
+    return metrics_response()
 
 
 app.include_router(auth.router)

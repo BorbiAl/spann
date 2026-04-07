@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from redis.asyncio import Redis
 
 from app.config import settings
+from app.metrics import redis_connected
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ class RedisClient:
             if self._redis is None:
                 self._redis = Redis.from_url(settings.redis_url, decode_responses=True)
                 logger.info("redis_client_initialized")
+                redis_connected.set(1)
 
         return self._redis
 
@@ -40,6 +41,11 @@ class RedisClient:
         subscribers = await redis.publish(channel, payload)
         logger.info("redis_publish", extra={"channel": channel, "subscribers": subscribers})
         return subscribers
+
+    async def get_client(self) -> Redis:
+        """Expose initialized Redis client for read-only metric pollers."""
+
+        return await self._get()
 
     async def set_json(self, key: str, payload: str, ex_seconds: int | None = None) -> None:
         """Set JSON value with optional expiration."""
@@ -53,12 +59,19 @@ class RedisClient:
         redis = await self._get()
         return await redis.get(key)
 
+    async def push_list(self, key: str, payload: str) -> int:
+        """Push one JSON payload into Redis list (dead-letter queue)."""
+
+        redis = await self._get()
+        return await redis.lpush(key, payload)
+
     async def close(self) -> None:
         """Close the Redis connection cleanly."""
 
         if self._redis is not None:
             await self._redis.aclose()
             self._redis = None
+            redis_connected.set(0)
 
 
 redis_client = RedisClient()

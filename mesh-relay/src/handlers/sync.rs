@@ -11,11 +11,17 @@ pub async fn sync_delivered_messages(state: &AppState, messages: Vec<Value>) -> 
     let message_count = messages.len();
 
     let request_id = uuid::Uuid::new_v4().to_string();
-    let response = state
+    let mut request = state
         .http_client
         .post(&state.config.fastapi_mesh_sync_url)
         .header("X-Request-ID", request_id)
-        .json(&json!({ "messages": messages }))
+        .json(&json!({ "messages": messages }));
+
+    if !state.config.mesh_sync_shared_token.trim().is_empty() {
+        request = request.header("X-Mesh-Sync-Token", state.config.mesh_sync_shared_token.trim());
+    }
+
+    let response = request
         .send()
         .await
         .map_err(|error| format!("sync request failed: {error}"))?;

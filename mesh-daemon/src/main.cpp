@@ -2,6 +2,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <exception>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -31,6 +32,18 @@ std::string GetEnvOrDefault(const char* key, const std::string& fallback) {
   return value == nullptr ? fallback : value;
 }
 
+std::uint16_t ParsePortOrDefault(const std::string& raw, const std::uint16_t fallback) {
+  try {
+    const unsigned long parsed = std::stoul(raw);
+    if (parsed == 0 || parsed > 65535UL) {
+      return fallback;
+    }
+    return static_cast<std::uint16_t>(parsed);
+  } catch (const std::exception&) {
+    return fallback;
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -39,8 +52,15 @@ int main() {
 
   const auto node_name = GetEnvOrDefault("NODE_NAME", "spann-mesh-node");
   const auto db_path = GetEnvOrDefault("MESH_DB_PATH", "/tmp/spann-mesh-db");
-  const auto api_bind = GetEnvOrDefault("MESH_DAEMON_BIND", "127.0.0.1");
-  const std::uint16_t port = static_cast<std::uint16_t>(std::stoi(GetEnvOrDefault("MESH_DAEMON_PORT", "7070")));
+  const auto configured_bind = GetEnvOrDefault("MESH_DAEMON_BIND", "127.0.0.1");
+  const std::string api_bind = "127.0.0.1";
+  const std::uint16_t port = ParsePortOrDefault(GetEnvOrDefault("MESH_DAEMON_PORT", "7070"), 7070U);
+
+  if (configured_bind != "127.0.0.1" && configured_bind != "localhost") {
+    spann::utils::Logger::Instance().Warn(
+        "mesh_daemon_bind_forced_localhost",
+        {{"configuredBind", configured_bind}, {"enforcedBind", api_bind}});
+  }
 
   spann::utils::Logger::Instance().Info("mesh_daemon_starting", {{"port", std::to_string(port)}});
 

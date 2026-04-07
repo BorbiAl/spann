@@ -6,6 +6,10 @@
 
 namespace spann::api {
 
+namespace {
+constexpr std::size_t kMaxApiMessageBytes = 4096;
+}
+
 Handlers::Handlers(network::FailoverController& failover,
                    ble::Scanner& scanner,
                    routing::MessageStore& message_store,
@@ -52,10 +56,18 @@ nlohmann::json Handlers::GetNodes() const {
 nlohmann::json Handlers::PostSend(const nlohmann::json& body) {
   const std::string channel_id = body.value("channelId", "");
   const std::string text = body.value("text", "");
-  const int ttl = std::clamp(body.value("ttl", 6), 0, 6);
+  int raw_ttl = 6;
+  if (body.contains("ttl") && !body["ttl"].is_number_integer()) {
+    return {{"error", "ttl must be an integer between 0 and 6"}};
+  }
+  raw_ttl = body.value("ttl", 6);
+  const int ttl = std::clamp(raw_ttl, 0, 6);
 
   if (channel_id.empty() || text.empty()) {
     return {{"error", "channelId and text are required"}};
+  }
+  if (text.size() > kMaxApiMessageBytes) {
+    return {{"error", "text exceeds 4096 byte limit"}};
   }
 
   auto message = router_.InjectMessage(channel_id, text, ttl, "local");

@@ -1,17 +1,17 @@
 package handlers
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/gorilla/websocket"
 	"spann/chat-server/config"
 	"spann/chat-server/hub"
 	"spann/chat-server/middleware"
 	"spann/chat-server/models"
 	redisstore "spann/chat-server/redis"
+
+	"github.com/gorilla/websocket"
 )
 
 // WSHandler manages websocket upgrades and client lifecycle.
@@ -22,6 +22,19 @@ type WSHandler struct {
 	TypingTracker *TypingTracker
 	Logger        *slog.Logger
 	allowedOrigin map[string]struct{}
+}
+
+func (h *WSHandler) isOriginAllowed(req *http.Request) bool {
+	origin := strings.TrimSpace(req.Header.Get("Origin"))
+	if origin == "" {
+		// Non-browser clients generally do not send Origin.
+		return true
+	}
+	if len(h.allowedOrigin) == 0 {
+		return false
+	}
+	_, ok := h.allowedOrigin[origin]
+	return ok
 }
 
 // NewWSHandler creates a websocket handler with event dispatch dependencies.
@@ -62,14 +75,7 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin: func(req *http.Request) bool {
-			if len(h.allowedOrigin) == 0 {
-				return true
-			}
-			origin := req.Header.Get("Origin")
-			_, ok := h.allowedOrigin[origin]
-			return ok
-		},
+		CheckOrigin:     h.isOriginAllowed,
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -79,6 +85,7 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := hub.NewClient(
+		r.Context(),
 		conn,
 		h.Hub,
 		h.Logger,
@@ -117,7 +124,7 @@ func (h *WSHandler) dispatchEvent(client *hub.Client, event models.ClientEvent) 
 }
 
 func (h *WSHandler) onConnect(client *hub.Client) {
-	ctx := context.Background()
+	ctx := client.Context
 	if err := h.Presence.SetStatus(ctx, client.UserID, "online"); err != nil {
 		h.Logger.Warn("presence_online_failed", "user_id", client.UserID, "error", err.Error())
 	}
@@ -130,7 +137,7 @@ func (h *WSHandler) onConnect(client *hub.Client) {
 }
 
 func (h *WSHandler) onDisconnect(client *hub.Client) {
-	ctx := context.Background()
+	ctx := client.Context
 	h.Hub.Unregister(client)
 	h.TypingTracker.RemoveUser(client.UserID)
 

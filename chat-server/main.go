@@ -11,17 +11,21 @@ import (
 	"syscall"
 	"time"
 
-	goredis "github.com/go-redis/redis/v9"
 	"spann/chat-server/config"
 	"spann/chat-server/handlers"
 	"spann/chat-server/hub"
 	"spann/chat-server/models"
 	redisadapter "spann/chat-server/redis"
+
+	goredis "github.com/redis/go-redis/v9"
 )
+
+const serviceVersion = "1.0.0"
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	cfg := config.Load()
+	startedAt := time.Now().UTC()
 
 	if strings.TrimSpace(cfg.JWTSecret) == "" {
 		logger.Error("JWT_SECRET is required")
@@ -62,7 +66,11 @@ func main() {
 	mux.HandleFunc("/ws", wsHandler.ServeWS)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":  "ok",
+			"version": serviceVersion,
+			"uptime":  int(time.Since(startedAt).Seconds()),
+		})
 	})
 
 	server := &http.Server{
@@ -119,23 +127,56 @@ func subscribeAuxiliaryEvents(
 	channelHub *hub.Hub,
 	logger *slog.Logger,
 ) error {
-	pubsub := redisClient.PSubscribe(ctx, "coaching:*", "pulse:*")
-	if _, err := pubsub.Receive(ctx); err != nil {
-		return err
-	}
-
 	go func() {
-		defer pubsub.Close()
-		channel := pubsub.Channel()
+		backoff := time.Second
 		for {
+			if ctx.Err() != nil {
+				return
+			}
+
+			pubsub := redisClient.PSubscribe(ctx, "coaching:*", "pulse:*")
+			if _, err := pubsub.Receive(ctx); err != nil {
+				logger.Warn("auxiliary_pubsub_subscribe_failed", "error", err.Error(), "backoff_seconds", backoff.Seconds())
+				_ = pubsub.Close()
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(backoff):
+				}
+				if backoff < 30*time.Second {
+					backoff *= 2
+				}
+				continue
+			}
+
+			backoff = time.Second
+			channel := pubsub.Channel()
+			running := true
+			for running {
+				select {
+				case <-ctx.Done():
+					running = false
+				case message, ok := <-channel:
+					if !ok {
+						logger.Warn("auxiliary_pubsub_closed")
+						running = false
+						break
+					}
+					handleAuxiliaryEvent(message, channelHub, logger)
+				}
+			}
+
+			_ = pubsub.Close()
+			if ctx.Err() != nil {
+				return
+			}
 			select {
 			case <-ctx.Done():
 				return
-			case message, ok := <-channel:
-				if !ok {
-					return
-				}
-				handleAuxiliaryEvent(message, channelHub, logger)
+			case <-time.After(backoff):
+			}
+			if backoff < 30*time.Second {
+				backoff *= 2
 			}
 		}
 	}()

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 #[derive(Clone, Default)]
 pub struct NodeRegistry {
-    sessions: DashMap<String, mpsc::UnboundedSender<Message>>,
+    sessions: DashMap<String, mpsc::Sender<Message>>,
 }
 
 impl NodeRegistry {
@@ -14,7 +14,7 @@ impl NodeRegistry {
         }
     }
 
-    pub fn register(&self, node_id: String, sender: mpsc::UnboundedSender<Message>) {
+    pub fn register(&self, node_id: String, sender: mpsc::Sender<Message>) {
         self.sessions.insert(node_id, sender);
     }
 
@@ -22,7 +22,7 @@ impl NodeRegistry {
         self.sessions.remove(node_id);
     }
 
-    pub fn get_sender(&self, node_id: &str) -> Option<mpsc::UnboundedSender<Message>> {
+    pub fn get_sender(&self, node_id: &str) -> Option<mpsc::Sender<Message>> {
         self.sessions.get(node_id).map(|entry| entry.value().clone())
     }
 

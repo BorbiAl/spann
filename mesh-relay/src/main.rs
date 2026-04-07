@@ -5,6 +5,7 @@ mod models;
 mod store;
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::{extract::State, routing::get, Json, Router};
 use deadpool_redis::{Config as RedisConfig, Runtime};
@@ -17,13 +18,13 @@ use tracing_subscriber::EnvFilter;
 
 use crate::config::Config;
 
-#[derive(Clone)]
 pub struct AppState {
     config: Config,
     registry: NodeRegistry,
     queue: MessageQueue,
     rate_limiter: NodeRateLimiter,
     http_client: reqwest::Client,
+    started_at: Instant,
 }
 
 #[tokio::main]
@@ -52,6 +53,7 @@ async fn main() {
         queue: MessageQueue::new(redis_pool),
         rate_limiter: build_rate_limiter(),
         http_client: reqwest::Client::new(),
+        started_at: Instant::now(),
     });
 
     let app = Router::new()
@@ -76,8 +78,12 @@ async fn main() {
     }
 }
 
-async fn health(State(_state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    Json(json!({ "status": "ok" }))
+async fn health(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    Json(json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION"),
+        "uptime": state.started_at.elapsed().as_secs()
+    }))
 }
 
 fn build_redis_pool(redis_url: &str) -> Result<deadpool_redis::Pool, String> {
