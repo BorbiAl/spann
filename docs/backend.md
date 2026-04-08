@@ -50,7 +50,8 @@ When enabled, backend uses in-memory local storage paths for major flows to supp
 
 ### Auth fallback mode
 Controlled by `AUTH_FALLBACK_ENABLED` in [backend/app/config.py](backend/app/config.py).
-When enabled (default true), auth-related flows can gracefully use local fallback state if Supabase auth responses fail in runtime environments.
+When enabled, auth-related flows can gracefully use local fallback state if Supabase auth responses fail in runtime environments.
+Default is `false`, and production validation blocks enabling it.
 
 ## API Behavior
 ### Response envelope
@@ -171,6 +172,14 @@ Important environment variables:
 - `ALLOWED_ORIGINS`
 - `TEST_MODE`
 - `AUTH_FALLBACK_ENABLED`
+
+Production startup/validation protections:
+- `TEST_MODE` must be `false`
+- `AUTH_FALLBACK_ENABLED` must be `false`
+- `ALLOWED_ORIGINS` cannot contain `*`
+- `JWT_SECRET` must be at least 32 characters
+- Supabase URL + API key must be configured
+- backend startup fails in production if Supabase healthcheck is unhealthy
 
 ## Local Run
 From repository root, scripts in [package.json](package.json):

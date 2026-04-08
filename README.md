@@ -48,3 +48,64 @@ Expected response includes:
 ```json
 {"data":{"status":"ok"},"error":null,"status":200}
 ```
+
+## Production hardening defaults
+
+Backend configuration now enforces safer production defaults:
+- `AUTH_FALLBACK_ENABLED=false` by default
+- `TEST_MODE=false` by default
+- startup fails in production when Supabase healthcheck fails
+- startup validation fails in production if:
+	- `ALLOWED_ORIGINS` contains `*`
+	- `JWT_SECRET` is shorter than 32 chars
+	- Supabase URL/key are missing
+
+Set `ENV=production` only when all production secrets and dependencies are configured.
+
+## Desktop app (Electron)
+
+Run as a desktop app in development:
+
+```bash
+npm run desktop:dev
+```
+
+Build desktop installers:
+
+```bash
+npm run desktop:build
+```
+
+Build artifacts are written to `release/` (NSIS on Windows, DMG on macOS, AppImage on Linux).
+
+## Mobile app (Capacitor)
+
+One-time platform setup:
+
+```bash
+npm run mobile:add:android
+npm run mobile:add:ios
+```
+
+Sync latest web build into native projects:
+
+```bash
+npm run mobile:sync
+```
+
+Open native IDE projects:
+
+```bash
+npm run mobile:android
+npm run mobile:ios
+```
+
+## Native API base configuration
+
+Native builds do not use the Vite `/api` proxy. Configure an absolute backend URL for release builds:
+- preferred: set `VITE_API_BASE_URL=https://api.your-domain.com` before `npm run build`
+- desktop runtime override: set `SPANN_API_BASE` when launching the Electron app
+
+Default native fallbacks for local development:
+- desktop and iOS simulator: `http://127.0.0.1:8000`
+- Android emulator: `http://10.0.2.2:8000`

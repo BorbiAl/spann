@@ -1,0 +1,6 @@
+{
+  "appId": "com.spann.app",
+  "appName": "Spann",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

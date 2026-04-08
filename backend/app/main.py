@@ -79,6 +79,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     healthy = await db.healthcheck()
     if not healthy:
+        if settings.env.lower() == "production":
+            raise RuntimeError("Supabase healthcheck failed during production startup")
         logger.warning("startup_supabase_unhealthy")
 
     app.state.start_time = monotonic()

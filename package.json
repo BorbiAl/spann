@@ -2,13 +2,20 @@
   "name": "spann",
   "version": "1.0.0",
   "description": "A team communication platform that works everywhere and understands everyone, combining real-time chat with AI-powered language translation, cultural adaptation, and communication coaching — so global teams collaborate without barriers. When infrastructure fails, our peer-to-peer mesh network keeps teams connected offline via Bluetooth and Wi-Fi.",
-  "main": "server/index.js",
+  "main": "desktop/main.cjs",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "desktop:dev": "cross-env ELECTRON_START_URL=http://localhost:5173 concurrently -k \"npm:dev\" \"wait-on tcp:5173 && electron ./desktop/main.cjs\"",
+    "desktop:build": "npm run build && electron-builder",
+    "mobile:sync": "npm run build && npx cap sync",
+    "mobile:add:android": "npx cap add android",
+    "mobile:add:ios": "npx cap add ios",
+    "mobile:android": "npm run mobile:sync && npx cap open android",
+    "mobile:ios": "npm run mobile:sync && npx cap open ios",
     "preview": "vite preview",
     "start": "npm run backend",
     "backend": "python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000",
@@ -28,13 +35,43 @@
   },
   "homepage": "https://github.com/BorbiAl/spann#readme",
   "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
     "@ljharb/tsconfig": "^0.3.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3",
     "vite": "^8.0.5"
+  },
+  "build": {
+    "appId": "com.spann.desktop",
+    "productName": "Spann",
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

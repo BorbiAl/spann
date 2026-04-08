@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     app_name: str = "Spann Backend"
     env: str = "development"
     test_mode: bool = Field(default=False, alias="TEST_MODE")
-    auth_fallback_enabled: bool = Field(default=True, alias="AUTH_FALLBACK_ENABLED")
+    auth_fallback_enabled: bool = Field(default=False, alias="AUTH_FALLBACK_ENABLED")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
@@ -66,8 +66,17 @@ class Settings(BaseSettings):
     def validate_security_defaults(self) -> "Settings":
         """Block insecure production settings early at startup."""
 
-        if self.env.lower() == "production" and "*" in self.cors_origins:
+        is_production = self.env.lower() == "production"
+        if is_production and "*" in self.cors_origins:
             raise ValueError("ALLOWED_ORIGINS cannot include '*' in production")
+        if is_production and self.test_mode:
+            raise ValueError("TEST_MODE must be disabled in production")
+        if is_production and self.auth_fallback_enabled:
+            raise ValueError("AUTH_FALLBACK_ENABLED must be disabled in production")
+        if is_production and len(self.jwt_secret.strip()) < 32:
+            raise ValueError("JWT_SECRET must be at least 32 characters in production")
+        if is_production and (not self.supabase_url.strip() or not self.supabase_api_key.strip()):
+            raise ValueError("SUPABASE_URL and a usable Supabase API key are required in production")
         return self
 
     @property

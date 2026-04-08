@@ -191,11 +191,14 @@ class DatabaseClient:
 
         client = await self.client()
         try:
-            response = await self._execute("healthcheck", client.table("channels").select("id").limit(1))
+            response = await self._execute("healthcheck", client.table("workspaces").select("id").limit(1))
             _ = self._extract_data(response)
             return True
         except Exception as exc:  # noqa: BLE001
             if self._is_schema_missing_error(exc):
+                if settings.env.lower() == "production":
+                    logger.error("supabase_healthcheck_schema_missing", extra={"error": str(exc)})
+                    return False
                 logger.warning("supabase_healthcheck_schema_missing", extra={"error": str(exc)})
                 return True
             logger.warning("supabase_healthcheck_failed", extra={"error": str(exc)})

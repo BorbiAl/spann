@@ -227,9 +227,15 @@ export function incrementReaction(reactions, emoji) {
 
 const runtimeApiBase = typeof window !== "undefined" ? window.SPANN_API_BASE : "";
 const envApiBase = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
+const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
+const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent || "");
 
-// Prefer runtime override, then Vite env, then relative API path handled by Vite proxy.
-export const API_BASE = String(runtimeApiBase || envApiBase || "/api").replace(/\/+$/, "");
+// Native shells run without the Vite proxy, so file:// builds need an absolute backend URL.
+const nativeDefaultApiBase = isAndroid ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000";
+const fallbackApiBase = isFileProtocol ? nativeDefaultApiBase : "/api";
+
+// Prefer runtime override, then Vite env, then protocol-aware fallback.
+export const API_BASE = String(runtimeApiBase || envApiBase || fallbackApiBase).replace(/\/+$/, "");
 
 export async function apiRequest(path, options = {}) {
 	const response = await fetch(`${API_BASE}${path}`, {
