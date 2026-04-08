@@ -20,6 +20,17 @@ Development desktop app:
 npm run desktop:dev
 ```
 
+One-command launcher (from repo root, Windows PowerShell):
+
+```powershell
+.\start.ps1
+```
+
+Useful flags:
+- `-NoDocker` skips `docker compose up -d`
+- `-NoInstall` skips npm install check
+- `-Web` starts web mode (`npm run dev`) instead of Electron
+
 Production installers:
 
 ```bash
