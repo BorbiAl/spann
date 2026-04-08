@@ -148,6 +148,11 @@ def test_send_message_coaching_task_triggered(client, auth_headers, monkeypatch)
     assert called["task"] is True
 
 
+def test_send_message_triggers_coaching_task(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_send_message_coaching_task_triggered(client, auth_headers, monkeypatch)
+
+
 def test_send_message_empty_text_rejected(client, auth_headers):
     response = client.post(
         "/messages",
@@ -230,6 +235,22 @@ def test_send_message_source_locale_stored(client, auth_headers, monkeypatch):
     assert response.json()["data"]["source_locale"] == "es-ES"
 
 
+def test_send_message_channel_not_found_404(client, auth_headers, monkeypatch):
+    async def fake_get_channel(_channel_id: str):
+        return None
+
+    monkeypatch.setattr("app.routers.messages.db.get_channel", fake_get_channel)
+
+    response = client.post(
+        "/messages",
+        headers=auth_headers,
+        json={"channel_id": CHANNEL_ID, "text": "hello"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "channel_not_found"
+
+
 # Get Messages Pagination (7)
 
 
@@ -295,6 +316,11 @@ def test_get_messages_cursor_pagination_correct(client, auth_headers, monkeypatc
     assert first["messages"][0]["id"] != second["messages"][0]["id"]
 
 
+def test_get_messages_cursor_pagination(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_get_messages_cursor_pagination_correct(client, auth_headers, monkeypatch)
+
+
 def test_get_messages_no_duplicates_across_pages(client, auth_headers, monkeypatch):
     dataset = _build_dataset(21)
     monkeypatch.setattr("app.routers.messages.message_service.get_messages_page", _pagination_stub(dataset))
@@ -332,6 +358,11 @@ def test_get_messages_no_skips_across_five_pages(client, auth_headers, monkeypat
     assert collected == expected
 
 
+def test_get_messages_no_skips_across_pages(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_get_messages_no_skips_across_five_pages(client, auth_headers, monkeypatch)
+
+
 def test_get_messages_deleted_messages_redacted(client, auth_headers, monkeypatch):
     dataset = [_message_row(text="secret", deleted_at=datetime.now(UTC))]
 
@@ -353,6 +384,18 @@ def test_get_messages_wrong_channel_forbidden(client, auth_headers, monkeypatch)
 
     response = client.get(f"/channels/{CHANNEL_ID}/messages", headers=auth_headers)
     assert response.status_code == 403
+
+
+def test_get_messages_channel_not_found_404(client, auth_headers, monkeypatch):
+    async def fake_get_channel(_channel_id: str):
+        return None
+
+    monkeypatch.setattr("app.routers.messages.db.get_channel", fake_get_channel)
+
+    response = client.get(f"/channels/{CHANNEL_ID}/messages", headers=auth_headers)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "channel_not_found"
 
 
 def test_get_messages_limit_param_max_100_enforced(client, auth_headers):
@@ -401,6 +444,11 @@ def test_edit_message_after_five_minutes_rejected(client, auth_headers, monkeypa
     response = client.patch(f"/messages/{uuid4()}", headers=auth_headers, json={"text": "late"})
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "edit_window_expired"
+
+
+def test_edit_message_after_5_minutes_rejected(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_edit_message_after_five_minutes_rejected(client, auth_headers, monkeypatch)
 
 
 @pytest.mark.asyncio
@@ -460,6 +508,12 @@ async def test_edit_message_stores_original_in_message_edits(monkeypatch):
     assert history_entries[0][3]["previous_text"] == "before"
 
 
+@pytest.mark.asyncio
+async def test_edit_message_stores_in_history(monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    await test_edit_message_stores_original_in_message_edits(monkeypatch)
+
+
 def test_edit_message_deleted_message_cannot_be_edited(client, auth_headers, monkeypatch):
     async def fake_edit_message(**kwargs):
         raise HTTPException(
@@ -504,6 +558,11 @@ def test_delete_message_success_returns_204(client, auth_headers, monkeypatch):
     assert response.status_code == 204
 
 
+def test_delete_message_success(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_delete_message_success_returns_204(client, auth_headers, monkeypatch)
+
+
 def test_delete_message_content_redacted_in_subsequent_get(client, auth_headers, monkeypatch):
     state = {"deleted": False}
     msg_id = str(uuid4())
@@ -528,6 +587,11 @@ def test_delete_message_content_redacted_in_subsequent_get(client, auth_headers,
     assert delete_response.status_code == 204
     assert list_response.status_code == 200
     assert list_response.json()["data"]["messages"][0]["text"] == "[deleted]"
+
+
+def test_delete_message_content_redacted(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_delete_message_content_redacted_in_subsequent_get(client, auth_headers, monkeypatch)
 
 
 def test_delete_message_not_owner_forbidden(client, auth_headers, monkeypatch):
@@ -565,6 +629,11 @@ def test_delete_message_admin_can_delete_any_message(client, auth_headers, monke
     assert captured["role"] == "admin"
 
 
+def test_delete_message_admin_can_delete_any(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_delete_message_admin_can_delete_any_message(client, auth_headers, monkeypatch)
+
+
 def test_delete_message_already_deleted_is_idempotent(client, auth_headers, monkeypatch):
     async def fake_get_message_by_id(db, message_id):
         return _message_row(message_id=message_id, deleted_at=datetime.now(UTC))
@@ -577,6 +646,18 @@ def test_delete_message_already_deleted_is_idempotent(client, auth_headers, monk
 
     response = client.delete(f"/messages/{uuid4()}", headers=auth_headers)
     assert response.status_code == 204
+
+
+def test_delete_message_not_found_404(client, auth_headers, monkeypatch):
+    async def fake_get_message_by_id(db, message_id):
+        return None
+
+    monkeypatch.setattr("app.routers.messages.message_service.get_message_by_id", fake_get_message_by_id)
+
+    response = client.delete(f"/messages/{uuid4()}", headers=auth_headers)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "message_not_found"
 
 
 # Reactions (5)
@@ -604,6 +685,11 @@ def test_reaction_add_success(client, auth_headers, monkeypatch):
     assert response.json()["data"][0]["count"] == 1
 
 
+def test_reaction_toggle_add(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_reaction_add_success(client, auth_headers, monkeypatch)
+
+
 def test_reaction_second_call_removes_reaction(client, auth_headers, monkeypatch):
     message_id = str(uuid4())
     state = {"on": False}
@@ -626,6 +712,11 @@ def test_reaction_second_call_removes_reaction(client, auth_headers, monkeypatch
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json()["data"] == []
+
+
+def test_reaction_toggle_remove(client, auth_headers, monkeypatch):
+    # Alias for checklist parity with external E2E verification naming.
+    test_reaction_second_call_removes_reaction(client, auth_headers, monkeypatch)
 
 
 def test_reaction_count_correct(client, auth_headers, monkeypatch):
@@ -668,6 +759,22 @@ def test_reaction_wrong_emoji_format_rejected(client, auth_headers):
     assert response.status_code == 422
 
 
+def test_reaction_message_not_found_404(client, auth_headers, monkeypatch):
+    async def fake_get_message_by_id(db, message_id):
+        return None
+
+    monkeypatch.setattr("app.routers.messages.message_service.get_message_by_id", fake_get_message_by_id)
+
+    response = client.post(
+        f"/messages/{uuid4()}/reactions",
+        headers=auth_headers,
+        json={"emoji": "👍"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "message_not_found"
+
+
 # Redis Publishing (4)
 
 
@@ -683,6 +790,11 @@ def test_redis_message_new_published_on_send(client, auth_headers, monkeypatch, 
     assert fake_redis_publisher.calls[-1][1]["event"] == "message:new"
 
 
+def test_redis_publish_on_message_create(client, auth_headers, monkeypatch, fake_redis_publisher):
+    # Alias for checklist parity with external E2E verification naming.
+    test_redis_message_new_published_on_send(client, auth_headers, monkeypatch, fake_redis_publisher)
+
+
 def test_redis_message_edited_published_on_edit(client, auth_headers, monkeypatch, fake_redis_publisher):
     async def fake_edit_message(**kwargs):
         return _message_row(text=kwargs["new_text"], is_edited=True)
@@ -692,6 +804,11 @@ def test_redis_message_edited_published_on_edit(client, auth_headers, monkeypatc
     response = client.patch(f"/messages/{uuid4()}", headers=auth_headers, json={"text": "edited"})
     assert response.status_code == 200
     assert fake_redis_publisher.calls[-1][1]["event"] == "message:edited"
+
+
+def test_redis_publish_on_message_edit(client, auth_headers, monkeypatch, fake_redis_publisher):
+    # Alias for checklist parity with external E2E verification naming.
+    test_redis_message_edited_published_on_edit(client, auth_headers, monkeypatch, fake_redis_publisher)
 
 
 def test_redis_message_deleted_published_on_delete(client, auth_headers, monkeypatch, fake_redis_publisher):
@@ -709,6 +826,11 @@ def test_redis_message_deleted_published_on_delete(client, auth_headers, monkeyp
     assert fake_redis_publisher.calls[-1][1]["event"] == "message:deleted"
 
 
+def test_redis_publish_on_message_delete(client, auth_headers, monkeypatch, fake_redis_publisher):
+    # Alias for checklist parity with external E2E verification naming.
+    test_redis_message_deleted_published_on_delete(client, auth_headers, monkeypatch, fake_redis_publisher)
+
+
 def test_redis_message_reaction_published_on_toggle(client, auth_headers, monkeypatch, fake_redis_publisher):
     async def fake_get_message_by_id(db, message_id):
         return _message_row(message_id=message_id)
@@ -722,6 +844,11 @@ def test_redis_message_reaction_published_on_toggle(client, auth_headers, monkey
     response = client.post(f"/messages/{uuid4()}/reactions", headers=auth_headers, json={"emoji": "👍"})
     assert response.status_code == 200
     assert fake_redis_publisher.calls[-1][1]["event"] == "message:reaction"
+
+
+def test_redis_publish_on_reaction(client, auth_headers, monkeypatch, fake_redis_publisher):
+    # Alias for checklist parity with external E2E verification naming.
+    test_redis_message_reaction_published_on_toggle(client, auth_headers, monkeypatch, fake_redis_publisher)
 
 
 # Rate Limiting (2)
