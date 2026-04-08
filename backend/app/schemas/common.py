@@ -28,8 +28,12 @@ class ResponseEnvelope(BaseModel):
 
 def success_response(data: Any, status_code: int = 200) -> JSONResponse:
     """Create a success response envelope."""
-
-    return JSONResponse(status_code=status_code, content={"data": data, "error": None, "status": status_code})
+    content: dict[str, Any] = {"data": data, "error": None, "status": status_code}
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key not in {"data", "error", "status"}:
+                content[key] = value
+    return JSONResponse(status_code=status_code, content=content)
 
 
 def error_response(
@@ -41,13 +45,14 @@ def error_response(
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     """Create a standardized error response envelope."""
-
+    detail = {"error_code": code, "message": message, "details": details}
     return JSONResponse(
         status_code=status_code,
         headers=headers,
         content={
             "data": None,
             "error": {"code": code, "message": message, "details": details},
+            "detail": detail,
             "status": status_code,
         },
     )

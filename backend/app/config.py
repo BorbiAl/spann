@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     app_name: str = "Spann Backend"
     env: str = "development"
+    test_mode: bool = Field(default=False, alias="TEST_MODE")
+    auth_fallback_enabled: bool = Field(default=True, alias="AUTH_FALLBACK_ENABLED")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")

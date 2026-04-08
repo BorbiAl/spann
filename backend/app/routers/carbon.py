@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 
+from app.config import settings
 from app.database import db
 from app.middleware.rate_limit import public_rate_limit_dependency
 from app.schemas.common import error_response, success_response
@@ -16,6 +18,7 @@ from app.metrics import carbon_logs_total
 from app.tasks.carbon import recalculate_carbon_leaderboard
 
 router = APIRouter(prefix="/carbon", tags=["carbon"])
+logger = logging.getLogger(__name__)
 
 
 class CarbonLogRequest(BaseModel):
@@ -85,5 +88,9 @@ async def create_carbon_log(
         kg_co2=payload.kg_co2,
     )
     carbon_logs_total.labels(transport_type=transport_type).inc()
-    recalculate_carbon_leaderboard.delay(str(payload.workspace_id))
+    if not settings.test_mode:
+        try:
+            recalculate_carbon_leaderboard.delay(str(payload.workspace_id))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("carbon_recalculate_dispatch_failed", extra={"error": str(exc)})
     return success_response(logged, status_code=201)

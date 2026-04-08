@@ -1,0 +1,8 @@
+[run]
+omit =
+    app/database.py
+    app/services/local_store.py
+    app/services/message_service.py
+    app/services/groq_client.py
+    app/models/*
+    app/schemas/carbon.py

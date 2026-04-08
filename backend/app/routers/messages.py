@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
+from app.config import settings
 from app.database import db
 from app.middleware.rate_limit import messages_rate_limit_dependency
 from app.schemas.common import success_response
@@ -93,13 +94,21 @@ async def create_message(
     )
 
     preferences = await db.get_user_preferences(user_id)
-    trigger_coaching_task(
-        message_id=str(response_model.id),
-        text=response_model.text,
-        channel_tone=str(channel.get("tone", "neutral")),
-        user_locale=str(preferences.get("locale", "en-US")),
-    )
-    score_single_channel_task.delay(str(response_model.channel_id))
+    if not settings.test_mode:
+        try:
+            trigger_coaching_task(
+                message_id=str(response_model.id),
+                text=response_model.text,
+                channel_tone=str(channel.get("tone", "neutral")),
+                user_locale=str(preferences.get("locale", "en-US")),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("coaching_task_dispatch_failed", extra={"error": str(exc)})
+
+        try:
+            score_single_channel_task.delay(str(response_model.channel_id))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("sentiment_task_dispatch_failed", extra={"error": str(exc)})
 
     return success_response(response_model.model_dump(mode="json"), status_code=201)
 

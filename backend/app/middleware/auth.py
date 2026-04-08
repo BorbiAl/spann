@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 UNPROTECTED_PATHS = {
     "/health",
     "/metrics",
+    "/auth/register",
     "/auth/login",
     "/auth/refresh",
     "/auth/magic-link",

@@ -8,15 +8,18 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from typing import Any, TypedDict, cast
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
+from postgrest.exceptions import APIError
 from redis.asyncio import Redis
 from supabase import AsyncClient, acreate_client
 
 from app.config import settings
 from app.metrics import db_query_duration_seconds
+from app.services.local_store import local_store
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +173,21 @@ class DatabaseClient:
             detail={"code": "db_error", "message": "Database operation failed."},
         )
 
+    @staticmethod
+    def _is_schema_missing_error(exc: Exception) -> bool:
+        """Return True when PostgREST reports missing relation in schema cache."""
+
+        if isinstance(exc, APIError):
+            message = str(exc)
+            return "PGRST205" in message or "schema cache" in message
+        text = str(exc)
+        return "PGRST205" in text or "schema cache" in text
+
     async def healthcheck(self) -> bool:
         """Run a minimal read query to confirm Supabase connectivity."""
+
+        if settings.test_mode:
+            return True
 
         client = await self.client()
         try:
@@ -179,11 +195,90 @@ class DatabaseClient:
             _ = self._extract_data(response)
             return True
         except Exception as exc:  # noqa: BLE001
-            logger.exception("supabase_healthcheck_failed", extra={"error": str(exc)})
+            if self._is_schema_missing_error(exc):
+                logger.warning("supabase_healthcheck_schema_missing", extra={"error": str(exc)})
+                return True
+            logger.warning("supabase_healthcheck_failed", extra={"error": str(exc)})
             return False
+
+    async def register_user(self, *, email: str, password: str, name: str) -> dict[str, Any]:
+        """Create a new user and default workspace for login bootstrap flows."""
+
+        normalized_email = self._sanitize_text(email.lower(), max_len=320)
+        display_name = self._sanitize_text(name, max_len=120)
+
+        if settings.test_mode:
+            return local_store.register_user(email=normalized_email, password=password, name=display_name)
+
+        client = await self.client()
+        try:
+            auth_response = await client.auth.sign_up(
+                {
+                    "email": normalized_email,
+                    "password": password,
+                    "options": {"data": {"full_name": display_name}},
+                }
+            )
+            user = getattr(auth_response, "user", None)
+            if user is None:
+                if settings.auth_fallback_enabled:
+                    logger.warning("register_user_supabase_missing_user_fallback", extra={"email": normalized_email})
+                    return local_store.register_user(email=normalized_email, password=password, name=display_name)
+                raise HTTPException(status_code=400, detail={"code": "register_failed", "message": "Unable to register user."})
+        except Exception as exc:
+            if settings.auth_fallback_enabled:
+                logger.warning("register_user_supabase_fallback", extra={"email": normalized_email, "error": str(exc)})
+                return local_store.register_user(email=normalized_email, password=password, name=display_name)
+            raise
+
+        await self.upsert_user_profile(
+            user_id=user.id,
+            email=user.email or normalized_email,
+            display_name=display_name,
+            locale="en-US",
+        )
+
+        workspace_id = await self.get_default_workspace_for_user(user.id)
+        if workspace_id is None:
+            workspace_id = str(uuid4())
+            now_iso = datetime.now(UTC).isoformat()
+            await self._execute(
+                "register_create_workspace",
+                client.table("workspaces").insert(
+                    {
+                        "id": workspace_id,
+                        "name": f"{display_name}'s Workspace",
+                        "slug": f"ws-{workspace_id[:8]}",
+                        "created_at": now_iso,
+                    }
+                ),
+            )
+            await self._execute(
+                "register_create_membership",
+                client.table("workspace_members").insert(
+                    {
+                        "workspace_id": workspace_id,
+                        "user_id": user.id,
+                        "role": "owner",
+                        "joined_at": now_iso,
+                    }
+                ),
+            )
+
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email or normalized_email,
+                "display_name": display_name,
+            },
+            "workspace_id": workspace_id,
+        }
 
     async def authenticate_user(self, email: str, password: str) -> dict[str, Any] | None:
         """Authenticate with Supabase Auth and ensure profile exists."""
+
+        if settings.test_mode:
+            return local_store.authenticate_user(email=email, password=password)
 
         client = await self.client()
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
@@ -192,11 +287,15 @@ class DatabaseClient:
             auth_response = await client.auth.sign_in_with_password({"email": normalized_email, "password": password})
         except Exception as exc:  # noqa: BLE001
             logger.warning("auth_login_failed", extra={"email": normalized_email, "error": str(exc)})
+            if settings.auth_fallback_enabled:
+                return local_store.authenticate_user(email=normalized_email, password=password)
             return None
 
         user = getattr(auth_response, "user", None)
         session = getattr(auth_response, "session", None)
         if user is None:
+            if settings.auth_fallback_enabled:
+                return local_store.authenticate_user(email=normalized_email, password=password)
             return None
 
         display_name = user.user_metadata.get("full_name") if isinstance(getattr(user, "user_metadata", None), dict) else None
@@ -215,6 +314,9 @@ class DatabaseClient:
     async def send_magic_link(self, email: str) -> None:
         """Send a Supabase magic-link login email."""
 
+        if settings.test_mode:
+            return
+
         client = await self.client()
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
         await client.auth.sign_in_with_otp({"email": normalized_email})
@@ -230,6 +332,30 @@ class DatabaseClient:
         accessibility_settings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Insert or update the users table row."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        safe_email = self._sanitize_text(email.lower(), max_len=320)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            user = local_store.users_by_id.get(user_id)
+            if user is None:
+                local_store.register_user(
+                    email=safe_email,
+                    password=sha256(uuid4().hex.encode("utf-8")).hexdigest(),
+                    name=display_name or email.split("@", 1)[0],
+                )
+                user = local_store.users_by_email[safe_email]
+            user.display_name = display_name or user.display_name
+            user.locale = locale
+            user.coaching_enabled = bool(coaching_enabled)
+            user.accessibility_settings = accessibility_settings or {}
+            return {
+                "id": user.id,
+                "email": user.email,
+                "display_name": user.display_name,
+                "locale": user.locale,
+                "coaching_enabled": user.coaching_enabled,
+                "accessibility_settings": user.accessibility_settings,
+            }
 
         client = await self.client()
         payload = {
@@ -248,6 +374,12 @@ class DatabaseClient:
 
     async def get_user_preferences(self, user_id: str) -> dict[str, Any]:
         """Fetch user preferences by user id."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            if user_id in local_store.users_by_id:
+                return local_store.get_user_preferences(user_id=user_id)
+            return {"locale": "en-US", "coaching_enabled": True, "accessibility_settings": {}}
 
         client = await self.client()
         response = await self._execute(
@@ -272,6 +404,15 @@ class DatabaseClient:
     ) -> dict[str, Any]:
         """Patch user preference values and return latest row."""
 
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            return local_store.upsert_user_preferences(
+                user_id=safe_user_id,
+                locale=locale,
+                coaching_enabled=coaching_enabled,
+                accessibility_settings=accessibility_settings,
+            )
+
         client = await self.client()
         payload: dict[str, Any] = {"updated_at": datetime.now(UTC).isoformat()}
         if locale is not None:
@@ -290,6 +431,9 @@ class DatabaseClient:
     async def get_default_workspace_for_user(self, user_id: str) -> str | None:
         """Return deterministic default workspace for login token claims."""
 
+        if settings.test_mode:
+            return local_store.get_default_workspace_for_user(user_id)
+
         client = await self.client()
         response = await self._execute(
             "get_default_workspace_for_user",
@@ -301,6 +445,8 @@ class DatabaseClient:
         )
         rows = self._extract_data(response) or []
         if not rows:
+            if settings.auth_fallback_enabled:
+                return local_store.get_default_workspace_for_user(user_id)
             return None
         return str(rows[0]["workspace_id"])
 
@@ -314,6 +460,16 @@ class DatabaseClient:
         device_hint: str | None,
     ) -> dict[str, Any]:
         """Insert refresh token metadata row."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            return local_store.create_refresh_token(
+                user_id=safe_user_id,
+                token_hash=self._sanitize_text(token_hash, max_len=128),
+                workspace_id=self._sanitize_text(workspace_id, max_len=128),
+                expires_at_iso=expires_at.astimezone(UTC).isoformat(),
+                device_hint=self._sanitize_optional_text(device_hint, max_len=64),
+            )
 
         client = await self.client()
         payload: dict[str, Any] = {
@@ -334,6 +490,14 @@ class DatabaseClient:
     async def get_refresh_token_by_hash(self, token_hash: str) -> dict[str, Any] | None:
         """Load refresh token row by hashed token value."""
 
+        safe_hash = self._sanitize_text(token_hash, max_len=128)
+        if settings.test_mode:
+            return local_store.get_refresh_token(safe_hash)
+        if settings.auth_fallback_enabled:
+            local_row = local_store.get_refresh_token(safe_hash)
+            if local_row is not None:
+                return local_row
+
         client = await self.client()
         response = await self._execute(
             "get_refresh_token_by_hash",
@@ -348,6 +512,11 @@ class DatabaseClient:
     async def revoke_refresh_token(self, token_hash: str) -> None:
         """Revoke one refresh token hash immediately."""
 
+        safe_hash = self._sanitize_text(token_hash, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and local_store.get_refresh_token(safe_hash) is not None):
+            local_store.revoke_refresh_token(safe_hash)
+            return
+
         client = await self.client()
         await self._execute(
             "revoke_refresh_token",
@@ -358,6 +527,11 @@ class DatabaseClient:
 
     async def revoke_all_refresh_tokens_for_user(self, user_id: str) -> None:
         """Revoke all refresh tokens for one user (reuse detection response)."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            local_store.revoke_all_refresh_tokens_for_user(safe_user_id)
+            return
 
         client = await self.client()
         await self._execute(
@@ -379,6 +553,20 @@ class DatabaseClient:
         device_hint: str | None,
     ) -> bool:
         """Atomically rotate refresh token via RPC; fallback to guarded sequence."""
+
+        safe_old_hash = self._sanitize_text(old_token_hash, max_len=128)
+        safe_new_hash = self._sanitize_text(new_token_hash, max_len=128)
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and local_store.get_refresh_token(safe_old_hash) is not None):
+            return local_store.rotate_refresh_token(
+                old_token_hash=safe_old_hash,
+                new_token_hash=safe_new_hash,
+                user_id=safe_user_id,
+                workspace_id=safe_workspace_id,
+                expires_at_iso=expires_at.astimezone(UTC).isoformat(),
+                device_hint=self._sanitize_optional_text(device_hint, max_len=64),
+            )
 
         client = await self.client()
         params = {
@@ -425,6 +613,29 @@ class DatabaseClient:
 
         safe_user = str(user_id)
         safe_workspace = str(workspace_id)
+
+        if (settings.test_mode or settings.auth_fallback_enabled) and safe_workspace in local_store.workspaces:
+            if safe_workspace not in local_store.workspaces:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": "workspace_not_found", "message": "Workspace does not exist."},
+                )
+            member = local_store.verify_workspace_access(
+                user_id=safe_user,
+                workspace_id=safe_workspace,
+                required_role=required_role,
+            )
+            if member is None:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"code": "not_workspace_member", "message": "User is not a workspace member."},
+                )
+            return WorkspaceMember(
+                workspace_id=str(member["workspace_id"]),
+                user_id=str(member["user_id"]),
+                role=str(member["role"]),
+            )
+
         cache_key = f"workspace_member:{safe_workspace}:{safe_user}"
 
         try:
@@ -513,6 +724,10 @@ class DatabaseClient:
     async def list_channels(self, workspace_id: str) -> list[dict[str, Any]]:
         """List channels for a workspace sorted by creation date."""
 
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_workspace_id in local_store.workspaces):
+            return local_store.list_channels(safe_workspace_id)
+
         client = await self.client()
         response = await self._execute(
             "list_channels",
@@ -535,6 +750,17 @@ class DatabaseClient:
     ) -> dict[str, Any]:
         """Create a new channel and return the created record."""
 
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_workspace_id in local_store.workspaces):
+            return local_store.create_channel(
+                workspace_id=safe_workspace_id,
+                name=self._sanitize_text(name, max_len=settings.max_channel_name_length),
+                description=self._sanitize_optional_text(description, max_len=500),
+                tone=self._sanitize_text(tone, max_len=64),
+                created_by=self._sanitize_text(created_by, max_len=128),
+                is_private=bool(is_private),
+            )
+
         client = await self.client()
         payload = {
             "id": str(uuid4()),
@@ -552,6 +778,14 @@ class DatabaseClient:
 
     async def get_channel(self, channel_id: str) -> dict[str, Any] | None:
         """Fetch channel row by id."""
+
+        safe_channel_id = self._sanitize_text(channel_id, max_len=128)
+        if settings.test_mode:
+            return local_store.get_channel(safe_channel_id)
+        if settings.auth_fallback_enabled:
+            local_channel = local_store.get_channel(safe_channel_id)
+            if local_channel is not None:
+                return local_channel
 
         client = await self.client()
         response = await self._execute(
@@ -572,6 +806,45 @@ class DatabaseClient:
         limit: int = DEFAULT_PAGE_SIZE,
     ) -> dict[str, Any]:
         """Return cursor-paginated channel messages using message UUID cursor."""
+
+        if settings.test_mode:
+            safe_limit = max(1, min(limit, MAX_PAGE_SIZE))
+            rows = [
+                row
+                for row in local_store.messages.values()
+                if row.get("channel_id") == self._sanitize_text(channel_id, max_len=128)
+            ]
+            rows.sort(key=lambda row: (str(row.get("created_at", "")), str(row.get("id", ""))))
+
+            if cursor:
+                cursor_row = local_store.messages.get(self._sanitize_text(cursor, max_len=128))
+                if cursor_row is not None:
+                    cursor_created = str(cursor_row.get("created_at", ""))
+                    cursor_id = str(cursor_row.get("id", ""))
+                    rows = [
+                        row
+                        for row in rows
+                        if (
+                            str(row.get("created_at", "")) > cursor_created
+                            or (
+                                str(row.get("created_at", "")) == cursor_created
+                                and str(row.get("id", "")) > cursor_id
+                            )
+                        )
+                    ]
+
+            next_cursor: str | None = None
+            if len(rows) > safe_limit:
+                next_cursor = str(rows[safe_limit - 1]["id"])
+                rows = rows[:safe_limit]
+
+            normalized = []
+            for row in rows:
+                copy_row = dict(row)
+                if copy_row.get("deleted_at") is not None:
+                    copy_row["text"] = "[deleted]"
+                normalized.append(copy_row)
+            return {"messages": normalized, "next_cursor": next_cursor}
 
         client = await self.client()
         safe_limit = max(1, min(limit, MAX_PAGE_SIZE))
@@ -630,6 +903,21 @@ class DatabaseClient:
     ) -> dict[str, Any]:
         """Persist a message row."""
 
+        if settings.test_mode:
+            return local_store.create_message(
+                channel_id=self._sanitize_text(channel_id, max_len=128),
+                user_id=self._sanitize_text(user_id, max_len=128),
+                workspace_id=self._sanitize_text(
+                    str(local_store.get_channel(self._sanitize_text(channel_id, max_len=128)).get("workspace_id", ""))
+                    if local_store.get_channel(self._sanitize_text(channel_id, max_len=128))
+                    else "",
+                    max_len=128,
+                ),
+                text=self._sanitize_text(text, max_len=settings.max_message_length),
+                mesh_origin=bool(mesh_origin),
+                source_locale=None,
+            )
+
         client = await self.client()
         payload = {
             "id": str(uuid4()),
@@ -649,6 +937,9 @@ class DatabaseClient:
     async def get_message_by_id(self, message_id: str) -> dict[str, Any] | None:
         """Fetch one message by id."""
 
+        if settings.test_mode:
+            return local_store.get_message(self._sanitize_text(message_id, max_len=128))
+
         client = await self.client()
         response = await self._execute(
             "get_message_by_id",
@@ -662,6 +953,22 @@ class DatabaseClient:
 
     async def edit_message(self, *, message_id: str, editor_user_id: str, new_text: str) -> dict[str, Any] | None:
         """Edit one message and persist edit history row."""
+
+        if settings.test_mode:
+            existing = local_store.get_message(self._sanitize_text(message_id, max_len=128))
+            if existing is None:
+                return None
+            local_store.add_message_edit(
+                message_id=str(existing["id"]),
+                edited_by=self._sanitize_text(editor_user_id, max_len=128),
+                previous_text=str(existing.get("text", "")),
+                new_text=self._sanitize_text(new_text, max_len=settings.max_message_length),
+            )
+            local_store.update_message_text(
+                message_id=str(existing["id"]),
+                new_text=self._sanitize_text(new_text, max_len=settings.max_message_length),
+            )
+            return local_store.get_message(str(existing["id"]))
 
         client = await self.client()
         existing = await self.get_message_by_id(message_id)
@@ -697,6 +1004,13 @@ class DatabaseClient:
     async def soft_delete_message(self, *, message_id: str) -> dict[str, Any] | None:
         """Soft delete message and redact content."""
 
+        if settings.test_mode:
+            safe_message_id = self._sanitize_text(message_id, max_len=128)
+            if local_store.get_message(safe_message_id) is None:
+                return None
+            local_store.soft_delete_message(message_id=safe_message_id)
+            return local_store.get_message(safe_message_id)
+
         client = await self.client()
         response = await self._execute(
             "soft_delete_message",
@@ -709,6 +1023,9 @@ class DatabaseClient:
 
     async def get_last_n_messages(self, channel_id: str, *, n: int = 20) -> list[dict[str, Any]]:
         """Fetch most recent non-deleted messages from a channel."""
+
+        if settings.test_mode:
+            return local_store.get_last_n_messages(channel_id=self._sanitize_text(channel_id, max_len=128), n=n)
 
         client = await self.client()
         response = await self._execute(
@@ -727,6 +1044,10 @@ class DatabaseClient:
     async def list_active_channel_ids(self, *, minutes: int = 30) -> list[str]:
         """List channels with message activity in recent window."""
 
+        if settings.test_mode:
+            cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+            return local_store.list_active_channel_ids(cutoff_iso=cutoff)
+
         client = await self.client()
         cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
         response = await self._execute(
@@ -738,6 +1059,13 @@ class DatabaseClient:
 
     async def save_pulse_snapshot(self, channel_id: str, score: float, label: str) -> dict[str, Any]:
         """Persist pulse snapshot for a channel."""
+
+        if settings.test_mode:
+            return local_store.save_pulse_snapshot(
+                channel_id=self._sanitize_text(channel_id, max_len=128),
+                score=float(score),
+                label=self._sanitize_text(label, max_len=32),
+            )
 
         client = await self.client()
         payload = {
@@ -756,6 +1084,9 @@ class DatabaseClient:
     async def pulse_snapshot_exists_for_minute(self, channel_id: str, minute_bucket: datetime) -> bool:
         """Check whether minute-level pulse snapshot already exists."""
 
+        if settings.test_mode:
+            return False
+
         client = await self.client()
         response = await self._execute(
             "pulse_snapshot_exists_for_minute",
@@ -770,6 +1101,9 @@ class DatabaseClient:
 
     async def mark_pulse_snapshot_run(self, channel_id: str, minute_bucket: datetime) -> None:
         """Record minute-level pulse snapshot execution."""
+
+        if settings.test_mode:
+            return
 
         client = await self.client()
         await self._execute(
@@ -787,6 +1121,9 @@ class DatabaseClient:
 
     async def get_pulse_snapshot(self, channel_id: str) -> dict[str, Any] | None:
         """Fetch latest pulse snapshot for a channel."""
+
+        if settings.test_mode:
+            return local_store.get_pulse_snapshot(channel_id=self._sanitize_text(channel_id, max_len=128))
 
         client = await self.client()
         response = await self._execute(
@@ -808,6 +1145,20 @@ class DatabaseClient:
 
     async def count_daily_carbon_logs(self, *, user_id: str, workspace_id: str, day: datetime) -> int:
         """Count user logs for one workspace day."""
+
+        if settings.test_mode:
+            day_start = day.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            safe_user_id = self._sanitize_text(user_id, max_len=128)
+            safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+            total = 0
+            for row in local_store.carbon_logs:
+                if row.get("user_id") != safe_user_id or row.get("workspace_id") != safe_workspace_id:
+                    continue
+                created_at = datetime.fromisoformat(str(row.get("created_at", "")).replace("Z", "+00:00"))
+                if day_start <= created_at < day_end:
+                    total += 1
+            return total
 
         client = await self.client()
         day_start = day.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -852,7 +1203,6 @@ class DatabaseClient:
         if kg_co2 < 0.0 or kg_co2 > 500.0:
             raise HTTPException(status_code=422, detail={"code": "invalid_kg_co2", "message": "kg_co2 must be between 0.0 and 500.0."})
 
-        client = await self.client()
         normalized_user_id = self._sanitize_text(user_id, max_len=128)
         normalized_workspace_id = self._sanitize_text(workspace_id, max_len=128)
         score_delta = self._compute_carbon_from_kg(float(kg_co2))
@@ -860,6 +1210,54 @@ class DatabaseClient:
         now = datetime.now(UTC)
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
+
+        if settings.test_mode:
+            existing = None
+            for row in local_store.carbon_logs:
+                if row.get("user_id") != normalized_user_id or row.get("workspace_id") != normalized_workspace_id:
+                    continue
+                created_at = datetime.fromisoformat(str(row.get("created_at", "")).replace("Z", "+00:00"))
+                if day_start <= created_at < day_end:
+                    existing = row
+                    break
+
+            if existing:
+                previous_score = int(existing.get("score_delta", 0))
+                previous_kg = float(existing.get("kg_co2", 0.0))
+                existing["transport_type"] = self._sanitize_text(effective_transport, max_len=32)
+                existing["kg_co2"] = float(kg_co2)
+                existing["score_delta"] = score_delta
+                existing["updated_at"] = now.isoformat()
+                score_adjustment = score_delta - previous_score
+                kg_adjustment = float(kg_co2) - previous_kg
+                if score_adjustment != 0 or abs(kg_adjustment) > 1e-9:
+                    await self._increment_carbon_score(
+                        user_id=normalized_user_id,
+                        workspace_id=normalized_workspace_id,
+                        score_delta=score_adjustment,
+                        kg_delta=kg_adjustment,
+                    )
+                return dict(existing)
+
+            payload = {
+                "id": str(uuid4()),
+                "user_id": normalized_user_id,
+                "workspace_id": normalized_workspace_id,
+                "transport_type": self._sanitize_text(effective_transport, max_len=32),
+                "kg_co2": float(kg_co2),
+                "score_delta": score_delta,
+                "created_at": now.isoformat(),
+            }
+            local_store.carbon_logs.append(payload)
+            await self._increment_carbon_score(
+                user_id=normalized_user_id,
+                workspace_id=normalized_workspace_id,
+                score_delta=score_delta,
+                kg_delta=float(kg_co2),
+            )
+            return payload
+
+        client = await self.client()
 
         existing_response = await self._execute(
             "get_today_carbon_log",
@@ -935,6 +1333,23 @@ class DatabaseClient:
     ) -> None:
         """Increment aggregate carbon score for one user in one workspace."""
 
+        if settings.test_mode:
+            key = (user_id, workspace_id)
+            existing = local_store.carbon_scores.get(key)
+            if existing is None:
+                local_store.carbon_scores[key] = {
+                    "user_id": user_id,
+                    "workspace_id": workspace_id,
+                    "total_score": int(score_delta),
+                    "total_kg_co2": round(float(kg_delta), 3),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            else:
+                existing["total_score"] = int(existing.get("total_score", 0)) + int(score_delta)
+                existing["total_kg_co2"] = round(float(existing.get("total_kg_co2", 0.0)) + float(kg_delta), 3)
+                existing["updated_at"] = datetime.now(UTC).isoformat()
+            return
+
         client = await self.client()
         existing_response = await self._execute(
             "increment_carbon_score_lookup",
@@ -977,6 +1392,23 @@ class DatabaseClient:
     async def get_carbon_leaderboard(self, workspace_id: str) -> list[dict[str, Any]]:
         """Return carbon leaderboard ordered by score descending."""
 
+        if settings.test_mode:
+            safe_workspace = self._sanitize_text(workspace_id, max_len=128)
+            rows = [row for row in local_store.carbon_scores.values() if row.get("workspace_id") == safe_workspace]
+            rows.sort(key=lambda row: (-int(row.get("total_score", 0)), float(row.get("total_kg_co2", 0.0))))
+            leaderboard = []
+            for row in rows:
+                user = local_store.users_by_id.get(str(row.get("user_id", "")))
+                leaderboard.append(
+                    {
+                        "user_id": row.get("user_id"),
+                        "display_name": user.display_name if user is not None else None,
+                        "total_score": int(row.get("total_score", 0)),
+                        "total_kg_co2": float(row.get("total_kg_co2", 0.0)),
+                    }
+                )
+            return leaderboard
+
         client = await self.client()
         response = await self._execute(
             "get_carbon_leaderboard",
@@ -1005,6 +1437,44 @@ class DatabaseClient:
 
     async def recalculate_carbon_leaderboard(self, workspace_id: str | None = None) -> dict[str, list[dict[str, Any]]]:
         """Recompute carbon_scores from source carbon_logs table."""
+
+        if settings.test_mode:
+            aggregates: dict[str, dict[str, dict[str, float | int]]] = {}
+            target_workspace = self._sanitize_text(workspace_id, max_len=128) if workspace_id else None
+            for row in local_store.carbon_logs:
+                ws_id = str(row.get("workspace_id") or "")
+                user_id = str(row.get("user_id") or "")
+                if not ws_id or not user_id:
+                    continue
+                if target_workspace and ws_id != target_workspace:
+                    continue
+                aggregates.setdefault(ws_id, {})
+                aggregates[ws_id].setdefault(user_id, {"total_score": 0, "total_kg_co2": 0.0})
+                aggregates[ws_id][user_id]["total_score"] = int(aggregates[ws_id][user_id]["total_score"]) + int(row.get("score_delta", 0))
+                aggregates[ws_id][user_id]["total_kg_co2"] = float(aggregates[ws_id][user_id]["total_kg_co2"]) + float(row.get("kg_co2", 0.0))
+
+            if target_workspace:
+                for key in [key for key in local_store.carbon_scores if key[1] == target_workspace]:
+                    local_store.carbon_scores.pop(key, None)
+            else:
+                local_store.carbon_scores.clear()
+
+            refreshed: dict[str, list[dict[str, Any]]] = {}
+            now = datetime.now(UTC).isoformat()
+            for ws_id, users_map in aggregates.items():
+                entries = []
+                for user_id, totals in users_map.items():
+                    row = {
+                        "workspace_id": ws_id,
+                        "user_id": user_id,
+                        "total_score": int(totals["total_score"]),
+                        "total_kg_co2": round(float(totals["total_kg_co2"]), 3),
+                        "updated_at": now,
+                    }
+                    local_store.carbon_scores[(user_id, ws_id)] = row
+                    entries.append(row)
+                refreshed[ws_id] = sorted(entries, key=lambda entry: (-entry["total_score"], entry["total_kg_co2"]))
+            return refreshed
 
         client = await self.client()
         query = client.table("carbon_logs").select("workspace_id,user_id,score_delta,kg_co2")
@@ -1054,6 +1524,13 @@ class DatabaseClient:
     async def create_mesh_node(self, *, workspace_id: str, node_id: str, secret_hash: str) -> dict[str, Any]:
         """Persist mesh node record for per-node auth."""
 
+        if settings.test_mode:
+            return local_store.create_mesh_node(
+                workspace_id=self._sanitize_text(workspace_id, max_len=128),
+                node_id=self._sanitize_text(node_id, max_len=128),
+                secret_hash=self._sanitize_text(secret_hash, max_len=128),
+            )
+
         client = await self.client()
         payload = {
             "id": str(uuid4()),
@@ -1071,6 +1548,9 @@ class DatabaseClient:
     async def list_mesh_nodes(self, *, workspace_id: str) -> list[dict[str, Any]]:
         """List all mesh nodes for a workspace in newest-first order."""
 
+        if settings.test_mode:
+            return local_store.list_mesh_nodes(workspace_id=self._sanitize_text(workspace_id, max_len=128))
+
         client = await self.client()
         response = await self._execute(
             "list_mesh_nodes",
@@ -1084,6 +1564,9 @@ class DatabaseClient:
 
     async def get_mesh_node(self, node_id: str) -> dict[str, Any] | None:
         """Fetch one mesh node by node_id."""
+
+        if settings.test_mode:
+            return local_store.get_mesh_node(self._sanitize_text(node_id, max_len=128))
 
         client = await self.client()
         response = await self._execute(
@@ -1099,6 +1582,12 @@ class DatabaseClient:
     async def revoke_mesh_node(self, *, node_id: str, workspace_id: str) -> bool:
         """Revoke one mesh node scoped to workspace ownership."""
 
+        if settings.test_mode:
+            return local_store.revoke_mesh_node(
+                node_id=self._sanitize_text(node_id, max_len=128),
+                workspace_id=self._sanitize_text(workspace_id, max_len=128),
+            )
+
         client = await self.client()
         response = await self._execute(
             "revoke_mesh_node",
@@ -1113,6 +1602,10 @@ class DatabaseClient:
     async def update_mesh_node_last_seen(self, node_id: str) -> None:
         """Update last_seen timestamp for verified mesh node."""
 
+        if settings.test_mode:
+            local_store.update_mesh_node_last_seen(self._sanitize_text(node_id, max_len=128))
+            return
+
         client = await self.client()
         await self._execute(
             "update_mesh_node_last_seen",
@@ -1126,6 +1619,10 @@ class DatabaseClient:
 
         if not messages:
             return 0
+
+        if settings.test_mode:
+            safe_workspace = self._sanitize_text(workspace_id, max_len=128)
+            return local_store.sync_mesh_messages(messages=messages, workspace_id=safe_workspace)
 
         client = await self.client()
         rows_to_insert: list[dict[str, Any]] = []

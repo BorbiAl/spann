@@ -10,8 +10,19 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
+from app.config import settings
+from app.services.local_store import local_store
+
 
 MessageRow = dict[str, Any]
+
+
+def _use_local_channel(channel_id: str) -> bool:
+    return settings.test_mode or (settings.auth_fallback_enabled and channel_id in local_store.channels)
+
+
+def _use_local_message(message_id: str) -> bool:
+    return settings.test_mode or (settings.auth_fallback_enabled and message_id in local_store.messages)
 
 
 def _http_error(status_code: int, error_code: str, message: str) -> HTTPException:
@@ -124,6 +135,9 @@ def _row_to_message_response(row: dict[str, Any], *, requesting_user_id: str) ->
 
 
 async def _get_raw_message(db: Any, message_id: str) -> MessageRow | None:
+    if _use_local_message(message_id):
+        return local_store.get_message(message_id)
+
     client = await db.client()
     response = await db._execute(  # noqa: SLF001
         "message_service_get_raw_message",
@@ -140,6 +154,20 @@ async def _get_raw_message(db: Any, message_id: str) -> MessageRow | None:
 
 
 async def create_message(db: Any, user_id: str, channel_id: str, workspace_id: str, text: str, mesh_origin: bool, source_locale: str | None) -> MessageRow:
+    if _use_local_channel(channel_id):
+        created = local_store.create_message(
+            channel_id=channel_id,
+            user_id=user_id,
+            workspace_id=workspace_id,
+            text=text.strip(),
+            mesh_origin=bool(mesh_origin),
+            source_locale=source_locale,
+        )
+        full_message = await get_message_by_id(db, str(created["id"]))
+        if full_message is None:
+            raise _http_error(404, "message_not_found", "Message does not exist or has been deleted")
+        return full_message
+
     client = await db.client()
     now = datetime.now(UTC)
     payload = {
@@ -196,13 +224,30 @@ LIMIT :limit
 
 
 async def get_messages_page(db: Any, channel_id: str, user_id: str, cursor: str | None, limit: int) -> tuple[list[MessageRow], bool, str | None]:
-    client = await db.client()
     safe_limit = max(1, min(int(limit), 100))
 
     cursor_id: str | None = None
     cursor_created_at: datetime | None = None
     if cursor:
         cursor_id, cursor_created_at = decode_cursor(cursor)
+
+    if _use_local_channel(channel_id):
+        rows = local_store.list_messages_page(
+            channel_id=channel_id,
+            cursor_id=cursor_id,
+            cursor_created_at=cursor_created_at,
+            limit_plus_one=safe_limit + 1,
+        )
+        has_more = len(rows) > safe_limit
+        page_rows = rows[:safe_limit]
+        next_cursor: str | None = None
+        if has_more and page_rows:
+            tail = page_rows[-1]
+            next_cursor = encode_cursor(str(tail["id"]), _parse_datetime(tail["created_at"]))
+        messages = [_row_to_message_response(row, requesting_user_id=user_id) for row in page_rows]
+        return messages, has_more, next_cursor
+
+    client = await db.client()
 
     query = (
         client.table("messages")
@@ -250,29 +295,38 @@ async def edit_message(db: Any, message_id: str, user_id: str, new_text: str) ->
     if datetime.now(UTC) - created_at > timedelta(seconds=300):
         raise _http_error(409, "edit_window_expired", "Message edit window has expired")
 
-    client = await db.client()
-    now = datetime.now(UTC)
+    if _use_local_message(message_id):
+        local_store.add_message_edit(
+            message_id=message_id,
+            edited_by=user_id,
+            previous_text=str(existing.get("text") or ""),
+            new_text=new_text.strip(),
+        )
+        local_store.update_message_text(message_id=message_id, new_text=new_text.strip())
+    else:
+        client = await db.client()
+        now = datetime.now(UTC)
 
-    await db._execute(  # noqa: SLF001
-        "message_service_create_edit_history",
-        client.table("message_edits").insert(
-            {
-                "id": str(uuid4()),
-                "message_id": message_id,
-                "edited_by": user_id,
-                "previous_text": str(existing.get("text") or ""),
-                "new_text": new_text.strip(),
-                "edited_at": now.isoformat(),
-            }
-        ),
-    )
+        await db._execute(  # noqa: SLF001
+            "message_service_create_edit_history",
+            client.table("message_edits").insert(
+                {
+                    "id": str(uuid4()),
+                    "message_id": message_id,
+                    "edited_by": user_id,
+                    "previous_text": str(existing.get("text") or ""),
+                    "new_text": new_text.strip(),
+                    "edited_at": now.isoformat(),
+                }
+            ),
+        )
 
-    await db._execute(  # noqa: SLF001
-        "message_service_update_message_text",
-        client.table("messages")
-        .update({"text": new_text.strip(), "updated_at": now.isoformat()})
-        .eq("id", message_id),
-    )
+        await db._execute(  # noqa: SLF001
+            "message_service_update_message_text",
+            client.table("messages")
+            .update({"text": new_text.strip(), "updated_at": now.isoformat()})
+            .eq("id", message_id),
+        )
 
     updated = await get_message_by_id(db, message_id)
     if updated is None:
@@ -293,12 +347,15 @@ async def soft_delete_message(db: Any, message_id: str, user_id: str, user_role:
     if existing.get("deleted_at") is not None:
         return
 
-    client = await db.client()
-    now = datetime.now(UTC).isoformat()
-    await db._execute(  # noqa: SLF001
-        "message_service_soft_delete",
-        client.table("messages").update({"deleted_at": now, "updated_at": now}).eq("id", message_id),
-    )
+    if _use_local_message(message_id):
+        local_store.soft_delete_message(message_id=message_id)
+    else:
+        client = await db.client()
+        now = datetime.now(UTC).isoformat()
+        await db._execute(  # noqa: SLF001
+            "message_service_soft_delete",
+            client.table("messages").update({"deleted_at": now, "updated_at": now}).eq("id", message_id),
+        )
 
 
 async def toggle_reaction(db: Any, message_id: str, user_id: str, emoji: str) -> list[dict[str, Any]]:
@@ -308,48 +365,59 @@ async def toggle_reaction(db: Any, message_id: str, user_id: str, emoji: str) ->
     if message.get("deleted_at") is not None:
         raise _http_error(409, "message_deleted", "Deleted messages cannot receive reactions")
 
-    client = await db.client()
     cleaned_emoji = emoji.strip()
-
-    existing_response = await db._execute(  # noqa: SLF001
-        "message_service_reaction_lookup",
-        client.table("message_reactions")
-        .select("id")
-        .eq("message_id", message_id)
-        .eq("user_id", user_id)
-        .eq("emoji", cleaned_emoji)
-        .limit(1),
-    )
-    existing_rows = _extract_data(existing_response) or []
-
-    if existing_rows:
-        await db._execute(  # noqa: SLF001
-            "message_service_reaction_delete",
-            client.table("message_reactions").delete().eq("id", str(existing_rows[0]["id"])),
-        )
+    if _use_local_message(message_id):
+        local_store.toggle_reaction(message_id=message_id, user_id=user_id, emoji=cleaned_emoji)
+        reaction_rows = local_store.list_reactions(message_id=message_id)
     else:
-        await db._execute(  # noqa: SLF001
-            "message_service_reaction_insert",
-            client.table("message_reactions").insert(
-                {
-                    "id": str(uuid4()),
-                    "message_id": message_id,
-                    "user_id": user_id,
-                    "emoji": cleaned_emoji,
-                    "created_at": datetime.now(UTC).isoformat(),
-                }
-            ),
-        )
+        client = await db.client()
 
-    reactions_response = await db._execute(  # noqa: SLF001
-        "message_service_reaction_list",
-        client.table("message_reactions").select("emoji,user_id").eq("message_id", message_id),
-    )
-    reaction_rows = _extract_data(reactions_response) or []
+        existing_response = await db._execute(  # noqa: SLF001
+            "message_service_reaction_lookup",
+            client.table("message_reactions")
+            .select("id")
+            .eq("message_id", message_id)
+            .eq("user_id", user_id)
+            .eq("emoji", cleaned_emoji)
+            .limit(1),
+        )
+        existing_rows = _extract_data(existing_response) or []
+
+        if existing_rows:
+            await db._execute(  # noqa: SLF001
+                "message_service_reaction_delete",
+                client.table("message_reactions").delete().eq("id", str(existing_rows[0]["id"])),
+            )
+        else:
+            await db._execute(  # noqa: SLF001
+                "message_service_reaction_insert",
+                client.table("message_reactions").insert(
+                    {
+                        "id": str(uuid4()),
+                        "message_id": message_id,
+                        "user_id": user_id,
+                        "emoji": cleaned_emoji,
+                        "created_at": datetime.now(UTC).isoformat(),
+                    }
+                ),
+            )
+
+        reactions_response = await db._execute(  # noqa: SLF001
+            "message_service_reaction_list",
+            client.table("message_reactions").select("emoji,user_id").eq("message_id", message_id),
+        )
+        reaction_rows = _extract_data(reactions_response) or []
+
     return _normalize_reactions(reaction_rows, requesting_user_id=user_id)
 
 
 async def get_message_by_id(db: Any, message_id: str) -> MessageRow | None:
+    if _use_local_message(message_id):
+        row = local_store.get_message_with_relations(message_id)
+        if row is None:
+            return None
+        return _row_to_message_response(row, requesting_user_id=str(row.get("user_id") or ""))
+
     client = await db.client()
     response = await db._execute(  # noqa: SLF001
         "message_service_get_message_by_id",

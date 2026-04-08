@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import db
 from app.middleware.rate_limit import auth_rate_limit_dependency
 from app.schemas.common import error_response, success_response
-from app.schemas.auth import LoginRequest, LogoutRequest, RefreshRequest
+from app.schemas.auth import LoginRequest, LogoutRequest, RefreshRequest, RegisterRequest
 from app.schemas.user import MagicLinkRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -93,6 +93,42 @@ async def login(payload: LoginRequest, request: Request, _rate_limit: None = Dep
         status_code=200,
     )
 
+
+@router.post("/register")
+async def register(payload: RegisterRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)) -> JSONResponse:
+    """Register a user, create default workspace, and issue initial token pair."""
+
+    try:
+        created = await db.register_user(email=payload.email, password=payload.password, name=payload.name)
+    except ValueError:
+        return error_response(status_code=409, code="email_already_exists", message="A user with this email already exists.")
+    except Exception:
+        return error_response(status_code=400, code="register_failed", message="Unable to register user.")
+
+    user = created["user"]
+    workspace_id = str(created["workspace_id"])
+    access_token, expires_in = _build_access_token(user_id=str(user["id"]), workspace_id=workspace_id)
+    refresh_token, refresh_hash = _build_refresh_token()
+
+    await db.create_refresh_token(
+        user_id=str(user["id"]),
+        token_hash=refresh_hash,
+        workspace_id=workspace_id,
+        expires_at=(datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_TTL_DAYS)),
+        device_hint=payload.device_hint,
+    )
+
+    return success_response(
+        {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",  # nosec B105 - OAuth token type literal, not a secret.
+            "expires_in": expires_in,
+            "workspace_id": workspace_id,
+            "user": user,
+        },
+        status_code=201,
+    )
 
 @router.post("/refresh")
 async def refresh(payload: RefreshRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)) -> JSONResponse:

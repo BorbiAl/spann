@@ -43,6 +43,23 @@ class _StaticContainer:
         return self.connection_url
 
 
+def _resolve_redis_connection_url(container: RedisContainer | _StaticContainer) -> str:
+    """Return redis connection URL across testcontainers API variants."""
+
+    get_url = getattr(container, "get_connection_url", None)
+    if callable(get_url):
+        return str(get_url())
+
+    host_getter = getattr(container, "get_container_host_ip", None)
+    port_getter = getattr(container, "get_exposed_port", None)
+    if callable(host_getter) and callable(port_getter):
+        host = str(host_getter())
+        port = str(port_getter(6379))
+        return f"redis://{host}:{port}/0"
+
+    raise RuntimeError("Unable to resolve Redis connection URL from container.")
+
+
 def _can_connect_postgres(dsn: str) -> bool:
     normalized_dsn = dsn.replace("postgresql+psycopg2://", "postgresql://")
     try:
@@ -132,9 +149,10 @@ def configure_test_environment(postgres_container: PostgresContainer, redis_cont
     os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
     os.environ["GROQ_API_KEY"] = "test-groq-key"
     os.environ["JWT_SECRET"] = "this-is-a-very-long-test-secret-32bytes!!"
-    os.environ["REDIS_URL"] = redis_container.get_connection_url()
-    os.environ["CELERY_BROKER_URL"] = redis_container.get_connection_url()
-    os.environ["CELERY_RESULT_BACKEND"] = redis_container.get_connection_url().replace("/0", "/1")
+    redis_url = _resolve_redis_connection_url(redis_container)
+    os.environ["REDIS_URL"] = redis_url
+    os.environ["CELERY_BROKER_URL"] = redis_url
+    os.environ["CELERY_RESULT_BACKEND"] = redis_url.replace("/0", "/1")
     os.environ["ENV"] = "test"
 
 
