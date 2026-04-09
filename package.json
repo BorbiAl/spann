@@ -1,35 +1,31 @@
 {
-  "name": "spann",
+  "name": "spann-desktop",
   "version": "1.0.0",
-  "description": "A team communication platform that works everywhere and understands everyone, combining real-time chat with AI-powered language translation, cultural adaptation, and communication coaching — so global teams collaborate without barriers. When infrastructure fails, our peer-to-peer mesh network keeps teams connected offline via Bluetooth and Wi-Fi.",
-  "main": "desktop/main.cjs",
-  "directories": {
-    "doc": "docs"
-  },
+  "description": "Spann — Reach Anyone. Anywhere. Always.",
+  "main": "dist-electron/main.js",
+  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "desktop:dev": "cross-env ELECTRON_START_URL=http://localhost:5173 concurrently -k \"npm:dev\" \"wait-on tcp:5173 && electron ./desktop/main.cjs\"",
-    "desktop:build": "npm run build && electron-builder",
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "tsc && vite build && electron-builder",
+    "build:win": "electron-builder --win",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src electron --ext .ts,.tsx",
+    "backend": "python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000",
+    "backend:legacy": "node server/index.js",
     "mobile:sync": "npm run build && npx cap sync",
     "mobile:add:android": "npx cap add android",
     "mobile:add:ios": "npx cap add ios",
     "mobile:android": "npm run mobile:sync && npx cap open android",
-    "mobile:ios": "npm run mobile:sync && npx cap open ios",
-    "preview": "vite preview",
-    "start": "npm run backend",
-    "backend": "python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000",
-    "backend:legacy": "node server/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "mobile:ios": "npm run mobile:sync && npx cap open ios"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BorbiAl/spann.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["electron", "react", "typescript", "desktop", "communication"],
+  "author": "BorisAl",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/BorbiAl/spann/issues"
   },
@@ -38,40 +34,38 @@
     "@capacitor/android": "^7.4.3",
     "@capacitor/core": "^7.4.3",
     "@capacitor/ios": "^7.4.3",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "@tanstack/react-query": "^5.62.16",
+    "@tanstack/react-virtual": "^3.11.2",
+    "axios": "^1.7.9",
+    "clsx": "^2.1.1",
+    "electron-store": "^10.0.0",
+    "electron-updater": "^6.3.9",
+    "framer-motion": "^11.15.0",
+    "keytar": "^7.9.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^2.5.5",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3",
-    "@ljharb/tsconfig": "^0.3.2",
-    "concurrently": "^9.2.1",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
     "cross-env": "^10.1.0",
-    "electron": "^37.2.0",
+    "electron": "^31.7.7",
     "electron-builder": "^26.0.12",
-    "wait-on": "^8.0.3",
-    "vite": "^8.0.5"
-  },
-  "build": {
-    "appId": "com.spann.desktop",
-    "productName": "Spann",
-    "files": [
-      "dist/**/*",
-      "desktop/**/*",
-      "package.json"
-    ],
-    "directories": {
-      "output": "release"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
+    "eslint": "^9.17.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
   }
 }
