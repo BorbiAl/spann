@@ -64,6 +64,13 @@ async def login(payload: LoginRequest, request: Request, _rate_limit: None = Dep
     user = auth_result["user"]
     workspace_id = await db.get_default_workspace_for_user(user["id"])
     if workspace_id is None:
+        workspace_id = await db.ensure_default_workspace_for_user(
+            user_id=str(user["id"]),
+            display_name=user.get("display_name"),
+            email=user.get("email"),
+        )
+
+    if workspace_id is None:
         return error_response(
             status_code=403,
             code="not_workspace_member",

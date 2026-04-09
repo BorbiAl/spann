@@ -453,6 +453,73 @@ class DatabaseClient:
             return None
         return str(rows[0]["workspace_id"])
 
+    async def ensure_default_workspace_for_user(
+        self,
+        *,
+        user_id: str,
+        display_name: str | None = None,
+        email: str | None = None,
+    ) -> str | None:
+        """Ensure a user has a default workspace, creating one when missing."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        existing_workspace = await self.get_default_workspace_for_user(safe_user_id)
+        if existing_workspace is not None:
+            return existing_workspace
+
+        safe_display_name = self._sanitize_optional_text(display_name, max_len=120)
+        if safe_display_name is None and email:
+            local_part = email.strip().split("@", 1)[0]
+            safe_display_name = self._sanitize_text(local_part, max_len=120)
+        owner_name = safe_display_name or "User"
+
+        workspace_id = str(uuid4())
+        now_iso = datetime.now(UTC).isoformat()
+        workspace_payload = {
+            "id": workspace_id,
+            "name": f"{owner_name}'s Workspace",
+            "slug": f"ws-{workspace_id[:8]}",
+            "created_at": now_iso,
+        }
+
+        if settings.test_mode:
+            local_store.workspaces[workspace_id] = workspace_payload
+            local_store.workspace_members.append(
+                {
+                    "workspace_id": workspace_id,
+                    "user_id": safe_user_id,
+                    "role": "owner",
+                    "joined_at": now_iso,
+                }
+            )
+            return workspace_id
+
+        client = await self.client()
+        try:
+            await self._execute(
+                "bootstrap_create_workspace",
+                client.table("workspaces").insert(workspace_payload),
+            )
+            await self._execute(
+                "bootstrap_create_membership",
+                client.table("workspace_members").insert(
+                    {
+                        "workspace_id": workspace_id,
+                        "user_id": safe_user_id,
+                        "role": "owner",
+                        "joined_at": now_iso,
+                    }
+                ),
+            )
+            return workspace_id
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "ensure_default_workspace_failed",
+                extra={"user_id": safe_user_id, "error": str(exc)},
+            )
+            # Handle race conditions where another request created membership first.
+            return await self.get_default_workspace_for_user(safe_user_id)
+
     async def create_refresh_token(
         self,
         *,

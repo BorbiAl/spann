@@ -22,11 +22,15 @@ def _mock_login_db(monkeypatch, *, user_id: str, workspace_id: str, success: boo
     async def fake_default_workspace(_user_id: str):
         return workspace_id
 
+    async def fake_ensure_workspace_for_user(*, user_id: str, display_name: str | None = None, email: str | None = None):
+        return workspace_id
+
     async def fake_create_refresh_token(**kwargs):
         return {"id": str(uuid4()), **kwargs}
 
     monkeypatch.setattr("app.routers.auth.db.authenticate_user", fake_authenticate)
     monkeypatch.setattr("app.routers.auth.db.get_default_workspace_for_user", fake_default_workspace)
+    monkeypatch.setattr("app.routers.auth.db.ensure_default_workspace_for_user", fake_ensure_workspace_for_user)
     monkeypatch.setattr("app.routers.auth.db.create_refresh_token", fake_create_refresh_token)
 
 
