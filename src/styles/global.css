@@ -95,6 +95,7 @@
       font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: var(--body-size);
       letter-spacing: -0.3px;
+      line-height: 1.45;
       background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 86%, var(--bg2)), var(--bg));
       color: var(--text);
       transition: background-color var(--motion), color var(--motion);
@@ -134,6 +135,7 @@
       font: inherit;
       color: inherit;
       letter-spacing: -0.3px;
+      line-height: 1.2;
     }
 
     button {
@@ -153,6 +155,57 @@
     :where(button, a, input, textarea, select):focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
+    }
+
+    .entry-theme-toggle,
+    .entry-cta.secondary,
+    .auth-mode-btn,
+    .auth-pass-toggle,
+    .auth-pass-suggest,
+    .header-btn,
+    .theme-toggle,
+    .tiny-btn,
+    .mic-btn,
+    .log-btn,
+    .channel-item,
+    .section-item,
+    .member-item,
+    .tab-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--panel-border);
+      color: var(--text-secondary);
+    }
+
+    .entry-theme-toggle,
+    .entry-cta,
+    .auth-mode-btn,
+    .auth-pass-toggle,
+    .auth-pass-suggest,
+    .auth-text-link,
+    .header-btn,
+    .theme-toggle,
+    .mic-btn,
+    .log-btn,
+    .accent-btn,
+    .channel-item,
+    .section-item,
+    .member-item {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .entry-theme-toggle span,
+    .entry-cta span,
+    .theme-toggle span,
+    .tab-btn span,
+    .log-btn span:last-child {
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .entry-shell,
@@ -890,6 +943,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      padding: 0 10px;
       background: var(--card-bg);
       color: var(--text-secondary);
       border: 1px solid var(--panel-border);
@@ -1769,12 +1823,56 @@
       display: flex;
       align-items: center;
       padding: 0 10px;
+      position: relative;
     }
 
     .select-wrap select {
       width: 100%;
       font-size: 14px;
       cursor: pointer;
+      color: var(--text);
+      background: transparent;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      padding-right: 24px;
+      line-height: 1.2;
+    }
+
+    .select-wrap::after {
+      content: "";
+      position: absolute;
+      right: 12px;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--text-muted);
+      border-bottom: 2px solid var(--text-muted);
+      transform: rotate(45deg) translateY(-2px);
+      pointer-events: none;
+    }
+
+    .select-wrap select option {
+      color: var(--text);
+      background: var(--bg2);
+    }
+
+    .pulse-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      align-items: stretch;
+    }
+
+    .pulse-actions .mic-btn {
+      margin-top: 0;
+    }
+
+    .pulse-refresh-btn {
+      min-height: 54px;
+      padding: 0 18px;
+      justify-content: center;
+      border-radius: 50px;
     }
 
     .translator-input {
@@ -2076,6 +2174,72 @@
       100% {
         transform: translate3d(0, 0, 0) rotate(0deg);
       }
+    }
+
+    .entry-theme-toggle,
+    .entry-cta,
+    .auth-mode-btn,
+    .auth-pass-toggle,
+    .auth-pass-suggest,
+    .auth-text-link,
+    .header-btn,
+    .theme-toggle,
+    .tiny-btn,
+    .mic-btn,
+    .pulse-refresh-btn,
+    .log-btn,
+    .accent-btn,
+    .channel-item,
+    .section-item,
+    .member-item,
+    .tab-btn,
+    .rail-item,
+    .send-btn {
+      transition: transform var(--motion), background-color var(--motion), color var(--motion), border-color var(--motion), box-shadow var(--motion), filter var(--motion);
+    }
+
+    .entry-theme-toggle:hover,
+    .entry-cta:hover,
+    .auth-mode-btn:hover,
+    .auth-pass-toggle:hover,
+    .auth-pass-suggest:hover,
+    .auth-text-link:hover,
+    .header-btn:hover,
+    .theme-toggle:hover,
+    .tiny-btn:hover,
+    .mic-btn:hover,
+    .pulse-refresh-btn:hover,
+    .log-btn:hover,
+    .accent-btn:hover,
+    .channel-item:hover,
+    .section-item:hover,
+    .member-item:hover,
+    .tab-btn:hover,
+    .rail-item:hover,
+    .send-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .entry-theme-toggle:active,
+    .entry-cta:active,
+    .auth-mode-btn:active,
+    .auth-pass-toggle:active,
+    .auth-pass-suggest:active,
+    .auth-text-link:active,
+    .header-btn:active,
+    .theme-toggle:active,
+    .tiny-btn:active,
+    .mic-btn:active,
+    .pulse-refresh-btn:active,
+    .log-btn:active,
+    .accent-btn:active,
+    .channel-item:active,
+    .section-item:active,
+    .member-item:active,
+    .tab-btn:active,
+    .rail-item:active,
+    .send-btn:active {
+      transform: translateY(0);
     }
 
     @media (max-width: 1140px) {

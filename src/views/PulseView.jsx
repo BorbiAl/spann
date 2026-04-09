@@ -31,12 +31,12 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 					<WaveformBars level={average} />
 				</div>
 
-				<div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-					<button className={`mic-btn ${micActive ? "active" : ""}`} onClick={onMicToggle}>
+				<div className="pulse-actions">
+					<button type="button" className={`mic-btn ${micActive ? "active" : ""}`} onClick={onMicToggle}>
 						<Icon name="mic" size={17} />
 						{micActive ? "Mic Joined" : "Join with Mic"}
 					</button>
-					<button className="header-btn" onClick={onRefreshPulse}>
+					<button type="button" className="mic-btn pulse-refresh-btn" onClick={onRefreshPulse}>
 						{isRefreshing ? "Refreshing..." : "Refresh Pulse"}
 					</button>
 				</div>
