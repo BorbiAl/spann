@@ -37,12 +37,16 @@ def _mock_login_db(monkeypatch: pytest.MonkeyPatch, *, user_id: str, workspace_i
     async def fake_workspace(_user_id: str) -> str:
         return workspace_id
 
+    async def fake_ensure_workspace_for_user(*, user_id: str, display_name: str | None = None, email: str | None = None) -> str:
+        return workspace_id
+
     async def fake_create_refresh_token(**kwargs: object) -> dict[str, object]:
         captured.update(kwargs)
         return {"id": str(uuid4()), **kwargs}
 
     monkeypatch.setattr("app.routers.auth.db.authenticate_user", fake_authenticate)
     monkeypatch.setattr("app.routers.auth.db.get_default_workspace_for_user", fake_workspace)
+    monkeypatch.setattr("app.routers.auth.db.ensure_default_workspace_for_user", fake_ensure_workspace_for_user)
     monkeypatch.setattr("app.routers.auth.db.create_refresh_token", fake_create_refresh_token)
     return captured
 
@@ -228,7 +232,7 @@ def test_refresh_token_hash_algorithm(client, monkeypatch: pytest.MonkeyPatch) -
     assert stored_hash != raw_refresh
 
 
-def test_login_without_workspace_membership_returns_403(client, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_login_without_workspace_membership_bootstraps_workspace(client, monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_authenticate(email: str, password: str) -> dict[str, object]:
         return {
             "user": {"id": str(uuid4()), "email": email, "display_name": "No Workspace"},
@@ -238,11 +242,19 @@ def test_login_without_workspace_membership_returns_403(client, monkeypatch: pyt
     async def fake_workspace(_user_id: str):
         return None
 
+    async def fake_ensure_workspace_for_user(*, user_id: str, display_name: str | None = None, email: str | None = None):
+        return str(uuid4())
+
+    async def fake_create_refresh_token(**kwargs: object) -> dict[str, object]:
+        return {"id": str(uuid4()), **kwargs}
+
     monkeypatch.setattr("app.routers.auth.db.authenticate_user", fake_authenticate)
     monkeypatch.setattr("app.routers.auth.db.get_default_workspace_for_user", fake_workspace)
+    monkeypatch.setattr("app.routers.auth.db.ensure_default_workspace_for_user", fake_ensure_workspace_for_user)
+    monkeypatch.setattr("app.routers.auth.db.create_refresh_token", fake_create_refresh_token)
 
     response = client.post("/auth/login", json={"email": "user@spann.app", "password": "password123"})
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 def test_refresh_invalid_token_not_found(client, monkeypatch: pytest.MonkeyPatch) -> None:
