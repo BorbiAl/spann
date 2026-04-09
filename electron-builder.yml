@@ -1,0 +1,41 @@
+appId: app.spann.desktop
+productName: Spann
+copyright: Copyright © 2024-2025 Spann
+
+directories:
+  buildResources: public
+  output: dist-release
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+extraMetadata:
+  main: dist-electron/main.js
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  icon: public/icon.ico
+  requestedExecutionLevel: asUser
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Spann
+  installerIcon: public/icon.ico
+  uninstallerIcon: public/icon.ico
+  installerHeaderIcon: public/icon.ico
+  differentialPackage: true
+
+publish:
+  provider: github
+  owner: spann-app
+  repo: spann-desktop
+  releaseType: release
