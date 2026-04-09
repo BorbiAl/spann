@@ -52,19 +52,21 @@ function MeshBackground() {
 
 interface FloatingInputProps {
   id: string
+  name?: string
   label: string
   type: string
   value: string
   onChange: (v: string) => void
   onBlur?: () => void
   autoFocus?: boolean
-  autoComplete?: string
+  autoComplete?: 'username' | 'current-password'
   error?: string
   suffix?: React.ReactNode
 }
 
 function FloatingInput({
   id,
+  name,
   label,
   type,
   value,
@@ -102,24 +104,66 @@ function FloatingInput({
         >
           {label}
         </label>
-        <input
-          id={id}
-          type={type}
-          value={value}
-          autoComplete={autoComplete}
-          autoFocus={autoFocus}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false)
-            onBlur?.()
-          }}
-          className={cn(
-            'w-full bg-transparent pb-2 pl-4 pr-4 pt-6 text-sm text-spann-text-primary',
-            'outline-none placeholder-transparent',
-            suffix && 'pr-12',
-          )}
-        />
+        {autoComplete === 'username' ? (
+          <input
+            id={id}
+            name={name}
+            type={type}
+            value={value}
+            autoComplete="username"
+            autoFocus={autoFocus}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false)
+              onBlur?.()
+            }}
+            className={cn(
+              'w-full bg-transparent pb-2 pl-4 pr-4 pt-6 text-sm text-spann-text-primary',
+              'outline-none placeholder-transparent',
+              suffix && 'pr-12',
+            )}
+          />
+        ) : autoComplete === 'current-password' ? (
+          <input
+            id={id}
+            name={name}
+            type={type}
+            value={value}
+            autoComplete="current-password"
+            autoFocus={autoFocus}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false)
+              onBlur?.()
+            }}
+            className={cn(
+              'w-full bg-transparent pb-2 pl-4 pr-4 pt-6 text-sm text-spann-text-primary',
+              'outline-none placeholder-transparent',
+              suffix && 'pr-12',
+            )}
+          />
+        ) : (
+          <input
+            id={id}
+            name={name}
+            type={type}
+            value={value}
+            autoFocus={autoFocus}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false)
+              onBlur?.()
+            }}
+            className={cn(
+              'w-full bg-transparent pb-2 pl-4 pr-4 pt-6 text-sm text-spann-text-primary',
+              'outline-none placeholder-transparent',
+              suffix && 'pr-12',
+            )}
+          />
+        )}
         {suffix && (
           <div className="absolute right-3 flex items-center">{suffix}</div>
         )}
@@ -292,18 +336,20 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} noValidate className="space-y-3">
             <FloatingInput
               id="login-email"
+              name="username"
               label="Email"
               type="email"
               value={email}
               onChange={setEmail}
               onBlur={validateEmail}
               autoFocus={!storeGet('lastEmail')}
-              autoComplete="email"
+              autoComplete="username"
               error={emailError}
             />
 
             <FloatingInput
               id="login-password"
+              name="password"
               label="Password"
               type={showPassword ? 'text' : 'password'}
               value={password}
