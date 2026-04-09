@@ -1,4 +1,5 @@
 # spann
+
 A team communication platform that works everywhere and understands everyone, combining real-time chat with AI-powered language translation, cultural adaptation, and communication coaching — so global teams collaborate without barriers. When infrastructure fails, our peer-to-peer mesh network keeps teams connected offline via Bluetooth and Wi-Fi.
 
 ## Run the project
@@ -52,13 +53,14 @@ Expected response includes:
 ## Production hardening defaults
 
 Backend configuration now enforces safer production defaults:
+
 - `AUTH_FALLBACK_ENABLED=false` by default
 - `TEST_MODE=false` by default
 - startup fails in production when Supabase healthcheck fails
 - startup validation fails in production if:
-	- `ALLOWED_ORIGINS` contains `*`
-	- `JWT_SECRET` is shorter than 32 chars
-	- Supabase URL/key are missing
+  - `ALLOWED_ORIGINS` contains `*`
+  - `JWT_SECRET` is shorter than 32 chars
+  - Supabase URL/key are missing
 
 Set `ENV=production` only when all production secrets and dependencies are configured.
 
@@ -103,9 +105,11 @@ npm run mobile:ios
 ## Native API base configuration
 
 Native builds do not use the Vite `/api` proxy. Configure an absolute backend URL for release builds:
+
 - preferred: set `VITE_API_BASE_URL=https://api.your-domain.com` before `npm run build`
 - desktop runtime override: set `SPANN_API_BASE` when launching the Electron app
 
 Default native fallbacks for local development:
+
 - desktop and iOS simulator: `http://127.0.0.1:8000`
 - Android emulator: `http://10.0.2.2:8000`
