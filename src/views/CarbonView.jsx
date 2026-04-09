@@ -76,7 +76,7 @@ export default function CarbonView({ leaderboard, currentUserId, onLogAction, is
 							</div>
 							<p className="leader-name">{entry.display_name || "Team Member"}</p>
 							<p className="leader-score">{Number(entry.total_kg_co2 || 0).toFixed(2)} kg CO2</p>
-							<span style={{ color: "var(--green)", fontWeight: 700 }}>{entry.total_score || 0}</span>
+							<span style={{ color: "var(--accent)", fontWeight: 700 }}>{entry.total_score || 0}</span>
 						</div>
 					))}
 					{orderedLeaderboard.length === 0 ? <p className="caption">No carbon entries yet.</p> : null}
