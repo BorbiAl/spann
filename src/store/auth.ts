@@ -12,7 +12,8 @@ function friendlyError(errorCode: string, fallback: string): string {
   const map: Record<string, string> = {
     invalid_credentials: 'Incorrect email or password. Please try again.',
     email_already_exists: 'An account with this email already exists.',
-    register_failed: 'Could not create your account right now. Please try again.',
+    register_failed:
+      'We could not create your account right now. Please try again later, or use Sign In / Forgot password if you already have an account.',
     account_disabled: 'Your account has been disabled. Contact support.',
     too_many_requests: 'Too many attempts. Please wait a moment and try again.',
     token_expired: 'Your session expired. Please sign in again.',
@@ -53,7 +54,12 @@ interface AuthState {
   error: string | null
 
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, name: string) => Promise<void>
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    companyName?: string,
+  ) => Promise<void>
   logout: () => Promise<void>
   refreshSession: () => Promise<boolean>
   initialize: () => Promise<void>
@@ -144,11 +150,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // ── register ───────────────────────────────────────────────────────────
 
-  async register(email: string, password: string, name: string): Promise<void> {
+  async register(
+    email: string,
+    password: string,
+    name: string,
+    companyName?: string,
+  ): Promise<void> {
     set({ isLoading: true, error: null })
 
     try {
-      const response = await authApi.register(email, password, name)
+      const response = await authApi.register(email, password, name, companyName)
 
       tokenManager.setAccessToken(response.access_token)
       await tokenManager.saveRefreshToken(email, response.refresh_token)

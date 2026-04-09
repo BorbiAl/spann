@@ -156,6 +156,7 @@ function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
 function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	const [mode, setMode] = useState("login");
 	const [name, setName] = useState("");
+	const [companyName, setCompanyName] = useState("");
 	const [email, setEmail] = useState(defaultEmail || "");
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
@@ -191,6 +192,10 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 
 		if (code === "register_failed") {
 			return "We could not create your account right now. Please try again later, or use Sign In / Forgot password if you already have an account.";
+		}
+
+		if (code === "too_many_requests") {
+			return "Too many attempts right now. Please wait a minute and try again.";
 		}
 
 		if (status === 422 && authMode === "register") {
@@ -273,6 +278,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 					email: email.trim(),
 					password,
 					name: name.trim(),
+					companyName: companyName.trim() || null,
 					persistSession: rememberSession,
 					deviceHint: "web-client"
 				});
@@ -386,6 +392,19 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 								required
+							/>
+						</label>
+					) : null}
+
+					{mode === "register" ? (
+						<label className="auth-field">
+							<span>Company name (optional)</span>
+							<input
+								type="text"
+								className="auth-input"
+								value={companyName}
+								onChange={(event) => setCompanyName(event.target.value)}
+								placeholder="e.g. Elsys"
 							/>
 						</label>
 					) : null}

@@ -8,7 +8,7 @@ from secrets import token_hex
 from uuid import uuid4
 
 import jwt
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.config import settings
@@ -62,10 +62,11 @@ async def login(payload: LoginRequest, request: Request, _rate_limit: None = Dep
         return error_response(status_code=401, code="INVALID_CREDENTIALS", message="Email or password is incorrect.")
 
     user = auth_result["user"]
-    workspace_id = await db.get_default_workspace_for_user(user["id"])
+    user_id = str(user["id"])
+    workspace_id = await db.get_default_workspace_for_user(user_id)
     if workspace_id is None:
         workspace_id = await db.ensure_default_workspace_for_user(
-            user_id=str(user["id"]),
+            user_id=user_id,
             display_name=user.get("display_name"),
             email=user.get("email"),
         )
@@ -77,13 +78,13 @@ async def login(payload: LoginRequest, request: Request, _rate_limit: None = Dep
             message="User is not a member of any workspace.",
         )
 
-    access_token, expires_in = _build_access_token(user_id=user["id"], workspace_id=workspace_id)
+    access_token, expires_in = _build_access_token(user_id=user_id, workspace_id=str(workspace_id))
     refresh_token, refresh_hash = _build_refresh_token()
 
     await db.create_refresh_token(
-        user_id=user["id"],
+        user_id=user_id,
         token_hash=refresh_hash,
-        workspace_id=workspace_id,
+        workspace_id=str(workspace_id),
         expires_at=(datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_TTL_DAYS)),
         device_hint=payload.device_hint,
     )
@@ -106,9 +107,19 @@ async def register(payload: RegisterRequest, request: Request, _rate_limit: None
     """Register a user, create default workspace, and issue initial token pair."""
 
     try:
-        created = await db.register_user(email=payload.email, password=payload.password, name=payload.name)
+        created = await db.register_user(
+            email=payload.email,
+            password=payload.password,
+            name=payload.name,
+            company_name=payload.company_name,
+        )
     except ValueError:
         return error_response(status_code=409, code="email_already_exists", message="A user with this email already exists.")
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        code = str(detail.get("code", "register_failed"))
+        message = str(detail.get("message", "Unable to register user."))
+        return error_response(status_code=exc.status_code, code=code, message=message)
     except Exception:
         return error_response(status_code=400, code="register_failed", message="Unable to register user.")
 

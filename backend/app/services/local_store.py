@@ -10,6 +10,23 @@ from uuid import uuid4
 
 
 ROLE_PRIORITY = {"member": 1, "admin": 2, "owner": 3}
+PERSONAL_EMAIL_DOMAINS = {
+    "gmail.com",
+    "googlemail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "icloud.com",
+    "me.com",
+    "proton.me",
+    "protonmail.com",
+    "aol.com",
+    "mail.com",
+    "gmx.com",
+    "yandex.com",
+}
 
 
 @dataclass(slots=True)
@@ -31,6 +48,7 @@ class LocalStore:
         self.users_by_id: dict[str, LocalUser] = {}
         self.workspaces: dict[str, dict[str, Any]] = {}
         self.workspace_members: list[dict[str, Any]] = []
+        self.workspace_domains: dict[str, str] = {}
 
         self.refresh_tokens: dict[str, dict[str, Any]] = {}
         self.channels: dict[str, dict[str, Any]] = {}
@@ -60,7 +78,20 @@ class LocalStore:
             return parts[0][:2].upper()
         return f"{parts[0][0]}{parts[-1][0]}".upper()
 
-    def register_user(self, *, email: str, password: str, name: str) -> dict[str, Any]:
+    @staticmethod
+    def _extract_domain(email: str) -> str | None:
+        parts = email.strip().lower().split("@", 1)
+        if len(parts) != 2 or not parts[1]:
+            return None
+        return parts[1]
+
+    @staticmethod
+    def _is_company_domain(domain: str | None) -> bool:
+        if not domain:
+            return False
+        return "." in domain and domain not in PERSONAL_EMAIL_DOMAINS
+
+    def register_user(self, *, email: str, password: str, name: str, company_name: str | None = None) -> dict[str, Any]:
         normalized_email = email.strip().lower()
         if normalized_email in self.users_by_email:
             raise ValueError("email_already_exists")
@@ -77,19 +108,38 @@ class LocalStore:
         self.users_by_email[normalized_email] = user
         self.users_by_id[user_id] = user
 
-        workspace_id = str(uuid4())
         now_iso = self._now().isoformat()
-        self.workspaces[workspace_id] = {
-            "id": workspace_id,
-            "name": f"{display_name}'s Workspace",
-            "slug": f"ws-{workspace_id[:8]}",
-            "created_at": now_iso,
-        }
+        domain = self._extract_domain(normalized_email)
+        company_domain = domain if self._is_company_domain(domain) else None
+
+        workspace_id = self.workspace_domains.get(company_domain) if company_domain else None
+        role = "member"
+
+        if workspace_id is None:
+            workspace_id = str(uuid4())
+            if company_name and company_name.strip():
+                workspace_name = f"{company_name.strip()} Workspace"
+            elif company_domain:
+                workspace_name = f"{company_domain.split('.', 1)[0].replace('-', ' ').title()} Workspace"
+            else:
+                workspace_name = f"{display_name}'s Workspace"
+
+            self.workspaces[workspace_id] = {
+                "id": workspace_id,
+                "name": workspace_name,
+                "slug": f"ws-{workspace_id[:8]}",
+                "created_at": now_iso,
+            }
+            role = "owner"
+
+            if company_domain:
+                self.workspace_domains[company_domain] = workspace_id
+
         self.workspace_members.append(
             {
                 "workspace_id": workspace_id,
                 "user_id": user_id,
-                "role": "owner",
+                "role": role,
                 "joined_at": now_iso,
             }
         )

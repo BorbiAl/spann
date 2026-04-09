@@ -19,11 +19,13 @@ export const authApi = {
     email: string,
     password: string,
     name: string,
+    companyName?: string,
   ): Promise<LoginResponse> {
     const { data } = await apiClient.post<LoginResponse>('/auth/register', {
       email,
       password,
       name,
+      ...(companyName ? { company_name: companyName } : {}),
     })
     return data
   },

@@ -11,3 +11,6 @@ celery==5.6.3
 python-json-logger==4.1.0
 prometheus-client==0.23.1
 python-dotenv==1.2.2
+alembic==1.16.4
+SQLAlchemy==2.0.43
+psycopg2-binary==2.9.10

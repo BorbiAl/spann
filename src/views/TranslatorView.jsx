@@ -11,6 +11,7 @@ export default function TranslatorView() {
 	const [targetCulture, setTargetCulture] = useState("Bulgarian");
 	const [inputText, setInputText] = useState("Break a leg!");
 	const [isTranslating, setIsTranslating] = useState(false);
+	const [statusNote, setStatusNote] = useState("");
 	const [result, setResult] = useState({
 		literal: "Счупи крак!",
 		cultural: "Много успех!",
@@ -25,6 +26,7 @@ export default function TranslatorView() {
 		}
 
 		setIsTranslating(true);
+		setStatusNote("");
 		const sourceOption = CULTURE_BY_KEY[sourceCulture];
 		const targetOption = CULTURE_BY_KEY[targetCulture];
 
@@ -43,19 +45,32 @@ export default function TranslatorView() {
 
 			const apiResult = payload?.data || payload?.result;
 			if (apiResult && apiResult.literal && apiResult.cultural) {
+				const explanation =
+					apiResult.explanation ||
+					apiResult.note ||
+					`Adjusted for ${targetOption?.label || targetCulture} communication norms and tone.`;
+
 				setResult({
 					literal: apiResult.literal,
 					cultural: apiResult.cultural,
-					note:
-						apiResult.explanation ||
-						apiResult.note ||
-						`Adjusted for ${targetOption?.label || targetCulture} communication norms and tone.`
+					note: explanation
 				});
+
+				if (String(explanation).toLowerCase().includes("fallback")) {
+					setStatusNote("Live translator is unavailable right now. Showing fallback output.");
+				}
 				return;
 			}
 
 			throw new Error("Missing translation result");
 		} catch (error) {
+			const status = Number(error?.status || 0);
+			if (status === 401) {
+				setStatusNote("Your session expired. Sign in again to use translation.");
+			} else {
+				setStatusNote("Translation service is currently unavailable. Showing fallback output.");
+			}
+
 			if (trimmed.toLowerCase() === "break a leg!" && sourceCulture === "American" && targetCulture === "Bulgarian") {
 				setResult({
 					literal: "Счупи крак!",
@@ -123,6 +138,8 @@ export default function TranslatorView() {
 				<button className="accent-btn" onClick={translate} disabled={isTranslating}>
 					{isTranslating ? "Translating..." : "Translate"}
 				</button>
+
+				{statusNote ? <p className="caption">{statusNote}</p> : null}
 
 				<div className="result-grid">
 					<div className="result-box">

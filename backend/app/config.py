@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     supabase_use_service_role: bool = Field(default=False, alias="SUPABASE_USE_SERVICE_ROLE")
 
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
-    groq_model: str = "llama-3.1-70b-versatile"
+    groq_model: str = "llama-3.3-70b-versatile"
 
     redis_url: str = Field(default="redis://valkey:6379/0", alias="REDIS_URL")
 
@@ -87,9 +87,16 @@ class Settings(BaseSettings):
 
     @property
     def supabase_api_key(self) -> str:
-        """Return service role key when available, otherwise fall back to publishable key."""
+        """Return backend Supabase API key.
 
-        if self.supabase_use_service_role and self.supabase_service_key:
+        In development, prefer service-role automatically when present so
+        server-side bootstrap writes (signup/profile/workspace creation) work
+        without extra env toggles. In production, only use service role when
+        explicitly enabled.
+        """
+
+        use_service_role = self.supabase_use_service_role or self.env.lower() != "production"
+        if use_service_role and self.supabase_service_key:
             return self.supabase_service_key.strip()
         return self.supabase_anon_key.strip()
 

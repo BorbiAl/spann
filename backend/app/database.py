@@ -42,6 +42,23 @@ EMISSION_FACTORS_G_PER_KM = {
     "flight": 255.0,
     "remote": 0.0,
 }
+PERSONAL_EMAIL_DOMAINS = {
+    "gmail.com",
+    "googlemail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "icloud.com",
+    "me.com",
+    "proton.me",
+    "protonmail.com",
+    "aol.com",
+    "mail.com",
+    "gmx.com",
+    "yandex.com",
+}
 
 
 class UserRow(TypedDict):
@@ -100,6 +117,7 @@ class DatabaseClient:
 
     def __init__(self) -> None:
         self._client: AsyncClient | None = None
+        self._admin_client: AsyncClient | None = None
         self._redis: Redis | None = None
         self._lock = asyncio.Lock()
 
@@ -115,6 +133,47 @@ class DatabaseClient:
                 logger.info("supabase_client_initialized")
 
         return self._client
+
+    async def admin_client(self) -> AsyncClient | None:
+        """Return Supabase service-role client for admin auth operations."""
+
+        if not settings.supabase_service_key:
+            return None
+
+        # If main client already uses service role, reuse it.
+        if settings.supabase_use_service_role:
+            return await self.client()
+
+        if self._admin_client is not None:
+            return self._admin_client
+
+        async with self._lock:
+            if self._admin_client is None:
+                self._admin_client = await acreate_client(
+                    settings.supabase_url,
+                    settings.supabase_service_key,
+                )
+                logger.info("supabase_admin_client_initialized")
+
+        return self._admin_client
+
+    async def auth_client(self) -> AsyncClient:
+        """Return isolated anon-key Supabase client for auth flows.
+
+        Auth methods can mutate client session state; using a short-lived client
+        avoids leaking per-user auth context into shared database clients.
+        """
+
+        auth_key = settings.supabase_anon_key.strip() or settings.supabase_api_key
+        return await acreate_client(settings.supabase_url, auth_key)
+
+    async def _privileged_client(self) -> AsyncClient:
+        """Return service-role client when available, else fallback client."""
+
+        admin = await self.admin_client()
+        if admin is not None:
+            return admin
+        return await self.client()
 
     async def cache(self) -> Redis:
         """Return shared Redis client used for membership caching."""
@@ -147,6 +206,17 @@ class DatabaseClient:
         if value is None:
             return None
         return DatabaseClient._sanitize_text(value, max_len=max_len)
+
+    @staticmethod
+    def _initials_from_name(name: str) -> str:
+        """Derive a short initials token for compatibility with legacy schema."""
+
+        parts = [part for part in name.strip().split() if part]
+        if not parts:
+            return "??"
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        return f"{parts[0][0]}{parts[-1][0]}".upper()
 
     @staticmethod
     def _extract_data(result: Any) -> Any:
@@ -183,6 +253,99 @@ class DatabaseClient:
         text = str(exc)
         return "PGRST205" in text or "schema cache" in text
 
+    @staticmethod
+    def _extract_email_domain(email: str) -> str | None:
+        parts = email.strip().lower().split("@", 1)
+        if len(parts) != 2 or not parts[1]:
+            return None
+        return parts[1]
+
+    @staticmethod
+    def _is_company_domain(domain: str | None) -> bool:
+        if not domain:
+            return False
+        return "." in domain and domain not in PERSONAL_EMAIL_DOMAINS
+
+    @staticmethod
+    def _is_rate_limited_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "429" in text or "too many requests" in text or "rate limit" in text
+
+    @staticmethod
+    def _is_email_exists_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "already registered" in text or "already exists" in text or "email_exists" in text
+
+    @staticmethod
+    def _workspace_name_for_registration(*, display_name: str, company_name: str | None, email_domain: str | None) -> str:
+        if company_name:
+            return f"{company_name} Workspace"
+        if email_domain and "." in email_domain:
+            company_token = email_domain.split(".", 1)[0].replace("-", " ").strip()
+            if company_token:
+                return f"{company_token.title()} Workspace"
+        return f"{display_name}'s Workspace"
+
+    async def _register_user_via_admin(
+        self,
+        *,
+        email: str,
+        password: str,
+        display_name: str,
+        company_name: str | None,
+    ) -> Any:
+        """Create a Supabase Auth user via admin API (service key)."""
+
+        admin_client = await self.admin_client()
+        if admin_client is None:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "too_many_requests",
+                    "message": "Too many signup attempts right now. Please wait a minute and try again.",
+                },
+            )
+
+        metadata: dict[str, str] = {"full_name": display_name}
+        if company_name:
+            metadata["company_name"] = company_name
+
+        try:
+            response = await admin_client.auth.admin.create_user(
+                cast(
+                    Any,
+                    {
+                        "email": email,
+                        "password": password,
+                        "email_confirm": True,
+                        "user_metadata": metadata,
+                    },
+                )
+            )
+        except Exception as exc:
+            if self._is_email_exists_error(exc):
+                raise ValueError("email_already_exists") from exc
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "register_failed",
+                    "message": "Unable to register user.",
+                },
+            ) from exc
+
+        user = getattr(response, "user", None)
+        if user is None and isinstance(response, dict):
+            user = response.get("user")
+        if user is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "register_failed",
+                    "message": "Unable to register user.",
+                },
+            )
+        return user
+
     async def healthcheck(self) -> bool:
         """Run a minimal read query to confirm Supabase connectivity."""
 
@@ -204,78 +367,261 @@ class DatabaseClient:
             logger.warning("supabase_healthcheck_failed", extra={"error": str(exc)})
             return False
 
-    async def register_user(self, *, email: str, password: str, name: str) -> dict[str, Any]:
+    async def register_user(self, *, email: str, password: str, name: str, company_name: str | None = None) -> dict[str, Any]:
         """Create a new user and default workspace for login bootstrap flows."""
 
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
         display_name = self._sanitize_text(name, max_len=120)
+        safe_company_name = self._sanitize_optional_text(company_name, max_len=120)
+        email_domain = self._extract_email_domain(normalized_email)
+        company_domain = email_domain if self._is_company_domain(email_domain) else None
 
         if settings.test_mode:
-            return local_store.register_user(email=normalized_email, password=password, name=display_name)
+            return local_store.register_user(
+                email=normalized_email,
+                password=password,
+                name=display_name,
+                company_name=safe_company_name,
+            )
 
-        client = await self.client()
+        auth_client = await self.auth_client()
+        user: Any = None
         try:
-            auth_response = await client.auth.sign_up(
+            auth_response = await auth_client.auth.sign_up(
                 {
                     "email": normalized_email,
                     "password": password,
-                    "options": {"data": {"full_name": display_name}},
+                    "options": {
+                        "data": {
+                            "full_name": display_name,
+                            **({"company_name": safe_company_name} if safe_company_name else {}),
+                        }
+                    },
                 }
             )
             user = getattr(auth_response, "user", None)
             if user is None:
+                # Some Supabase setups can return no user when signup is throttled/blocked.
+                user = await self._register_user_via_admin(
+                    email=normalized_email,
+                    password=password,
+                    display_name=display_name,
+                    company_name=safe_company_name,
+                )
+            if user is None:
                 if settings.auth_fallback_enabled:
                     logger.warning("register_user_supabase_missing_user_fallback", extra={"email": normalized_email})
-                    return local_store.register_user(email=normalized_email, password=password, name=display_name)
+                    return local_store.register_user(
+                        email=normalized_email,
+                        password=password,
+                        name=display_name,
+                        company_name=safe_company_name,
+                    )
                 raise HTTPException(status_code=400, detail={"code": "register_failed", "message": "Unable to register user."})
         except Exception as exc:
-            if settings.auth_fallback_enabled:
-                logger.warning("register_user_supabase_fallback", extra={"email": normalized_email, "error": str(exc)})
-                return local_store.register_user(email=normalized_email, password=password, name=display_name)
-            raise
+            handled_by_admin_fallback = False
+            if self._is_rate_limited_error(exc):
+                try:
+                    user = await self._register_user_via_admin(
+                        email=normalized_email,
+                        password=password,
+                        display_name=display_name,
+                        company_name=safe_company_name,
+                    )
+                except ValueError:
+                    raise
+                except HTTPException:
+                    if settings.auth_fallback_enabled:
+                        logger.warning(
+                            "register_user_rate_limited_fallback",
+                            extra={"email": normalized_email, "error": str(exc)},
+                        )
+                        return local_store.register_user(
+                            email=normalized_email,
+                            password=password,
+                            name=display_name,
+                            company_name=safe_company_name,
+                        )
+                    raise
+                else:
+                    # Admin fallback succeeded; continue with profile/workspace bootstrap.
+                    handled_by_admin_fallback = True
 
+            if not handled_by_admin_fallback:
+                if self._is_email_exists_error(exc):
+                    raise ValueError("email_already_exists") from exc
+                if settings.auth_fallback_enabled:
+                    logger.warning("register_user_supabase_fallback", extra={"email": normalized_email, "error": str(exc)})
+                    return local_store.register_user(
+                        email=normalized_email,
+                        password=password,
+                        name=display_name,
+                        company_name=safe_company_name,
+                    )
+                raise
+
+        if user is None:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "register_failed", "message": "Unable to register user."},
+            )
+
+        user_id = str(user.id)
         await self.upsert_user_profile(
-            user_id=user.id,
+            user_id=user_id,
             email=user.email or normalized_email,
             display_name=display_name,
             locale="en-US",
         )
 
-        workspace_id = await self.get_default_workspace_for_user(user.id)
+        write_client = await self._privileged_client()
+
+        workspace_id = await self.get_default_workspace_for_user(user_id)
         if workspace_id is None:
-            workspace_id = str(uuid4())
-            now_iso = datetime.now(UTC).isoformat()
-            await self._execute(
-                "register_create_workspace",
-                client.table("workspaces").insert(
-                    {
-                        "id": workspace_id,
-                        "name": f"{display_name}'s Workspace",
-                        "slug": f"ws-{workspace_id[:8]}",
-                        "created_at": now_iso,
-                    }
-                ),
-            )
-            await self._execute(
-                "register_create_membership",
-                client.table("workspace_members").insert(
-                    {
-                        "workspace_id": workspace_id,
-                        "user_id": user.id,
-                        "role": "owner",
-                        "joined_at": now_iso,
-                    }
-                ),
-            )
+            domain_workspace_id: str | None = None
+            if company_domain:
+                domain_workspace_id = await self.get_workspace_for_domain(company_domain)
+
+            if domain_workspace_id:
+                workspace_id = domain_workspace_id
+                await self.add_workspace_member(
+                    workspace_id=workspace_id,
+                    user_id=user_id,
+                    role="member",
+                )
+            else:
+                workspace_id = str(uuid4())
+                now_iso = datetime.now(UTC).isoformat()
+                workspace_name = self._workspace_name_for_registration(
+                    display_name=display_name,
+                    company_name=safe_company_name,
+                    email_domain=company_domain,
+                )
+                await self._execute(
+                    "register_create_workspace",
+                    write_client.table("workspaces").insert(
+                        {
+                            "id": workspace_id,
+                            "name": workspace_name,
+                            "slug": f"ws-{workspace_id[:8]}",
+                            "created_at": now_iso,
+                        }
+                    ),
+                )
+                await self.add_workspace_member(
+                    workspace_id=workspace_id,
+                    user_id=user_id,
+                    role="owner",
+                )
+
+                if company_domain:
+                    await self.map_workspace_domain(
+                        domain=company_domain,
+                        workspace_id=workspace_id,
+                    )
 
         return {
             "user": {
-                "id": user.id,
+                "id": user_id,
                 "email": user.email or normalized_email,
                 "display_name": display_name,
             },
             "workspace_id": workspace_id,
         }
+
+    async def get_workspace_for_domain(self, domain: str) -> str | None:
+        """Resolve workspace id mapped to an email domain."""
+
+        safe_domain = self._sanitize_text(domain.lower(), max_len=255)
+        if settings.test_mode:
+            return local_store.workspace_domains.get(safe_domain)
+
+        client = await self._privileged_client()
+        response = await self._execute(
+            "get_workspace_for_domain",
+            client.table("workspace_domains")
+            .select("workspace_id")
+            .eq("domain", safe_domain)
+            .limit(1),
+        )
+        rows = self._extract_data(response) or []
+        if not rows:
+            if settings.auth_fallback_enabled:
+                return local_store.workspace_domains.get(safe_domain)
+            return None
+        return str(rows[0]["workspace_id"])
+
+    async def map_workspace_domain(self, *, domain: str, workspace_id: str) -> None:
+        """Create or update domain-to-workspace mapping for onboarding."""
+
+        safe_domain = self._sanitize_text(domain.lower(), max_len=255)
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        if settings.test_mode:
+            local_store.workspace_domains[safe_domain] = safe_workspace_id
+            return
+
+        client = await self._privileged_client()
+        await self._execute(
+            "map_workspace_domain",
+            client.table("workspace_domains").upsert(
+                cast(
+                    Any,
+                    {
+                        "domain": safe_domain,
+                        "workspace_id": safe_workspace_id,
+                        "created_at": datetime.now(UTC).isoformat(),
+                    },
+                ),
+                on_conflict="domain",
+            ),
+        )
+
+    async def add_workspace_member(self, *, workspace_id: str, user_id: str, role: str) -> None:
+        """Upsert workspace membership for a user."""
+
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        safe_role = self._sanitize_text(role.lower(), max_len=16)
+        now_iso = datetime.now(UTC).isoformat()
+
+        if settings.test_mode:
+            existing = next(
+                (
+                    m
+                    for m in local_store.workspace_members
+                    if m["workspace_id"] == safe_workspace_id and m["user_id"] == safe_user_id
+                ),
+                None,
+            )
+            if existing is None:
+                local_store.workspace_members.append(
+                    {
+                        "workspace_id": safe_workspace_id,
+                        "user_id": safe_user_id,
+                        "role": safe_role,
+                        "joined_at": now_iso,
+                    }
+                )
+            else:
+                existing["role"] = safe_role
+            return
+
+        client = await self._privileged_client()
+        await self._execute(
+            "add_workspace_member",
+            client.table("workspace_members").upsert(
+                cast(
+                    Any,
+                    {
+                        "workspace_id": safe_workspace_id,
+                        "user_id": safe_user_id,
+                        "role": safe_role,
+                        "joined_at": now_iso,
+                    },
+                ),
+                on_conflict="workspace_id,user_id",
+            ),
+        )
 
     async def authenticate_user(self, email: str, password: str) -> dict[str, Any] | None:
         """Authenticate with Supabase Auth and ensure profile exists."""
@@ -283,11 +629,13 @@ class DatabaseClient:
         if settings.test_mode:
             return local_store.authenticate_user(email=email, password=password)
 
-        client = await self.client()
+        auth_client = await self.auth_client()
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
 
         try:
-            auth_response = await client.auth.sign_in_with_password({"email": normalized_email, "password": password})
+            auth_response = await auth_client.auth.sign_in_with_password(
+                {"email": normalized_email, "password": password}
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("auth_login_failed", extra={"email": normalized_email, "error": str(exc)})
             if settings.auth_fallback_enabled:
@@ -320,7 +668,7 @@ class DatabaseClient:
         if settings.test_mode:
             return
 
-        client = await self.client()
+        client = await self.auth_client()
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
         await client.auth.sign_in_with_otp({"email": normalized_email})
 
@@ -360,18 +708,35 @@ class DatabaseClient:
                 "accessibility_settings": user.accessibility_settings,
             }
 
-        client = await self.client()
+        client = await self._privileged_client()
+        resolved_name = self._sanitize_text(
+            (display_name or safe_email.split("@", 1)[0]),
+            max_len=120,
+        )
         payload = {
             "id": self._sanitize_text(user_id, max_len=128),
             "email": self._sanitize_text(email.lower(), max_len=320),
+            "name": resolved_name,
+            "initials": self._initials_from_name(resolved_name),
             "display_name": self._sanitize_optional_text(display_name, max_len=120),
             "locale": self._sanitize_text(locale, max_len=16),
+            "coaching_opt_in": bool(coaching_enabled),
+            "accessibility_prefs": accessibility_settings or {},
             "coaching_enabled": bool(coaching_enabled),
             "accessibility_settings": accessibility_settings or {},
             "updated_at": datetime.now(UTC).isoformat(),
         }
 
-        response = await self._execute("upsert_user_profile", client.table("users").upsert(payload, on_conflict="id"))
+        try:
+            response = await self._execute("upsert_user_profile", client.table("users").upsert(payload, on_conflict="id"))
+        except APIError as exc:
+            if "42501" in str(exc):
+                logger.warning(
+                    "upsert_user_profile_rls_denied",
+                    extra={"user_id": safe_user_id, "email": safe_email, "error": str(exc)},
+                )
+                return payload
+            raise
         data = self._extract_data(response) or []
         return data[0] if data else payload
 
@@ -437,7 +802,7 @@ class DatabaseClient:
         if settings.test_mode:
             return local_store.get_default_workspace_for_user(user_id)
 
-        client = await self.client()
+        client = await self._privileged_client()
         response = await self._execute(
             "get_default_workspace_for_user",
             client.table("workspace_members")
@@ -494,7 +859,7 @@ class DatabaseClient:
             )
             return workspace_id
 
-        client = await self.client()
+        client = await self._privileged_client()
         try:
             await self._execute(
                 "bootstrap_create_workspace",
@@ -541,7 +906,7 @@ class DatabaseClient:
                 device_hint=self._sanitize_optional_text(device_hint, max_len=64),
             )
 
-        client = await self.client()
+        client = await self._privileged_client()
         payload: dict[str, Any] = {
             "id": str(uuid4()),
             "user_id": self._sanitize_text(user_id, max_len=128),
@@ -568,7 +933,7 @@ class DatabaseClient:
             if local_row is not None:
                 return local_row
 
-        client = await self.client()
+        client = await self._privileged_client()
         response = await self._execute(
             "get_refresh_token_by_hash",
             client.table("refresh_tokens")
@@ -587,7 +952,7 @@ class DatabaseClient:
             local_store.revoke_refresh_token(safe_hash)
             return
 
-        client = await self.client()
+        client = await self._privileged_client()
         await self._execute(
             "revoke_refresh_token",
             client.table("refresh_tokens")
@@ -603,7 +968,7 @@ class DatabaseClient:
             local_store.revoke_all_refresh_tokens_for_user(safe_user_id)
             return
 
-        client = await self.client()
+        client = await self._privileged_client()
         await self._execute(
             "revoke_all_refresh_tokens_for_user",
             client.table("refresh_tokens")
@@ -638,7 +1003,7 @@ class DatabaseClient:
                 device_hint=self._sanitize_optional_text(device_hint, max_len=64),
             )
 
-        client = await self.client()
+        client = await self._privileged_client()
         params = {
             "p_old_token_hash": self._sanitize_text(old_token_hash, max_len=128),
             "p_new_token_hash": self._sanitize_text(new_token_hash, max_len=128),

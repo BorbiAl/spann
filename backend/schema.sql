@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS workspace_members (
     PRIMARY KEY (workspace_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS workspace_domains (
+    domain TEXT PRIMARY KEY,
+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 4) channels
 CREATE TABLE IF NOT EXISTS channels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -189,6 +195,7 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash)
 CREATE INDEX IF NOT EXISTS idx_carbon_logs_user_date ON carbon_logs(user_id, logged_date);
 CREATE INDEX IF NOT EXISTS idx_pulse_snapshots_channel ON pulse_snapshots(channel_id, snapshot_minute DESC);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_domains_workspace ON workspace_domains(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_mesh_nodes_node_id ON mesh_nodes(node_id);
 
 -- Additional supporting indexes.
@@ -198,6 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_mesh_nodes_workspace ON mesh_nodes(workspace_id);
 ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workspace_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspace_domains ENABLE ROW LEVEL SECURITY;
 ALTER TABLE channels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message_edits ENABLE ROW LEVEL SECURITY;

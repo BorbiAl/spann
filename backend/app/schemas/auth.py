@@ -13,6 +13,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(..., max_length=254)
     password: str = Field(..., min_length=8, max_length=128)
     name: str = Field(..., min_length=1, max_length=120)
+    company_name: str | None = Field(default=None, max_length=120)
     device_hint: str | None = Field(default=None, max_length=64)
 
 

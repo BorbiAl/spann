@@ -50,6 +50,13 @@ alter table workspace_members
   foreign key (user_id) references users(id) on delete cascade;
 create index if not exists idx_workspace_members_user on workspace_members(user_id);
 
+create table if not exists workspace_domains (
+  domain text primary key,
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_workspace_domains_workspace on workspace_domains(workspace_id);
+
 create table if not exists channels (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspaces(id) on delete cascade,

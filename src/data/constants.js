@@ -555,11 +555,17 @@ export async function loginWithPassword({ email, password, deviceHint, persistSe
 	};
 }
 
-export async function registerWithPassword({ email, password, name, deviceHint, persistSession = true }) {
+export async function registerWithPassword({ email, password, name, companyName, deviceHint, persistSession = true }) {
 	const payload = await apiRequest("/auth/register", {
 		method: "POST",
 		auth: false,
-		body: JSON.stringify({ email, password, name, device_hint: deviceHint || null })
+		body: JSON.stringify({
+			email,
+			password,
+			name,
+			company_name: companyName || null,
+			device_hint: deviceHint || null
+		})
 	});
 
 	const data = payload?.data || payload || {};

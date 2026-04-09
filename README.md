@@ -38,6 +38,34 @@ Open the Vite URL shown in your terminal (usually `http://localhost:5173`).
 The frontend API base is configured through environment variables and defaults to a relative `/api` path.
 In dev mode, Vite proxies `/api/*` to `VITE_API_PROXY_TARGET` (default: `http://localhost:8000`).
 
+## Database migrations (Alembic)
+
+If backend logs show PostgREST schema-cache errors like `PGRST205` (missing `public.channels` or `public.messages`), run migrations:
+
+```bash
+# local Python environment
+cd backend
+alembic upgrade head
+```
+
+Or with Docker Compose:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Notes:
+
+- Alembic reads DB URL in this order: `SUPABASE_TRANSACTION_POOLER_URL`, `SUPABASE_DB_URL`, then `DATABASE_URL`.
+- For transaction pooler, use the Supabase pooler connection string (typically port `6543`) and URL-encode password special characters.
+- The initial revision applies `backend/migration.sql` automatically.
+- If using Docker, rebuild backend images after dependency updates:
+
+```bash
+docker compose build backend backend-worker backend-beat
+docker compose up -d
+```
+
 ## API quick check
 
 ```bash
