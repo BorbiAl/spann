@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Layout from "./Layout";
 import ThemeProvider from "./ThemeProvider";
 import { useTheme } from "./ThemeProvider";
 import Icon from "../components/Icon";
 import {
+	APP_NOTICE_EVENT_NAME,
+	NETWORK_LOADING_EVENT_NAME,
 	apiRequest,
 	getAuthState,
 	loginWithPassword,
@@ -519,8 +521,35 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	);
 }
 
+function AppBusyIndicator({ visible }) {
+	if (!visible) {
+		return null;
+	}
+
+	return (
+		<div className="app-busy-indicator" role="status" aria-live="polite" aria-atomic="true">
+			<span className="busy-spinner" aria-hidden="true" />
+			<span>Working...</span>
+		</div>
+	);
+}
+
+function AppNotice({ notice }) {
+	if (!notice?.message) {
+		return null;
+	}
+
+	return (
+		<div className={`app-notice ${notice.tone || "info"}`} role="status" aria-live="polite" aria-atomic="true">
+			<span>{notice.message}</span>
+		</div>
+	);
+}
+
 function AppFlow() {
 	const initialAuth = getAuthState();
+	const clickFeedbackTimerRef = useRef(null);
+	const noticeTimerRef = useRef(null);
 	const [entryStage, setEntryStage] = useState(() => {
 		if (initialAuth?.accessToken) {
 			return "workspace";
@@ -533,12 +562,92 @@ function AppFlow() {
 		return "landing";
 	});
 	const [authState, setAuthState] = useState(initialAuth);
+	const [buttonBusy, setButtonBusy] = useState(false);
+	const [networkBusy, setNetworkBusy] = useState(false);
+	const [notice, setNotice] = useState(null);
 
 	useEffect(() => {
 		localStorage.setItem(ENTRY_STAGE_KEY, entryStage);
 	}, [entryStage]);
 
+	useEffect(() => {
+		function showButtonFeedback() {
+			setButtonBusy(true);
+			if (clickFeedbackTimerRef.current) {
+				clearTimeout(clickFeedbackTimerRef.current);
+			}
+
+			clickFeedbackTimerRef.current = setTimeout(() => {
+				setButtonBusy(false);
+				clickFeedbackTimerRef.current = null;
+			}, 700);
+		}
+
+		function handleDocumentClick(event) {
+			const target = event.target;
+			if (!(target instanceof Element)) {
+				return;
+			}
+
+			const button = target.closest("button");
+			if (!button || button.disabled) {
+				return;
+			}
+
+			showButtonFeedback();
+		}
+
+		function handleDocumentSubmit(event) {
+			if (event.target instanceof HTMLFormElement) {
+				showButtonFeedback();
+			}
+		}
+
+		function handleNetworkLoading(event) {
+			const pending = Number(event?.detail?.pending || 0);
+			setNetworkBusy(pending > 0);
+		}
+
+		function handleAppNotice(event) {
+			const detail = event?.detail || {};
+			const message = String(detail.message || "").trim();
+			if (!message) {
+				return;
+			}
+
+			setNotice({ message, tone: detail.tone || "info" });
+			if (noticeTimerRef.current) {
+				clearTimeout(noticeTimerRef.current);
+			}
+			noticeTimerRef.current = setTimeout(() => {
+				setNotice(null);
+				noticeTimerRef.current = null;
+			}, 2200);
+		}
+
+		document.addEventListener("click", handleDocumentClick, true);
+		document.addEventListener("submit", handleDocumentSubmit, true);
+		window.addEventListener(NETWORK_LOADING_EVENT_NAME, handleNetworkLoading);
+		window.addEventListener(APP_NOTICE_EVENT_NAME, handleAppNotice);
+
+		return () => {
+			document.removeEventListener("click", handleDocumentClick, true);
+			document.removeEventListener("submit", handleDocumentSubmit, true);
+			window.removeEventListener(NETWORK_LOADING_EVENT_NAME, handleNetworkLoading);
+			window.removeEventListener(APP_NOTICE_EVENT_NAME, handleAppNotice);
+			if (clickFeedbackTimerRef.current) {
+				clearTimeout(clickFeedbackTimerRef.current);
+				clickFeedbackTimerRef.current = null;
+			}
+			if (noticeTimerRef.current) {
+				clearTimeout(noticeTimerRef.current);
+				noticeTimerRef.current = null;
+			}
+		};
+	}, []);
+
 	const hasSession = Boolean(authState?.accessToken);
+	const isWorking = buttonBusy || networkBusy;
 
 	async function handleLogout() {
 		await logoutSession();
@@ -546,18 +655,17 @@ function AppFlow() {
 		setEntryStage("landing");
 	}
 
+	let content;
 	if (entryStage === "landing") {
-		return (
+		content = (
 			<LandingScreen
 				onContinueWeb={() => setEntryStage("auth")}
 				onContinueWorkspace={() => setEntryStage(hasSession ? "workspace" : "auth")}
 				hasSession={hasSession}
 			/>
 		);
-	}
-
-	if (entryStage === "auth") {
-		return (
+	} else if (entryStage === "auth") {
+		content = (
 			<AuthScreen
 				onBack={() => setEntryStage("landing")}
 				onAuthenticated={(nextAuthState) => {
@@ -567,17 +675,25 @@ function AppFlow() {
 				defaultEmail={authState?.user?.email || ""}
 			/>
 		);
+	} else {
+		content = (
+			<Layout
+				authState={authState}
+				onLogout={handleLogout}
+				onSessionExpired={() => {
+					setAuthState(null);
+					setEntryStage("auth");
+				}}
+			/>
+		);
 	}
 
 	return (
-		<Layout
-			authState={authState}
-			onLogout={handleLogout}
-			onSessionExpired={() => {
-				setAuthState(null);
-				setEntryStage("auth");
-			}}
-		/>
+		<>
+			{content}
+			<AppBusyIndicator visible={isWorking} />
+			<AppNotice notice={notice} />
+		</>
 	);
 }
 

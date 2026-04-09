@@ -67,13 +67,13 @@ export const CHANNELS = [
 ];
 
 export const CULTURES = [
-	"🇺🇸 American",
-	"🇬🇧 British",
-	"🇧🇬 Bulgarian",
-	"🇯🇵 Japanese",
-	"🇩🇪 German",
-	"🇧🇷 Brazilian",
-	"🇸🇦 Arabic"
+	{ key: "American", label: "English (US)", locale: "en-US" },
+	{ key: "British", label: "English (UK)", locale: "en-GB" },
+	{ key: "Bulgarian", label: "Bulgarian", locale: "bg-BG" },
+	{ key: "Japanese", label: "Japanese", locale: "ja-JP" },
+	{ key: "German", label: "German", locale: "de-DE" },
+	{ key: "Brazilian", label: "Portuguese (Brazil)", locale: "pt-BR" },
+	{ key: "Arabic", label: "Arabic (Saudi Arabia)", locale: "ar-SA" }
 ];
 
 export const NAV_ITEMS = [
@@ -239,6 +239,52 @@ export const API_BASE = String(runtimeApiBase || envApiBase || fallbackApiBase).
 
 const AUTH_STATE_STORAGE_KEY = "spann-auth-state";
 const AUTH_STATE_SESSION_KEY = "spann-auth-state-session";
+const NETWORK_LOADING_EVENT = "spann:network-loading";
+const APP_NOTICE_EVENT = "spann:notice";
+let pendingNetworkRequests = 0;
+
+function emitNetworkLoading() {
+	if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+		return;
+	}
+
+	window.dispatchEvent(
+		new CustomEvent(NETWORK_LOADING_EVENT, {
+			detail: {
+				pending: pendingNetworkRequests
+			}
+		})
+	);
+}
+
+function beginNetworkRequest() {
+	pendingNetworkRequests += 1;
+	emitNetworkLoading();
+}
+
+function endNetworkRequest() {
+	pendingNetworkRequests = Math.max(0, pendingNetworkRequests - 1);
+	emitNetworkLoading();
+}
+
+export const NETWORK_LOADING_EVENT_NAME = NETWORK_LOADING_EVENT;
+export const APP_NOTICE_EVENT_NAME = APP_NOTICE_EVENT;
+
+export function pushAppNotice(message, tone = "info") {
+	const text = String(message || "").trim();
+	if (!text || typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+		return;
+	}
+
+	window.dispatchEvent(
+		new CustomEvent(APP_NOTICE_EVENT, {
+			detail: {
+				message: text,
+				tone: tone === "error" ? "error" : tone === "success" ? "success" : "info"
+			}
+		})
+	);
+}
 
 function readJson(raw) {
 	if (!raw) {
@@ -352,41 +398,46 @@ async function refreshAccessToken() {
 
 	if (!refreshInFlight) {
 		refreshInFlight = (async () => {
-			const response = await fetch(`${API_BASE}/auth/refresh`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json"
-				},
-				body: JSON.stringify({ refresh_token: current.refreshToken })
-			});
+			beginNetworkRequest();
+			try {
+				const response = await fetch(`${API_BASE}/auth/refresh`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json"
+					},
+					body: JSON.stringify({ refresh_token: current.refreshToken })
+				});
 
-			if (!response.ok) {
-				clearAuthState();
-				const payload = await response.text();
-				throw new Error(payload || `HTTP ${response.status}`);
+				if (!response.ok) {
+					clearAuthState();
+					const payload = await response.text();
+					throw new Error(payload || `HTTP ${response.status}`);
+				}
+
+				const payload = await response.json();
+				const tokenData = payload?.data || payload || {};
+				const claims = decodeJwtPayload(tokenData.access_token) || {};
+				const nextState = setAuthState(
+					{
+						accessToken: tokenData.access_token,
+						refreshToken: tokenData.refresh_token,
+						expiresAt: Date.now() + (Number(tokenData.expires_in) || 0) * 1000,
+						workspaceId: current.workspaceId || claims.workspace_id || "",
+						userId: current.userId || claims.sub || "",
+						user: current.user,
+						persist: current.persist
+					},
+					{ persist: current.persist }
+				);
+
+				if (!nextState) {
+					throw new Error("Unable to persist refreshed auth state");
+				}
+
+				return nextState.accessToken;
+			} finally {
+				endNetworkRequest();
 			}
-
-			const payload = await response.json();
-			const tokenData = payload?.data || payload || {};
-			const claims = decodeJwtPayload(tokenData.access_token) || {};
-			const nextState = setAuthState(
-				{
-					accessToken: tokenData.access_token,
-					refreshToken: tokenData.refresh_token,
-					expiresAt: Date.now() + (Number(tokenData.expires_in) || 0) * 1000,
-					workspaceId: current.workspaceId || claims.workspace_id || "",
-					userId: current.userId || claims.sub || "",
-					user: current.user,
-					persist: current.persist
-				},
-				{ persist: current.persist }
-			);
-
-			if (!nextState) {
-				throw new Error("Unable to persist refreshed auth state");
-			}
-
-			return nextState.accessToken;
 		})();
 	}
 
@@ -398,6 +449,7 @@ async function refreshAccessToken() {
 }
 
 async function requestRaw(path, options = {}, accessToken) {
+	beginNetworkRequest();
 	const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
 	const controller = timeoutMs > 0 ? new AbortController() : null;
 	const timeoutHandle =
@@ -416,39 +468,43 @@ async function requestRaw(path, options = {}, accessToken) {
 		headers.Authorization = `Bearer ${accessToken}`;
 	}
 
-	let response;
 	try {
-		response = await fetch(`${API_BASE}${path}`, {
-			method: options.method || "GET",
-			headers,
-			...(options.body ? { body: options.body } : {}),
-			...(controller ? { signal: controller.signal } : {})
-		});
-	} finally {
-		if (timeoutHandle) {
-			clearTimeout(timeoutHandle);
+		let response;
+		try {
+			response = await fetch(`${API_BASE}${path}`, {
+				method: options.method || "GET",
+				headers,
+				...(options.body ? { body: options.body } : {}),
+				...(controller ? { signal: controller.signal } : {})
+			});
+		} finally {
+			if (timeoutHandle) {
+				clearTimeout(timeoutHandle);
+			}
 		}
-	}
 
-	let payload = null;
-	const contentType = response.headers.get("content-type") || "";
-	if (contentType.includes("application/json")) {
-		payload = await response.json();
-	} else {
-		const text = await response.text();
-		payload = text ? { message: text } : null;
-	}
+		let payload = null;
+		const contentType = response.headers.get("content-type") || "";
+		if (contentType.includes("application/json")) {
+			payload = await response.json();
+		} else {
+			const text = await response.text();
+			payload = text ? { message: text } : null;
+		}
 
-	if (!response.ok) {
-		const errorBody = payload?.error || payload?.detail || payload || {};
-		const error = new Error(errorBody.message || payload?.message || `HTTP ${response.status}`);
-		error.status = response.status;
-		error.code = errorBody.code || errorBody.error_code || "REQUEST_FAILED";
-		error.details = errorBody.details || null;
-		throw error;
-	}
+		if (!response.ok) {
+			const errorBody = payload?.error || payload?.detail || payload || {};
+			const error = new Error(errorBody.message || payload?.message || `HTTP ${response.status}`);
+			error.status = response.status;
+			error.code = errorBody.code || errorBody.error_code || "REQUEST_FAILED";
+			error.details = errorBody.details || null;
+			throw error;
+		}
 
-	return payload;
+		return payload;
+	} finally {
+		endNetworkRequest();
+	}
 }
 
 export async function apiRequest(path, options = {}) {

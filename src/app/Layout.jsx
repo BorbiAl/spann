@@ -17,7 +17,8 @@ import {
 	getAuthState,
 	incrementReaction,
 	loadFromStorage,
-	normalizeApiError
+	normalizeApiError,
+	pushAppNotice
 } from "../data/constants";
 
 function withHash(channelName) {
@@ -537,7 +538,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 
 	async function refreshPulseData(channelRows) {
 		if (!Array.isArray(channelRows) || channelRows.length === 0) {
-			return;
+			return false;
 		}
 
 		setPulseLoading(true);
@@ -569,8 +570,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				moodMap[snapshot.id] = snapshot.energy;
 			});
 			setChannelMoodById((current) => ({ ...current, ...moodMap }));
+			return true;
 		} catch (error) {
 			setPulseError("Pulse snapshots are currently unavailable.");
+			return false;
 		} finally {
 			setPulseLoading(false);
 		}
@@ -602,9 +605,11 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		try {
 			const payload = await apiRequest("/mesh/nodes");
 			setMeshNodes(Array.isArray(payload?.data) ? payload.data : []);
+			return true;
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Unable to load mesh nodes");
 			setMeshError(normalized.message);
+			return false;
 		} finally {
 			setMeshBusy(false);
 		}
@@ -738,6 +743,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			return;
 		}
 
+		let usedLocalFallback = false;
+
 		if (backendConnected) {
 			try {
 				const payload = await apiRequest("/messages", {
@@ -755,12 +762,15 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						...current,
 						[channelId]: [...(current[channelId] || []), toUiMessage(apiMessage)]
 					}));
+					pushAppNotice("Message sent.", "success");
 				}
 				return;
 			} catch (error) {
 				const normalized = normalizeApiError(error, "Unable to send message");
+				usedLocalFallback = true;
 				if (normalized.status === 401 && onSessionExpired) {
 					onSessionExpired();
+					return;
 				}
 			}
 		}
@@ -783,12 +793,15 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			...current,
 			[channelId]: [...(current[channelId] || []), draft]
 		}));
+		pushAppNotice(usedLocalFallback ? "Message saved locally." : "Message sent.", usedLocalFallback ? "info" : "success");
 	}
 
 	async function handleReactMessage(channelId, messageId, emoji) {
 		if (!channelId || !messageId || !emoji) {
 			return;
 		}
+
+		let usedLocalFallback = false;
 
 		if (backendConnected) {
 			try {
@@ -810,11 +823,14 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						};
 					})
 				}));
+				pushAppNotice("Reaction added.", "success");
 				return;
 			} catch (error) {
 				const normalized = normalizeApiError(error, "Unable to update reaction");
+				usedLocalFallback = true;
 				if (normalized.status === 401 && onSessionExpired) {
 					onSessionExpired();
+					return;
 				}
 			}
 		}
@@ -831,6 +847,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				};
 			})
 		}));
+		pushAppNotice(usedLocalFallback ? "Reaction saved locally." : "Reaction added.", usedLocalFallback ? "info" : "success");
 	}
 
 	async function handleLogCarbon(action) {
@@ -850,9 +867,11 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				})
 			});
 			await refreshCarbonLeaderboard();
+			pushAppNotice(action?.note || "Carbon log saved.", "success");
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Unable to save carbon log");
 			setCarbonError(normalized.message);
+			pushAppNotice(normalized.message || "Unable to save carbon log.", "error");
 		} finally {
 			setCarbonSaving(false);
 		}
@@ -868,9 +887,11 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				body: JSON.stringify({ node_name: `web-${suffix}` })
 			});
 			await refreshMeshNodes();
+			pushAppNotice("Mesh node registered.", "success");
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Unable to register mesh node");
 			setMeshError(normalized.message);
+			pushAppNotice(normalized.message || "Unable to register mesh node.", "error");
 		} finally {
 			setMeshBusy(false);
 		}
@@ -887,9 +908,11 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				method: "POST"
 			});
 			await refreshMeshNodes();
+			pushAppNotice("Mesh node revoked.", "success");
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Unable to revoke mesh node");
 			setMeshError(normalized.message);
+			pushAppNotice(normalized.message || "Unable to revoke mesh node.", "error");
 		} finally {
 			setMeshBusy(false);
 		}
@@ -903,7 +926,19 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	function handleToggleMic() {
-		handleAccessibilityPreferenceChange("micJoined", !micActive);
+		const next = !micActive;
+		handleAccessibilityPreferenceChange("micJoined", next);
+		pushAppNotice(next ? "Microphone joined." : "Microphone muted.", "info");
+	}
+
+	async function handleRefreshPulseAction() {
+		const success = await refreshPulseData(channels);
+		pushAppNotice(success ? "Pulse refreshed." : "Pulse refresh unavailable.", success ? "success" : "error");
+	}
+
+	async function handleRefreshMeshAction() {
+		const success = await refreshMeshNodes();
+		pushAppNotice(success ? "Nodes refreshed." : "Unable to refresh nodes.", success ? "success" : "error");
 	}
 
 	return (
@@ -938,7 +973,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				setShowNudge={setShowNudge}
 				onLogout={onLogout}
 				pulseChannels={pulseChannels}
-				onRefreshPulse={() => refreshPulseData(channels)}
+				onRefreshPulse={handleRefreshPulseAction}
 				pulseLoading={pulseLoading}
 				pulseError={pulseError}
 				micActive={micActive}
@@ -949,7 +984,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				carbonError={carbonError}
 				currentUserId={currentUserId}
 				meshNodes={meshNodes}
-				onRefreshMesh={refreshMeshNodes}
+				onRefreshMesh={handleRefreshMeshAction}
 				onRegisterMesh={handleRegisterMeshNode}
 				onRevokeMesh={handleRevokeMeshNode}
 				meshBusy={meshBusy}

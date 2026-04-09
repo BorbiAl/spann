@@ -1,19 +1,14 @@
 import React, { useState } from "react";
 import { CULTURES, apiRequest } from "../data/constants";
 
-const CULTURE_TO_LOCALE = {
-	American: "en-US",
-	British: "en-GB",
-	Bulgarian: "bg-BG",
-	Japanese: "ja-JP",
-	German: "de-DE",
-	Brazilian: "pt-BR",
-	Arabic: "ar-SA"
-};
+const CULTURE_BY_KEY = CULTURES.reduce((accumulator, culture) => {
+	accumulator[culture.key] = culture;
+	return accumulator;
+}, {});
 
 export default function TranslatorView() {
-	const [sourceCulture, setSourceCulture] = useState("🇺🇸 American");
-	const [targetCulture, setTargetCulture] = useState("🇧🇬 Bulgarian");
+	const [sourceCulture, setSourceCulture] = useState("American");
+	const [targetCulture, setTargetCulture] = useState("Bulgarian");
 	const [inputText, setInputText] = useState("Break a leg!");
 	const [isTranslating, setIsTranslating] = useState(false);
 	const [result, setResult] = useState({
@@ -21,10 +16,6 @@ export default function TranslatorView() {
 		cultural: "Много успех!",
 		note: "Bulgarians prefer direct well-wishing over idioms"
 	});
-
-	function cultureLabel(value) {
-		return String(value || "").replace(/^[^A-Za-z]+\s*/, "").trim();
-	}
 
 	async function translate() {
 		const trimmed = inputText.trim();
@@ -34,18 +25,18 @@ export default function TranslatorView() {
 		}
 
 		setIsTranslating(true);
-		const sourceLabel = cultureLabel(sourceCulture);
-		const targetLabel = cultureLabel(targetCulture);
+		const sourceOption = CULTURE_BY_KEY[sourceCulture];
+		const targetOption = CULTURE_BY_KEY[targetCulture];
 
 		try {
 			const payload = await apiRequest("/translate", {
 				method: "POST",
 				body: JSON.stringify({
 					phrase: trimmed,
-					source_locale: CULTURE_TO_LOCALE[sourceLabel] || "en-US",
-					target_locale: CULTURE_TO_LOCALE[targetLabel] || "en-US",
-					source_culture: sourceLabel || sourceCulture,
-					target_culture: targetLabel || targetCulture,
+					source_locale: sourceOption?.locale || "en-US",
+					target_locale: targetOption?.locale || "en-US",
+					source_culture: sourceCulture,
+					target_culture: targetCulture,
 					workplace_tone: "neutral"
 				})
 			});
@@ -58,14 +49,14 @@ export default function TranslatorView() {
 					note:
 						apiResult.explanation ||
 						apiResult.note ||
-						`Adjusted for ${targetLabel || targetCulture} communication norms and tone.`
+						`Adjusted for ${targetOption?.label || targetCulture} communication norms and tone.`
 				});
 				return;
 			}
 
 			throw new Error("Missing translation result");
 		} catch (error) {
-			if (trimmed.toLowerCase() === "break a leg!" && sourceLabel === "American" && targetLabel === "Bulgarian") {
+			if (trimmed.toLowerCase() === "break a leg!" && sourceCulture === "American" && targetCulture === "Bulgarian") {
 				setResult({
 					literal: "Счупи крак!",
 					cultural: "Много успех!",
@@ -84,9 +75,9 @@ export default function TranslatorView() {
 				American: "You got this!"
 			};
 
-			const resolvedTargetLabel = targetLabel || targetCulture;
+			const resolvedTargetLabel = targetOption?.label || targetCulture;
 			const literal = `${trimmed} (${resolvedTargetLabel} literal)`;
-			const cultural = adaptationMap[resolvedTargetLabel] || trimmed;
+			const cultural = adaptationMap[targetCulture] || trimmed;
 			const note = `Adjusted for ${resolvedTargetLabel} communication norms and tone.`;
 
 			setResult({ literal, cultural, note });
@@ -105,8 +96,8 @@ export default function TranslatorView() {
 					<div className="select-wrap">
 						<select value={sourceCulture} onChange={(event) => setSourceCulture(event.target.value)}>
 							{CULTURES.map((culture) => (
-								<option key={culture} value={culture}>
-									{culture}
+								<option key={culture.key} value={culture.key}>
+									{culture.label}
 								</option>
 							))}
 						</select>
@@ -114,8 +105,8 @@ export default function TranslatorView() {
 					<div className="select-wrap">
 						<select value={targetCulture} onChange={(event) => setTargetCulture(event.target.value)}>
 							{CULTURES.map((culture) => (
-								<option key={culture} value={culture}>
-									{culture}
+								<option key={culture.key} value={culture.key}>
+									{culture.label}
 								</option>
 							))}
 						</select>
