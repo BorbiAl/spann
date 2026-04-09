@@ -2560,6 +2560,17 @@
         padding: 10px;
       }
 
+      .header-actions {
+        gap: 6px;
+      }
+
+      .header-btn,
+      .theme-toggle {
+        min-width: 40px;
+        width: 40px;
+        height: 40px;
+      }
+
       .view-scroll {
         padding-bottom: 100px;
       }
@@ -2574,6 +2585,34 @@
 
       .toolbar-row {
         align-items: stretch;
+      }
+
+      .segment {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .ring-layout {
+        justify-content: center;
+      }
+
+      .ring-copy {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .app-notice {
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        max-width: calc(100vw - 20px);
+        border-radius: 12px;
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .app-busy-indicator {
+        max-width: calc(100vw - 24px);
+        padding: 0 10px;
+        font-size: 11px;
       }
 
       .translator-controls {
@@ -2595,5 +2634,85 @@
       .log-btn,
       .mic-btn {
         min-height: 48px;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .entry-surface,
+      .auth-card {
+        padding: 14px;
+      }
+
+      .entry-title {
+        font-size: clamp(22px, 8.8vw, 30px);
+      }
+
+      .entry-subtitle {
+        font-size: 14px;
+      }
+
+      .main-content {
+        padding: 8px;
+      }
+
+      .view-header {
+        padding: 8px 10px;
+      }
+
+      .card {
+        padding: 12px;
+      }
+
+      .composer-shell {
+        min-height: 48px;
+        padding: 6px 8px 6px 10px;
+      }
+
+      .translator-input {
+        min-height: 120px;
+      }
+
+      .wave-holder {
+        padding: 10px;
+      }
+
+      .mesh-map {
+        height: 200px;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .main-panel {
+        padding: 6px;
+      }
+
+      .header-btn,
+      .theme-toggle {
+        min-width: 36px;
+        width: 36px;
+        height: 36px;
+      }
+
+      .card {
+        padding: 10px;
+      }
+
+      .bottom-tab-bar {
+        left: 6px;
+        right: 6px;
+        min-height: 62px;
+        padding: 6px;
+      }
+
+      .tab-btn {
+        min-height: 46px;
+      }
+
+      .tab-btn span {
+        font-size: 9px;
+      }
+
+      .app-notice {
+        font-size: 10px;
       }
     }
