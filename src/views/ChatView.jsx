@@ -7,6 +7,7 @@ import { CHANNELS } from "../data/constants";
 
 export default function ChatView({
 	activeChannel,
+	channelMood,
 	messages,
 	onSendMessage,
 	onReactMessage,
@@ -17,7 +18,7 @@ export default function ChatView({
 }) {
 	const [inputValue, setInputValue] = useState("");
 
-	const sentimentScore = CHANNELS.find((channel) => channel.name === activeChannel)?.mood ?? 65;
+	const sentimentScore = Number(channelMood || CHANNELS.find((channel) => channel.name === activeChannel)?.mood || 65);
 	const sentimentTone = sentimentScore > 70 ? "green" : sentimentScore > 45 ? "orange" : "red";
 	const sentimentLabel =
 		sentimentScore > 70 ? "Calm Momentum" : sentimentScore > 45 ? "Focused Tension" : "Escalation Risk";

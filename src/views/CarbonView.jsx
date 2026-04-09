@@ -1,23 +1,26 @@
 import React, { useState } from "react";
 import Badge from "../components/Badge";
 import ProgressRing from "../components/ProgressRing";
-import { LEADERBOARD } from "../data/constants";
 
-export default function CarbonView() {
-	const [score, setScore] = useState(72);
+export default function CarbonView({ leaderboard, currentUserId, onLogAction, isSubmitting, errorText }) {
 	const [todayLog, setTodayLog] = useState(["08:15 — Remote standup logged", "09:05 — Bike commute captured"]);
 
 	const badgeItems = ["🌿 Zero Emission Commute", "🏅 Green Week Streak", "🔋 Battery Saver", "🛰 Mesh Optimizer"];
 
 	const actions = [
-		{ emoji: "🚗", label: "Car", delta: -5, note: "Car trip logged" },
-		{ emoji: "🚌", label: "Bus", delta: 1, note: "Bus commute logged" },
-		{ emoji: "🚲", label: "Bike", delta: 4, note: "Bike route logged" },
-		{ emoji: "🏠", label: "Remote", delta: 5, note: "Remote work session logged" }
+		{ emoji: "🚗", label: "Car", transportType: "car", kgCo2: 3.8, note: "Car trip logged" },
+		{ emoji: "🚌", label: "Bus", transportType: "bus", kgCo2: 1.5, note: "Bus commute logged" },
+		{ emoji: "🚲", label: "Bike", transportType: "bike", kgCo2: 0.0, note: "Bike route logged" },
+		{ emoji: "🏠", label: "Remote", transportType: "remote", kgCo2: 0.0, note: "Remote work session logged" }
 	];
 
-	function logAction(action) {
-		setScore((current) => Math.max(0, Math.min(100, current + action.delta)));
+	const orderedLeaderboard = Array.isArray(leaderboard) ? leaderboard : [];
+	const selfEntry = orderedLeaderboard.find((entry) => String(entry.user_id) === String(currentUserId));
+	const totalScore = Number(selfEntry?.total_score || 0);
+	const score = Math.max(0, Math.min(100, 50 + totalScore));
+
+	async function logAction(action) {
+		await onLogAction(action);
 		const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 		setTodayLog((current) => [`${stamp} — ${action.note}`, ...current].slice(0, 5));
 	}
@@ -56,21 +59,27 @@ export default function CarbonView() {
 
 			<section className="card">
 				<p className="title">Leaderboard</p>
+				{errorText ? (
+					<p className="caption" style={{ color: "var(--red)", marginBottom: 10 }}>
+						{errorText}
+					</p>
+				) : null}
 				<div className="leaderboard">
-					{LEADERBOARD.map((entry) => (
-						<div key={entry.rank} className="leader-row">
-							<span className="rank">{entry.rank}</span>
+					{orderedLeaderboard.map((entry, index) => (
+						<div key={entry.user_id || index} className="leader-row">
+							<span className="rank">{index + 1}</span>
 							<div className="avatar" style={{ width: 32, height: 32, minWidth: 32, background: entry.color }}>
-								{entry.name
+								{String(entry.display_name || "Member")
 									.split(" ")
 									.map((part) => part[0])
 									.join("")}
 							</div>
-							<p className="leader-name">{entry.name}</p>
-							<p className="leader-score">{entry.score}</p>
-							<span style={{ color: entry.color, fontWeight: 700 }}>{entry.trend}</span>
+							<p className="leader-name">{entry.display_name || "Team Member"}</p>
+							<p className="leader-score">{Number(entry.total_kg_co2 || 0).toFixed(2)} kg CO2</p>
+							<span style={{ color: "var(--green)", fontWeight: 700 }}>{entry.total_score || 0}</span>
 						</div>
 					))}
+					{orderedLeaderboard.length === 0 ? <p className="caption">No carbon entries yet.</p> : null}
 				</div>
 			</section>
 
@@ -78,9 +87,14 @@ export default function CarbonView() {
 				<p className="title">Quick Log</p>
 				<div className="quick-log-grid">
 					{actions.map((action) => (
-						<button key={action.label} className="log-btn" onClick={() => logAction(action)}>
+						<button
+							key={action.label}
+							className="log-btn"
+							onClick={() => logAction(action)}
+							disabled={isSubmitting}
+						>
 							<span style={{ fontSize: 24 }}>{action.emoji}</span>
-							<span>{action.label}</span>
+							<span>{isSubmitting ? "Saving..." : action.label}</span>
 						</button>
 					))}
 				</div>

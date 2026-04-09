@@ -237,20 +237,308 @@ const fallbackApiBase = isFileProtocol ? nativeDefaultApiBase : "/api";
 // Prefer runtime override, then Vite env, then protocol-aware fallback.
 export const API_BASE = String(runtimeApiBase || envApiBase || fallbackApiBase).replace(/\/+$/, "");
 
-export async function apiRequest(path, options = {}) {
-	const response = await fetch(`${API_BASE}${path}`, {
-		method: options.method || "GET",
-		headers: {
-			"Content-Type": "application/json",
-			...(options.headers || {})
-		},
-		...(options.body ? { body: options.body } : {})
-	});
+const AUTH_STATE_STORAGE_KEY = "spann-auth-state";
+const AUTH_STATE_SESSION_KEY = "spann-auth-state-session";
 
-	if (!response.ok) {
-		const text = await response.text();
-		throw new Error(text || `HTTP ${response.status}`);
+function readJson(raw) {
+	if (!raw) {
+		return null;
 	}
 
-	return response.json();
+	try {
+		return JSON.parse(raw);
+	} catch (error) {
+		return null;
+	}
+}
+
+function decodeJwtPayload(token) {
+	const parts = String(token || "").split(".");
+	if (parts.length < 2) {
+		return null;
+	}
+
+	try {
+		const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+		const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+		const decoded = atob(padded);
+		return JSON.parse(decoded);
+	} catch (error) {
+		return null;
+	}
+}
+
+function normalizeAuthState(authState) {
+	if (!authState || typeof authState !== "object") {
+		return null;
+	}
+
+	const accessToken = String(authState.accessToken || authState.access_token || "").trim();
+	const refreshToken = String(authState.refreshToken || authState.refresh_token || "").trim();
+	if (!accessToken || !refreshToken) {
+		return null;
+	}
+
+	const claims = decodeJwtPayload(accessToken) || {};
+	const expiresAt = Number(authState.expiresAt) || (Number(claims.exp) ? Number(claims.exp) * 1000 : null);
+	const workspaceId = String(authState.workspaceId || claims.workspace_id || "").trim();
+	const userId = String(authState.userId || authState.user?.id || claims.sub || "").trim();
+
+	return {
+		accessToken,
+		refreshToken,
+		expiresAt: expiresAt || null,
+		workspaceId: workspaceId || "",
+		userId: userId || "",
+		user: authState.user && typeof authState.user === "object" ? authState.user : {},
+		persist: Boolean(authState.persist)
+	};
+}
+
+export function getAuthState() {
+	const persistent = readJson(localStorage.getItem(AUTH_STATE_STORAGE_KEY));
+	const session = readJson(sessionStorage.getItem(AUTH_STATE_SESSION_KEY));
+	return normalizeAuthState(persistent) || normalizeAuthState(session);
+}
+
+export function setAuthState(authState, options = {}) {
+	const normalized = normalizeAuthState({ ...authState, persist: options.persist ?? authState.persist });
+	if (!normalized) {
+		clearAuthState();
+		return null;
+	}
+
+	const persist = Boolean(options.persist ?? normalized.persist);
+	const payload = JSON.stringify({ ...normalized, persist });
+	if (persist) {
+		localStorage.setItem(AUTH_STATE_STORAGE_KEY, payload);
+		sessionStorage.removeItem(AUTH_STATE_SESSION_KEY);
+	} else {
+		sessionStorage.setItem(AUTH_STATE_SESSION_KEY, payload);
+		localStorage.removeItem(AUTH_STATE_STORAGE_KEY);
+	}
+
+	return { ...normalized, persist };
+}
+
+export function clearAuthState() {
+	localStorage.removeItem(AUTH_STATE_STORAGE_KEY);
+	sessionStorage.removeItem(AUTH_STATE_SESSION_KEY);
+}
+
+export function normalizeApiError(error, fallbackMessage = "Request failed") {
+	if (!error) {
+		return { code: "UNKNOWN_ERROR", message: fallbackMessage, status: 0, details: null };
+	}
+
+	if (typeof error === "object") {
+		const message = String(error.message || error.error?.message || fallbackMessage);
+		const code = String(error.code || error.error?.code || "REQUEST_FAILED");
+		const status = Number(error.status || 0);
+		const details = error.details || error.error?.details || null;
+		return { message, code, status, details };
+	}
+
+	return { code: "REQUEST_FAILED", message: String(error), status: 0, details: null };
+}
+
+let refreshInFlight = null;
+
+async function refreshAccessToken() {
+	const current = getAuthState();
+	if (!current?.refreshToken) {
+		throw new Error("No refresh token available");
+	}
+
+	if (!refreshInFlight) {
+		refreshInFlight = (async () => {
+			const response = await fetch(`${API_BASE}/auth/refresh`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify({ refresh_token: current.refreshToken })
+			});
+
+			if (!response.ok) {
+				clearAuthState();
+				const payload = await response.text();
+				throw new Error(payload || `HTTP ${response.status}`);
+			}
+
+			const payload = await response.json();
+			const tokenData = payload?.data || payload || {};
+			const claims = decodeJwtPayload(tokenData.access_token) || {};
+			const nextState = setAuthState(
+				{
+					accessToken: tokenData.access_token,
+					refreshToken: tokenData.refresh_token,
+					expiresAt: Date.now() + (Number(tokenData.expires_in) || 0) * 1000,
+					workspaceId: current.workspaceId || claims.workspace_id || "",
+					userId: current.userId || claims.sub || "",
+					user: current.user,
+					persist: current.persist
+				},
+				{ persist: current.persist }
+			);
+
+			if (!nextState) {
+				throw new Error("Unable to persist refreshed auth state");
+			}
+
+			return nextState.accessToken;
+		})();
+	}
+
+	try {
+		return await refreshInFlight;
+	} finally {
+		refreshInFlight = null;
+	}
+}
+
+async function requestRaw(path, options = {}, accessToken) {
+	const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
+	const controller = timeoutMs > 0 ? new AbortController() : null;
+	const timeoutHandle =
+		controller !== null
+			? setTimeout(() => {
+				controller.abort();
+			}, timeoutMs)
+			: null;
+
+	const headers = {
+		"Content-Type": "application/json",
+		...(options.headers || {})
+	};
+
+	if (options.auth !== false && accessToken) {
+		headers.Authorization = `Bearer ${accessToken}`;
+	}
+
+	let response;
+	try {
+		response = await fetch(`${API_BASE}${path}`, {
+			method: options.method || "GET",
+			headers,
+			...(options.body ? { body: options.body } : {}),
+			...(controller ? { signal: controller.signal } : {})
+		});
+	} finally {
+		if (timeoutHandle) {
+			clearTimeout(timeoutHandle);
+		}
+	}
+
+	let payload = null;
+	const contentType = response.headers.get("content-type") || "";
+	if (contentType.includes("application/json")) {
+		payload = await response.json();
+	} else {
+		const text = await response.text();
+		payload = text ? { message: text } : null;
+	}
+
+	if (!response.ok) {
+		const errorBody = payload?.error || payload?.detail || payload || {};
+		const error = new Error(errorBody.message || payload?.message || `HTTP ${response.status}`);
+		error.status = response.status;
+		error.code = errorBody.code || errorBody.error_code || "REQUEST_FAILED";
+		error.details = errorBody.details || null;
+		throw error;
+	}
+
+	return payload;
+}
+
+export async function apiRequest(path, options = {}) {
+	const authState = getAuthState();
+	const token = options.accessToken || authState?.accessToken;
+
+	try {
+		return await requestRaw(path, options, token);
+	} catch (error) {
+		if (options.auth === false || options.skipRefresh) {
+			throw error;
+		}
+
+		if (Number(error.status) !== 401 || !authState?.refreshToken || path === "/auth/refresh") {
+			throw error;
+		}
+
+		const nextToken = await refreshAccessToken();
+		return requestRaw(path, { ...options, skipRefresh: true }, nextToken);
+	}
+}
+
+export async function loginWithPassword({ email, password, deviceHint, persistSession = true }) {
+	const payload = await apiRequest("/auth/login", {
+		method: "POST",
+		auth: false,
+		body: JSON.stringify({ email, password, device_hint: deviceHint || null })
+	});
+
+	const data = payload?.data || payload || {};
+	const claims = decodeJwtPayload(data.access_token) || {};
+	const authState = setAuthState(
+		{
+			accessToken: data.access_token,
+			refreshToken: data.refresh_token,
+			expiresAt: Date.now() + (Number(data.expires_in) || 0) * 1000,
+			workspaceId: claims.workspace_id || "",
+			userId: claims.sub || data.user?.id || "",
+			user: data.user || {},
+			persist: Boolean(persistSession)
+		},
+		{ persist: Boolean(persistSession) }
+	);
+
+	return {
+		authState,
+		payload
+	};
+}
+
+export async function registerWithPassword({ email, password, name, deviceHint, persistSession = true }) {
+	const payload = await apiRequest("/auth/register", {
+		method: "POST",
+		auth: false,
+		body: JSON.stringify({ email, password, name, device_hint: deviceHint || null })
+	});
+
+	const data = payload?.data || payload || {};
+	const claims = decodeJwtPayload(data.access_token) || {};
+	const authState = setAuthState(
+		{
+			accessToken: data.access_token,
+			refreshToken: data.refresh_token,
+			expiresAt: Date.now() + (Number(data.expires_in) || 0) * 1000,
+			workspaceId: data.workspace_id || claims.workspace_id || "",
+			userId: claims.sub || data.user?.id || "",
+			user: data.user || { display_name: name, email },
+			persist: Boolean(persistSession)
+		},
+		{ persist: Boolean(persistSession) }
+	);
+
+	return {
+		authState,
+		payload
+	};
+}
+
+export async function logoutSession() {
+	const authState = getAuthState();
+	try {
+		if (authState?.refreshToken) {
+			await apiRequest("/auth/logout", {
+				method: "POST",
+				body: JSON.stringify({ refresh_token: authState.refreshToken })
+			});
+		}
+	} catch (error) {
+		// Best-effort server revocation; local cleanup must still happen.
+	} finally {
+		clearAuthState();
+	}
 }

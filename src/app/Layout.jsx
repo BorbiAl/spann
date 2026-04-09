@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ChannelList from "../components/ChannelList";
 import Icon from "../components/Icon";
 import ChatView from "../views/ChatView";
@@ -12,13 +12,90 @@ import {
 	CHANNELS,
 	DEFAULT_MESSAGES_BY_CHANNEL,
 	DEFAULT_UNREAD_BY_CHANNEL,
-	INCOMING_AUTHORS,
-	INCOMING_MESSAGE_BANK,
 	NAV_ITEMS,
 	apiRequest,
+	getAuthState,
 	incrementReaction,
-	loadFromStorage
+	loadFromStorage,
+	normalizeApiError
 } from "../data/constants";
+
+function withHash(channelName) {
+	const value = String(channelName || "").trim();
+	if (!value) {
+		return "#channel";
+	}
+	return value.startsWith("#") ? value : `#${value}`;
+}
+
+function toFallbackChannels() {
+	return CHANNELS.map((channel) => ({
+		id: channel.name,
+		name: withHash(channel.name),
+		mood: channel.mood
+	}));
+}
+
+function toFallbackMessages() {
+	const mapped = {};
+	Object.keys(DEFAULT_MESSAGES_BY_CHANNEL).forEach((channelName) => {
+		mapped[channelName] = DEFAULT_MESSAGES_BY_CHANNEL[channelName].map((message) => ({ ...message }));
+	});
+	return mapped;
+}
+
+function toFallbackUnread() {
+	const unread = {};
+	Object.keys(DEFAULT_UNREAD_BY_CHANNEL).forEach((channelName) => {
+		unread[channelName] = Number(DEFAULT_UNREAD_BY_CHANNEL[channelName] || 0);
+	});
+	return unread;
+}
+
+function toFallbackMoodByChannel() {
+	const moodMap = {};
+	CHANNELS.forEach((channel) => {
+		moodMap[channel.name] = Number(channel.mood || 65);
+	});
+	return moodMap;
+}
+
+function normalizePulseScore(scoreValue) {
+	const raw = Number(scoreValue || 0);
+	if (!Number.isFinite(raw)) {
+		return 60;
+	}
+	if (raw <= 1) {
+		return Math.max(0, Math.min(100, Math.round(raw * 100)));
+	}
+	return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+function formatMessageTime(timestamp) {
+	const date = timestamp ? new Date(timestamp) : new Date();
+	if (Number.isNaN(date.getTime())) {
+		return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+	}
+	return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function toUiMessage(apiMessage) {
+	const reactions = Array.isArray(apiMessage?.reactions)
+		? apiMessage.reactions.map((reaction) => `${reaction.emoji || ""} ${Number(reaction.count) || 0}`.trim())
+		: [];
+
+	return {
+		id: String(apiMessage?.id || Date.now()),
+		user: String(apiMessage?.user?.name || "Member"),
+		initials: String(apiMessage?.user?.initials || "US"),
+		color: String(apiMessage?.user?.color || "#0A84FF"),
+		time: formatMessageTime(apiMessage?.created_at),
+		text: String(apiMessage?.text_translated || apiMessage?.text || ""),
+		reactions,
+		translated: Boolean(apiMessage?.text_translated),
+		lang: apiMessage?.source_locale ? `🌐 ${apiMessage.source_locale}` : undefined
+	};
+}
 
 function SideSection({ activeView }) {
 	const sectionMap = {
@@ -99,7 +176,7 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannel, onChannelChange, channelUnread }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread }) {
 	return (
 		<aside className="sidebar">
 			<div className="workspace-head">
@@ -108,7 +185,12 @@ function Sidebar({ activeView, activeChannel, onChannelChange, channelUnread }) 
 			</div>
 
 			{activeView === "chat" ? (
-				<ChannelList activeChannel={activeChannel} onChannelChange={onChannelChange} channelUnread={channelUnread} />
+				<ChannelList
+					channels={channels}
+					activeChannelId={activeChannelId}
+					onChannelChange={onChannelChange}
+					channelUnread={channelUnread}
+				/>
 			) : (
 				<SideSection activeView={activeView} />
 			)}
@@ -175,6 +257,7 @@ function BottomTabBar({ activeView, onChange, items }) {
 function MainPanel({
 	activeView,
 	activeChannel,
+	channelMood,
 	contextOpen,
 	setContextOpen,
 	openMobileSheet,
@@ -184,7 +267,28 @@ function MainPanel({
 	translateEnabled,
 	setTranslateEnabled,
 	showNudge,
-	setShowNudge
+	setShowNudge,
+	onLogout,
+	pulseChannels,
+	onRefreshPulse,
+	pulseLoading,
+	pulseError,
+	micActive,
+	onToggleMic,
+	carbonLeaderboard,
+	onLogCarbon,
+	carbonSaving,
+	carbonError,
+	currentUserId,
+	meshNodes,
+	onRefreshMesh,
+	onRegisterMesh,
+	onRevokeMesh,
+	meshBusy,
+	meshError,
+	accessibilityPrefs,
+	onChangeAccessibility,
+	accessibilitySaveState
 }) {
 	const { theme, toggleTheme } = useTheme();
 
@@ -202,6 +306,7 @@ function MainPanel({
 			return (
 				<ChatView
 					activeChannel={activeChannel}
+					channelMood={channelMood}
 					messages={messages}
 					onSendMessage={onSendMessage}
 					onReactMessage={onReactMessage}
@@ -213,16 +318,48 @@ function MainPanel({
 			);
 		}
 		if (activeView === "mesh") {
-			return <MeshView />;
+			return (
+				<MeshView
+					meshNodes={meshNodes}
+					onRefreshNodes={onRefreshMesh}
+					onRegisterNode={onRegisterMesh}
+					onRevokeNode={onRevokeMesh}
+					isBusy={meshBusy}
+					errorText={meshError}
+				/>
+			);
 		}
 		if (activeView === "carbon") {
-			return <CarbonView />;
+			return (
+				<CarbonView
+					leaderboard={carbonLeaderboard}
+					currentUserId={currentUserId}
+					onLogAction={onLogCarbon}
+					isSubmitting={carbonSaving}
+					errorText={carbonError}
+				/>
+			);
 		}
 		if (activeView === "pulse") {
-			return <PulseView />;
+			return (
+				<PulseView
+					channelEnergy={pulseChannels}
+					micActive={micActive}
+					onMicToggle={onToggleMic}
+					onRefreshPulse={onRefreshPulse}
+					isRefreshing={pulseLoading}
+					errorText={pulseError}
+				/>
+			);
 		}
 		if (activeView === "accessibility") {
-			return <AccessibilityView />;
+			return (
+				<AccessibilityView
+					preferences={accessibilityPrefs}
+					onChangePreference={onChangeAccessibility}
+					saveState={accessibilitySaveState}
+				/>
+			);
 		}
 		return <TranslatorView />;
 	}
@@ -242,6 +379,9 @@ function MainPanel({
 						<button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
 							<Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
 							<span>{theme === "dark" ? "Light" : "Dark"}</span>
+						</button>
+						<button className="header-btn" onClick={onLogout} aria-label="Logout">
+							<Icon name="logout" size={18} />
 						</button>
 						<button
 							className="header-btn"
@@ -281,60 +421,56 @@ function MobileSheet({ open, onClose, activeView, activeChannel }) {
 	);
 }
 
-export default function Layout() {
+export default function Layout({ authState, onLogout, onSessionExpired }) {
+	const fallbackChannels = useMemo(() => toFallbackChannels(), []);
 	const [activeView, setActiveView] = useState(() => loadFromStorage("spann-active-view", "chat"));
-	const [activeChannel, setActiveChannel] = useState(() => loadFromStorage("spann-active-channel", "#general"));
+	const [channels, setChannels] = useState(fallbackChannels);
+	const [activeChannelId, setActiveChannelId] = useState(() => loadFromStorage("spann-active-channel", fallbackChannels[0]?.id || ""));
 	const [contextOpen, setContextOpen] = useState(true);
 	const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
-	const [messagesByChannel, setMessagesByChannel] = useState(() =>
-		loadFromStorage("spann-messages-by-channel", DEFAULT_MESSAGES_BY_CHANNEL)
-	);
-	const [channelUnread, setChannelUnread] = useState(() =>
-		loadFromStorage("spann-channel-unread", DEFAULT_UNREAD_BY_CHANNEL)
-	);
+	const [messagesByChannel, setMessagesByChannel] = useState(() => loadFromStorage("spann-messages-by-channel", toFallbackMessages()));
+	const [channelUnread, setChannelUnread] = useState(() => loadFromStorage("spann-channel-unread", toFallbackUnread()));
 	const [translateEnabled, setTranslateEnabled] = useState(() => loadFromStorage("spann-translate-enabled", true));
 	const [showNudge, setShowNudge] = useState(() => loadFromStorage("spann-show-nudge", true));
+	const [channelMoodById, setChannelMoodById] = useState(() => toFallbackMoodByChannel());
+	const [pulseChannels, setPulseChannels] = useState(() =>
+		fallbackChannels.map((channel) => ({ id: channel.id, name: channel.name, energy: Number(channel.mood || 60) }))
+	);
+	const [pulseLoading, setPulseLoading] = useState(false);
+	const [pulseError, setPulseError] = useState("");
+	const [carbonLeaderboard, setCarbonLeaderboard] = useState([]);
+	const [carbonSaving, setCarbonSaving] = useState(false);
+	const [carbonError, setCarbonError] = useState("");
+	const [meshNodes, setMeshNodes] = useState([]);
+	const [meshBusy, setMeshBusy] = useState(false);
+	const [meshError, setMeshError] = useState("");
+	const [accessibilitySaveState, setAccessibilitySaveState] = useState("idle");
+	const [accessibilityPrefs, setAccessibilityPrefs] = useState(() =>
+		loadFromStorage("spann-accessibility-preferences", {
+			dyslexia: false,
+			highContrast: false,
+			simplified: false,
+			tts: false,
+			fontSize: 15,
+			colorBlind: "Normal",
+			micJoined: false
+		})
+	);
 	const [backendConnected, setBackendConnected] = useState(false);
+	const prefsLoadedRef = useRef(false);
 
-	function applyServerState(serverState) {
-		if (!serverState || typeof serverState !== "object") {
-			return;
-		}
+	const liveAuth = authState || getAuthState();
+	const workspaceId = String(liveAuth?.workspaceId || "").trim();
+	const currentUserId = String(liveAuth?.userId || liveAuth?.user?.id || "").trim();
 
-		if (serverState.messagesByChannel && typeof serverState.messagesByChannel === "object") {
-			setMessagesByChannel(serverState.messagesByChannel);
-		}
+	const activeChannel = useMemo(() => {
+		const found = channels.find((channel) => String(channel.id) === String(activeChannelId));
+		return found ? found.name : channels[0]?.name || "#general";
+	}, [channels, activeChannelId]);
 
-		if (serverState.channelUnread && typeof serverState.channelUnread === "object") {
-			setChannelUnread(serverState.channelUnread);
-		}
-	}
-
-	useEffect(() => {
-		let cancelled = false;
-
-		async function bootstrapFromBackend() {
-			try {
-				const payload = await apiRequest("/chat/state");
-				if (cancelled) {
-					return;
-				}
-
-				applyServerState(payload.state);
-				setBackendConnected(true);
-			} catch (error) {
-				if (!cancelled) {
-					setBackendConnected(false);
-				}
-			}
-		}
-
-		bootstrapFromBackend();
-
-		return () => {
-			cancelled = true;
-		};
-	}, []);
+	const activeMood = Number(channelMoodById[activeChannelId] || 65);
+	const currentMessages = messagesByChannel[activeChannelId] || [];
+	const micActive = Boolean(accessibilityPrefs.micJoined);
 
 	const navItems = useMemo(() => {
 		const totalChatUnread = Object.values(channelUnread).reduce((sum, count) => sum + (Number(count) || 0), 0);
@@ -351,8 +487,8 @@ export default function Layout() {
 	}, [activeView]);
 
 	useEffect(() => {
-		localStorage.setItem("spann-active-channel", JSON.stringify(activeChannel));
-	}, [activeChannel]);
+		localStorage.setItem("spann-active-channel", JSON.stringify(activeChannelId));
+	}, [activeChannelId]);
 
 	useEffect(() => {
 		localStorage.setItem("spann-messages-by-channel", JSON.stringify(messagesByChannel));
@@ -371,141 +507,266 @@ export default function Layout() {
 	}, [showNudge]);
 
 	useEffect(() => {
-		if (activeView !== "chat") {
+		localStorage.setItem("spann-accessibility-preferences", JSON.stringify(accessibilityPrefs));
+	}, [accessibilityPrefs]);
+
+	async function loadChannelMessages(channelId) {
+		if (!channelId) {
+			return;
+		}
+
+		try {
+			const payload = await apiRequest(`/channels/${encodeURIComponent(channelId)}/messages?limit=100`);
+			const apiMessages = Array.isArray(payload?.data?.messages) ? payload.data.messages : [];
+			const mappedMessages = apiMessages.map(toUiMessage);
+			setMessagesByChannel((current) => ({
+				...current,
+				[channelId]: mappedMessages
+			}));
+			setChannelUnread((current) => ({
+				...current,
+				[channelId]: 0
+			}));
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to load messages");
+			if (normalized.status === 401 && onSessionExpired) {
+				onSessionExpired();
+			}
+		}
+	}
+
+	async function refreshPulseData(channelRows) {
+		if (!Array.isArray(channelRows) || channelRows.length === 0) {
+			return;
+		}
+
+		setPulseLoading(true);
+		setPulseError("");
+		try {
+			const snapshots = await Promise.all(
+				channelRows.map(async (channel) => {
+					try {
+						const payload = await apiRequest(`/pulse/${encodeURIComponent(channel.id)}`);
+						const snapshot = payload?.data || {};
+						return {
+							id: channel.id,
+							name: channel.name,
+							energy: normalizePulseScore(snapshot.score)
+						};
+					} catch (error) {
+						return {
+							id: channel.id,
+							name: channel.name,
+							energy: Number(channelMoodById[channel.id] || 60)
+						};
+					}
+				})
+			);
+
+			setPulseChannels(snapshots);
+			const moodMap = {};
+			snapshots.forEach((snapshot) => {
+				moodMap[snapshot.id] = snapshot.energy;
+			});
+			setChannelMoodById((current) => ({ ...current, ...moodMap }));
+		} catch (error) {
+			setPulseError("Pulse snapshots are currently unavailable.");
+		} finally {
+			setPulseLoading(false);
+		}
+	}
+
+	async function refreshCarbonLeaderboard() {
+		if (!workspaceId) {
+			return;
+		}
+
+		try {
+			setCarbonError("");
+			const payload = await apiRequest(`/carbon/leaderboard?workspace_id=${encodeURIComponent(workspaceId)}`);
+			const rows = Array.isArray(payload?.data) ? payload.data : [];
+			setCarbonLeaderboard(rows);
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to load carbon leaderboard");
+			if (normalized.status === 401 && onSessionExpired) {
+				onSessionExpired();
+				return;
+			}
+			setCarbonError(normalized.message);
+		}
+	}
+
+	async function refreshMeshNodes() {
+		setMeshBusy(true);
+		setMeshError("");
+		try {
+			const payload = await apiRequest("/mesh/nodes");
+			setMeshNodes(Array.isArray(payload?.data) ? payload.data : []);
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to load mesh nodes");
+			setMeshError(normalized.message);
+		} finally {
+			setMeshBusy(false);
+		}
+	}
+
+	async function loadPreferences() {
+		try {
+			const payload = await apiRequest("/users/me/preferences", {
+				method: "PATCH",
+				body: JSON.stringify({})
+			});
+			const data = payload?.data || {};
+			const loaded = data.accessibility_settings && typeof data.accessibility_settings === "object" ? data.accessibility_settings : {};
+			setAccessibilityPrefs((current) => ({
+				...current,
+				...loaded,
+				fontSize: Number(loaded.fontSize || current.fontSize || 15),
+				colorBlind: loaded.colorBlind || current.colorBlind || "Normal"
+			}));
+			prefsLoadedRef.current = true;
+		} catch (error) {
+			prefsLoadedRef.current = true;
+		}
+	}
+
+	useEffect(() => {
+		if (!workspaceId) {
+			setBackendConnected(false);
+			if (onSessionExpired) {
+				onSessionExpired();
+			}
 			return;
 		}
 
 		let cancelled = false;
 
-		async function clearUnread() {
-			if (!backendConnected) {
-				setChannelUnread((current) => {
-					if (!current[activeChannel]) {
-						return current;
-					}
-					return {
-						...current,
-						[activeChannel]: 0
-					};
-				});
-				return;
-			}
-
+		async function bootstrapFromBackend() {
 			try {
-				const payload = await apiRequest("/chat/unread/clear", {
-					method: "POST",
-					body: JSON.stringify({ channel: activeChannel })
-				});
-
-				if (!cancelled) {
-					applyServerState(payload.state);
+				const payload = await apiRequest(`/channels?workspace_id=${encodeURIComponent(workspaceId)}`);
+				if (cancelled) {
+					return;
 				}
+
+				const fetchedChannels = Array.isArray(payload?.data) ? payload.data : [];
+				const mappedChannels =
+					fetchedChannels.length > 0
+						? fetchedChannels.map((row) => ({
+								id: String(row.id),
+								name: withHash(row.name),
+								mood: 60
+						  }))
+						: fallbackChannels;
+
+				setChannels(mappedChannels);
+				setBackendConnected(true);
+
+				const nextChannelId = mappedChannels.some((channel) => String(channel.id) === String(activeChannelId))
+					? activeChannelId
+					: mappedChannels[0]?.id || "";
+				setActiveChannelId(nextChannelId);
+				await Promise.all([
+					loadChannelMessages(nextChannelId),
+					refreshPulseData(mappedChannels),
+					refreshCarbonLeaderboard(),
+					refreshMeshNodes(),
+					loadPreferences()
+				]);
 			} catch (error) {
-				if (!cancelled) {
-					setBackendConnected(false);
-					setChannelUnread((current) => ({
-						...current,
-						[activeChannel]: 0
-					}));
+				if (cancelled) {
+					return;
+				}
+				const normalized = normalizeApiError(error, "Unable to connect backend");
+				setBackendConnected(false);
+				if (normalized.status === 401 && onSessionExpired) {
+					onSessionExpired();
 				}
 			}
 		}
 
-		clearUnread();
+		bootstrapFromBackend();
 
 		return () => {
 			cancelled = true;
 		};
-	}, [activeView, activeChannel, backendConnected]);
+	}, [workspaceId]);
 
 	useEffect(() => {
-		const timer = setInterval(async () => {
-			if (backendConnected) {
-				try {
-					const payload = await apiRequest("/chat/simulate", {
-						method: "POST",
-						body: JSON.stringify({
-							excludeChannel: activeView === "chat" ? activeChannel : null
-						})
-					});
+		if (activeView !== "chat" || !activeChannelId || !backendConnected) {
+			return;
+		}
+		loadChannelMessages(activeChannelId);
+	}, [activeView, activeChannelId, backendConnected]);
 
-					applyServerState(payload.state);
-					return;
-				} catch (error) {
-					setBackendConnected(false);
-				}
+	useEffect(() => {
+		if (!prefsLoadedRef.current || !backendConnected) {
+			return;
+		}
+
+		const timer = setTimeout(async () => {
+			setAccessibilitySaveState("saving");
+			try {
+				await apiRequest("/users/me/preferences", {
+					method: "PATCH",
+					body: JSON.stringify({
+						coaching_enabled: true,
+						accessibility_settings: accessibilityPrefs
+					})
+				});
+				setAccessibilitySaveState("saved");
+			} catch (error) {
+				setAccessibilitySaveState("error");
 			}
+		}, 450);
 
-			const availableChannels = CHANNELS.map((channel) => channel.name).filter(
-				(channelName) => !(activeView === "chat" && channelName === activeChannel)
-			);
-
-			if (!availableChannels.length) {
-				return;
-			}
-
-			const randomChannel = availableChannels[Math.floor(Math.random() * availableChannels.length)];
-			const channelBank = INCOMING_MESSAGE_BANK[randomChannel] || INCOMING_MESSAGE_BANK["#general"];
-			const randomText = channelBank[Math.floor(Math.random() * channelBank.length)];
-			const randomAuthor = INCOMING_AUTHORS[Math.floor(Math.random() * INCOMING_AUTHORS.length)];
-
-			const now = new Date();
-			const formatted = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-			const incomingMessage = {
-				id: Date.now() + Math.floor(Math.random() * 1000),
-				user: randomAuthor.user,
-				initials: randomAuthor.initials,
-				color: randomAuthor.color,
-				time: formatted,
-				text: randomText,
-				reactions: ["👀 1"],
-				translated: false
-			};
-
-			setMessagesByChannel((current) => ({
-				...current,
-				[randomChannel]: [...(current[randomChannel] || []), incomingMessage]
-			}));
-
-			setChannelUnread((current) => ({
-				...current,
-				[randomChannel]: (current[randomChannel] || 0) + 1
-			}));
-		}, 18000);
-
-		return () => clearInterval(timer);
-	}, [activeView, activeChannel, backendConnected]);
+		return () => clearTimeout(timer);
+	}, [accessibilityPrefs, backendConnected]);
 
 	useEffect(() => {
 		setMobileSheetOpen(false);
 	}, [activeView]);
 
-	function handleChannelChange(channelName) {
-		setActiveChannel(channelName);
+	function handleChannelChange(channelId) {
+		setActiveChannelId(channelId);
 		if (activeView !== "chat") {
 			setActiveView("chat");
 		}
 	}
 
-	async function handleSendMessage(channelName, text, translated) {
+	async function handleSendMessage(channelId, text, translated) {
+		if (!channelId) {
+			return;
+		}
+
 		if (backendConnected) {
 			try {
-				const payload = await apiRequest("/chat/messages", {
+				const payload = await apiRequest("/messages", {
 					method: "POST",
-					body: JSON.stringify({ channel: channelName, text, translated })
+					body: JSON.stringify({
+						channel_id: channelId,
+						text,
+						source_locale: translated ? "en-US" : null
+					})
 				});
 
-				applyServerState(payload.state);
+				const apiMessage = payload?.data;
+				if (apiMessage) {
+					setMessagesByChannel((current) => ({
+						...current,
+						[channelId]: [...(current[channelId] || []), toUiMessage(apiMessage)]
+					}));
+				}
 				return;
 			} catch (error) {
-				setBackendConnected(false);
+				const normalized = normalizeApiError(error, "Unable to send message");
+				if (normalized.status === 401 && onSessionExpired) {
+					onSessionExpired();
+				}
 			}
 		}
 
 		const now = new Date();
 		const formatted = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
 		const draft = {
 			id: Date.now() + Math.floor(Math.random() * 1000),
 			user: "You",
@@ -515,37 +776,55 @@ export default function Layout() {
 			text,
 			reactions: ["✅ 1"],
 			translated,
-			lang: translated ? "🇪🇸" : undefined
+			lang: translated ? "🌐 en-US" : undefined
 		};
 
 		setMessagesByChannel((current) => ({
 			...current,
-			[channelName]: [...(current[channelName] || []), draft]
+			[channelId]: [...(current[channelId] || []), draft]
 		}));
 	}
 
-	async function handleReactMessage(channelName, messageId, emoji) {
+	async function handleReactMessage(channelId, messageId, emoji) {
+		if (!channelId || !messageId || !emoji) {
+			return;
+		}
+
 		if (backendConnected) {
 			try {
-				const payload = await apiRequest("/chat/reactions", {
+				const payload = await apiRequest(`/messages/${encodeURIComponent(messageId)}/reactions`, {
 					method: "POST",
-					body: JSON.stringify({ channel: channelName, messageId, emoji })
+					body: JSON.stringify({ emoji })
 				});
 
-				applyServerState(payload.state);
+				const reactions = Array.isArray(payload?.data) ? payload.data : [];
+				setMessagesByChannel((current) => ({
+					...current,
+					[channelId]: (current[channelId] || []).map((message) => {
+						if (String(message.id) !== String(messageId)) {
+							return message;
+						}
+						return {
+							...message,
+							reactions: reactions.map((reaction) => `${reaction.emoji} ${reaction.count}`)
+						};
+					})
+				}));
 				return;
 			} catch (error) {
-				setBackendConnected(false);
+				const normalized = normalizeApiError(error, "Unable to update reaction");
+				if (normalized.status === 401 && onSessionExpired) {
+					onSessionExpired();
+				}
 			}
 		}
 
 		setMessagesByChannel((current) => ({
 			...current,
-			[channelName]: (current[channelName] || []).map((message) => {
-				if (message.id !== messageId) {
+			[channelId]: (current[channelId] || []).map((message) => {
+				if (String(message.id) !== String(messageId)) {
 					return message;
 				}
-
 				return {
 					...message,
 					reactions: incrementReaction(message.reactions || [], emoji)
@@ -554,28 +833,130 @@ export default function Layout() {
 		}));
 	}
 
+	async function handleLogCarbon(action) {
+		if (!workspaceId) {
+			return;
+		}
+
+		setCarbonSaving(true);
+		setCarbonError("");
+		try {
+			await apiRequest("/carbon/log", {
+				method: "POST",
+				body: JSON.stringify({
+					workspace_id: workspaceId,
+					transport_type: action.transportType,
+					kg_co2: action.kgCo2
+				})
+			});
+			await refreshCarbonLeaderboard();
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to save carbon log");
+			setCarbonError(normalized.message);
+		} finally {
+			setCarbonSaving(false);
+		}
+	}
+
+	async function handleRegisterMeshNode() {
+		setMeshBusy(true);
+		setMeshError("");
+		try {
+			const suffix = String(Date.now()).slice(-4);
+			await apiRequest("/mesh/register", {
+				method: "POST",
+				body: JSON.stringify({ node_name: `web-${suffix}` })
+			});
+			await refreshMeshNodes();
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to register mesh node");
+			setMeshError(normalized.message);
+		} finally {
+			setMeshBusy(false);
+		}
+	}
+
+	async function handleRevokeMeshNode(nodeId) {
+		if (!nodeId) {
+			return;
+		}
+		setMeshBusy(true);
+		setMeshError("");
+		try {
+			await apiRequest(`/mesh/nodes/${encodeURIComponent(nodeId)}/revoke`, {
+				method: "POST"
+			});
+			await refreshMeshNodes();
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to revoke mesh node");
+			setMeshError(normalized.message);
+		} finally {
+			setMeshBusy(false);
+		}
+	}
+
+	function handleAccessibilityPreferenceChange(key, value) {
+		setAccessibilityPrefs((current) => ({
+			...current,
+			[key]: value
+		}));
+	}
+
+	function handleToggleMic() {
+		handleAccessibilityPreferenceChange("micJoined", !micActive);
+	}
+
 	return (
 		<div className="app-shell">
 			<IconRail activeView={activeView} onChange={setActiveView} items={navItems} />
 			<Sidebar
 				activeView={activeView}
-				activeChannel={activeChannel}
+				activeChannelId={activeChannelId}
+				channels={channels}
 				onChannelChange={handleChannelChange}
 				channelUnread={channelUnread}
 			/>
 			<MainPanel
 				activeView={activeView}
 				activeChannel={activeChannel}
+				channelMood={activeMood}
 				contextOpen={contextOpen}
 				setContextOpen={setContextOpen}
 				openMobileSheet={() => setMobileSheetOpen(true)}
-				messages={messagesByChannel[activeChannel] || []}
-				onSendMessage={handleSendMessage}
-				onReactMessage={handleReactMessage}
+				messages={currentMessages}
+				onSendMessage={(channelLabel, text, translated) => {
+					const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+					handleSendMessage(channel?.id || activeChannelId, text, translated);
+				}}
+				onReactMessage={(channelLabel, messageId, emoji) => {
+					const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+					handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
+				}}
 				translateEnabled={translateEnabled}
 				setTranslateEnabled={setTranslateEnabled}
 				showNudge={showNudge}
 				setShowNudge={setShowNudge}
+				onLogout={onLogout}
+				pulseChannels={pulseChannels}
+				onRefreshPulse={() => refreshPulseData(channels)}
+				pulseLoading={pulseLoading}
+				pulseError={pulseError}
+				micActive={micActive}
+				onToggleMic={handleToggleMic}
+				carbonLeaderboard={carbonLeaderboard}
+				onLogCarbon={handleLogCarbon}
+				carbonSaving={carbonSaving}
+				carbonError={carbonError}
+				currentUserId={currentUserId}
+				meshNodes={meshNodes}
+				onRefreshMesh={refreshMeshNodes}
+				onRegisterMesh={handleRegisterMeshNode}
+				onRevokeMesh={handleRevokeMeshNode}
+				meshBusy={meshBusy}
+				meshError={meshError}
+				accessibilityPrefs={accessibilityPrefs}
+				onChangeAccessibility={handleAccessibilityPreferenceChange}
+				accessibilitySaveState={accessibilitySaveState}
 			/>
 			<BottomTabBar activeView={activeView} onChange={setActiveView} items={navItems} />
 			<MobileSheet

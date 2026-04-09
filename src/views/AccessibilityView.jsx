@@ -1,15 +1,15 @@
-import React, { useState } from "react";
+import React from "react";
 import Badge from "../components/Badge";
 import SegmentedControl from "../components/SegmentedControl";
 import ToggleRow from "../components/ToggleRow";
 
-export default function AccessibilityView() {
-	const [dyslexia, setDyslexia] = useState(false);
-	const [highContrast, setHighContrast] = useState(false);
-	const [simplified, setSimplified] = useState(false);
-	const [tts, setTts] = useState(false);
-	const [fontSize, setFontSize] = useState(15);
-	const [colorBlind, setColorBlind] = useState("Normal");
+export default function AccessibilityView({ preferences, onChangePreference, saveState }) {
+	const dyslexia = Boolean(preferences?.dyslexia);
+	const highContrast = Boolean(preferences?.highContrast);
+	const simplified = Boolean(preferences?.simplified);
+	const tts = Boolean(preferences?.tts);
+	const fontSize = Number(preferences?.fontSize || 15);
+	const colorBlind = preferences?.colorBlind || "Normal";
 
 	const previewText = simplified
 		? "Meeting starts at 11. Share key findings clearly and briefly."
@@ -33,25 +33,30 @@ export default function AccessibilityView() {
 						label="Dyslexia Font"
 						note="Use a simplified monospace profile"
 						value={dyslexia}
-						onChange={setDyslexia}
+						onChange={(value) => onChangePreference("dyslexia", value)}
 					/>
 					<ToggleRow
 						label="High Contrast"
 						note="Stronger text and control contrast"
 						value={highContrast}
-						onChange={setHighContrast}
+						onChange={(value) => onChangePreference("highContrast", value)}
 					/>
 					<ToggleRow
 						label="Simplified Language"
 						note="Reduce complexity in phrasing"
 						value={simplified}
-						onChange={setSimplified}
+						onChange={(value) => onChangePreference("simplified", value)}
 					/>
 				</div>
 
 				<div className="settings-group" style={{ marginTop: 12 }}>
 					<p className="group-head">Audio</p>
-					<ToggleRow label="Text to Speech" note="Read selected messages aloud" value={tts} onChange={setTts} />
+					<ToggleRow
+						label="Text to Speech"
+						note="Read selected messages aloud"
+						value={tts}
+						onChange={(value) => onChangePreference("tts", value)}
+					/>
 				</div>
 
 				<div className="settings-group" style={{ marginTop: 12, paddingBottom: 12 }}>
@@ -60,7 +65,7 @@ export default function AccessibilityView() {
 						<SegmentedControl
 							options={["Normal", "Deuter", "Protan", "Tritan"]}
 							value={colorBlind}
-							onChange={setColorBlind}
+							onChange={(value) => onChangePreference("colorBlind", value)}
 						/>
 					</div>
 				</div>
@@ -75,7 +80,7 @@ export default function AccessibilityView() {
 						min="13"
 						max="22"
 						value={fontSize}
-						onChange={(event) => setFontSize(Number(event.target.value))}
+						onChange={(event) => onChangePreference("fontSize", Number(event.target.value))}
 					/>
 				</div>
 
@@ -101,6 +106,9 @@ export default function AccessibilityView() {
 						{previewText}
 					</p>
 					{tts ? <Badge tone="accent">Text-to-speech ready</Badge> : null}
+					<p className="caption" style={{ marginTop: 10 }}>
+						{saveState === "saving" ? "Saving accessibility settings..." : "Accessibility settings are synced."}
+					</p>
 				</div>
 			</section>
 		</div>

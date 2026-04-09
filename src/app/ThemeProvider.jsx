@@ -7,7 +7,17 @@ export function useTheme() {
 }
 
 export default function ThemeProvider({ children }) {
-	const [theme, setTheme] = useState(() => localStorage.getItem("spann-theme") || "dark");
+	const [theme, setTheme] = useState(() => {
+		const saved = localStorage.getItem("spann-theme");
+		if (saved === "dark" || saved === "light") {
+			return saved;
+		}
+
+		if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+			return "dark";
+		}
+		return "light";
+	});
 
 	useEffect(() => {
 		document.documentElement.setAttribute("data-theme", theme);
@@ -17,6 +27,7 @@ export default function ThemeProvider({ children }) {
 	const value = useMemo(
 		() => ({
 			theme,
+			setTheme,
 			toggleTheme: () => setTheme((current) => (current === "dark" ? "light" : "dark"))
 		}),
 		[theme]

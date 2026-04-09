@@ -3,7 +3,7 @@ import NodeCard from "../components/NodeCard";
 import SegmentedControl from "../components/SegmentedControl";
 import { NODES } from "../data/constants";
 
-export default function MeshView() {
+export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, onRevokeNode, isBusy, errorText }) {
 	const [mode, setMode] = useState("Mesh");
 	const meshActive = mode === "Mesh";
 
@@ -30,6 +30,25 @@ export default function MeshView() {
 	function pointById(id) {
 		return points.find((point) => point.id === id);
 	}
+
+	const preparedNodes = (Array.isArray(meshNodes) && meshNodes.length ? meshNodes : NODES).map((node, index) => {
+		if (node.id && node.name) {
+			return node;
+		}
+
+		const nodeId = String(node.node_id || node.id || `node-${index + 1}`);
+		const lastSeen = node.last_seen ? new Date(node.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--";
+		const revoked = Boolean(node.revoked);
+		return {
+			id: nodeId,
+			nodeId,
+			name: nodeId,
+			ping: `last seen ${lastSeen}`,
+			signal: revoked ? 1 : 3,
+			status: revoked ? "weak" : "active",
+			revoked
+		};
+	});
 
 	return (
 		<div className="view-transition">
@@ -79,13 +98,34 @@ export default function MeshView() {
 				</div>
 
 				{meshActive ? <div className="warning-banner">⚠ Cellular signal lost — switching to mesh</div> : null}
+
+				<div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+					<button className="header-btn" onClick={onRefreshNodes}>
+						{isBusy ? "Refreshing..." : "Refresh Nodes"}
+					</button>
+					<button className="accent-btn" style={{ marginTop: 0 }} onClick={onRegisterNode} disabled={isBusy}>
+						Register Node
+					</button>
+				</div>
+
+				{errorText ? (
+					<p className="caption" style={{ color: "var(--red)", marginTop: 10 }}>
+						{errorText}
+					</p>
+				) : null}
 			</section>
 
 			<section className="card">
 				<p className="title">Node Health</p>
 				<div className="node-list">
-					{NODES.map((node) => (
-						<NodeCard key={node.id} node={node} />
+					{preparedNodes.map((node) => (
+						<NodeCard
+							key={node.id}
+							node={node}
+							actionLabel={node.revoked ? "Revoked" : "Revoke"}
+							onAction={node.revoked ? null : () => onRevokeNode(node.nodeId || node.id)}
+							actionDisabled={isBusy || node.revoked}
+						/>
 					))}
 				</div>
 			</section>

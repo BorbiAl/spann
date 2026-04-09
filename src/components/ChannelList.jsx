@@ -1,20 +1,30 @@
 import React from "react";
-import { CHANNELS } from "../data/constants";
 
-export default function ChannelList({ activeChannel, onChannelChange, channelUnread }) {
+export default function ChannelList({ channels, activeChannelId, onChannelChange, channelUnread }) {
+	if (!channels || !channels.length) {
+		return (
+			<div className="sidebar-section">
+				<p className="section-title">Channels</p>
+				<p className="caption" style={{ padding: "0 8px 8px" }}>
+					No channels available.
+				</p>
+			</div>
+		);
+	}
+
 	return (
 		<div className="sidebar-section">
 			<p className="section-title">Channels</p>
-			{CHANNELS.map((channel) => (
+			{channels.map((channel) => (
 				<button
-					key={channel.name}
-					className={`channel-item ${activeChannel === channel.name ? "active" : ""}`}
-					onClick={() => onChannelChange(channel.name)}
+					key={channel.id}
+					className={`channel-item ${activeChannelId === channel.id ? "active" : ""}`}
+					onClick={() => onChannelChange(channel.id)}
 				>
 					<span className="channel-dot">#</span>
 					<span className="channel-name">{channel.name}</span>
-					{(channelUnread[channel.name] ?? channel.unread) > 0 ? (
-						<span className="channel-unread">{channelUnread[channel.name] ?? channel.unread}</span>
+					{Number(channelUnread?.[channel.id] || 0) > 0 ? (
+						<span className="channel-unread">{channelUnread[channel.id]}</span>
 					) : null}
 				</button>
 			))}
