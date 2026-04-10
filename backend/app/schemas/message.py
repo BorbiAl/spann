@@ -36,6 +36,7 @@ class SendMessageRequest(BaseModel):
 
     channel_id: UUID
     text: str = Field(min_length=1, max_length=4096)
+    text_translated: str | None = Field(default=None, max_length=4096)
     mesh_origin: bool = False
     source_locale: str | None = Field(default=None, max_length=10)
 
@@ -43,6 +44,14 @@ class SendMessageRequest(BaseModel):
     @classmethod
     def _strip_text(cls, value: str) -> str:
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("text_translated", mode="before")
+    @classmethod
+    def _strip_translated_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
     @field_validator("source_locale", mode="before")
     @classmethod

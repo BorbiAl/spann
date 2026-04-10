@@ -6,6 +6,7 @@ import { useTheme } from "./ThemeProvider";
 import Icon from "../components/Icon";
 import {
 	APP_NOTICE_EVENT_NAME,
+	AUTH_STATE_UPDATED_EVENT_NAME,
 	apiRequest,
 	createOrganization,
 	decideOrganizationInvitation,
@@ -216,6 +217,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	const [mode, setMode] = useState("login");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState(defaultEmail || "");
+	const [locale, setLocale] = useState("en-US");
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [showRegisterPasswords, setShowRegisterPasswords] = useState(false);
@@ -345,6 +347,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 					confirmPassword,
 					name: name.trim(),
 					companyName: null,
+					locale,
 					persistSession: true,
 					deviceHint: "web-client"
 				});
@@ -532,6 +535,29 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 										required
 									/>
 								</label>
+
+									<div className="auth-form-grid">
+										<label className="auth-field">
+											<span>Preferred language</span>
+											<select className="auth-input" value={locale} onChange={(event) => setLocale(event.target.value)}>
+												<option value="en-US">English (US)</option>
+												<option value="en-GB">English (UK)</option>
+												<option value="bg-BG">Bulgarian</option>
+												<option value="es-ES">Spanish</option>
+												<option value="fr-FR">French</option>
+												<option value="de-DE">German</option>
+												<option value="it-IT">Italian</option>
+												<option value="pt-BR">Portuguese (BR)</option>
+												<option value="tr-TR">Turkish</option>
+												<option value="ar-SA">Arabic</option>
+												<option value="hi-IN">Hindi</option>
+												<option value="zh-CN">Chinese (Simplified)</option>
+												<option value="ja-JP">Japanese</option>
+												<option value="ko-KR">Korean</option>
+											</select>
+										</label>
+
+									</div>
 
 								<div className="auth-form-grid">
 									<label className="auth-field">
@@ -731,6 +757,16 @@ function AppFlow() {
 	});
 	const [authState, setAuthState] = useState(initialAuth);
 	const [notice, setNotice] = useState(null);
+
+	useEffect(() => {
+		function handleAuthStateUpdated(event) {
+			const nextAuth = event?.detail?.authState;
+			setAuthState(nextAuth || null);
+		}
+
+		window.addEventListener(AUTH_STATE_UPDATED_EVENT_NAME, handleAuthStateUpdated);
+		return () => window.removeEventListener(AUTH_STATE_UPDATED_EVENT_NAME, handleAuthStateUpdated);
+	}, []);
 
 	useEffect(() => {
 		function applyFromStorage() {

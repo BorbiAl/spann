@@ -16,6 +16,7 @@ class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     company_name: str | None = Field(default=None, max_length=120)
     device_hint: str | None = Field(default=None, max_length=64)
+    locale: str | None = Field(default=None, min_length=2, max_length=16)
 
 
 class LoginRequest(BaseModel):

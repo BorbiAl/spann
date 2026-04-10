@@ -9,59 +9,238 @@ const CATEGORIES = [
 		icon: "rocket_launch",
 		title: "Getting Started",
 		description: "Set up your workspace, invite your team, and send your first message.",
-		articles: 12,
 	},
 	{
 		icon: "forum",
 		title: "Channels & Messaging",
 		description: "Create channels, manage threads, reactions, and direct messages.",
-		articles: 18,
 	},
 	{
 		icon: "hub",
 		title: "Mesh Network",
 		description: "Configure offline mesh nodes, signal handoffs, and failover rules.",
-		articles: 9,
 	},
 	{
 		icon: "eco",
 		title: "Carbon Tracker",
 		description: "Log transport activity, read your footprint, and earn badges.",
-		articles: 7,
 	},
 	{
 		icon: "monitor_heart",
 		title: "Pulse & Sentiment",
 		description: "Understand channel energy scores and configure alert thresholds.",
-		articles: 8,
 	},
 	{
 		icon: "lock",
 		title: "Security & Privacy",
 		description: "Manage permissions, tokens, audit logs, and data retention.",
-		articles: 14,
 	},
 	{
 		icon: "settings",
 		title: "Admin & Settings",
 		description: "Workspace configuration, SSO, billing, and integrations.",
-		articles: 21,
 	},
 	{
 		icon: "accessibility",
 		title: "Accessibility",
 		description: "Enable dyslexia mode, high contrast, text-to-speech, and more.",
-		articles: 6,
 	},
 ];
 
-const POPULAR_ARTICLES = [
-	{ title: "How to invite team members to your workspace", category: "Getting Started", views: "12.4k" },
-	{ title: "Setting up offline mesh nodes for field teams", category: "Mesh Network", views: "9.8k" },
-	{ title: "Understanding your channel sentiment score", category: "Pulse & Sentiment", views: "7.2k" },
-	{ title: "Enabling end-to-end encryption for channels", category: "Security & Privacy", views: "6.9k" },
-	{ title: "Logging carbon activity from mobile devices", category: "Carbon Tracker", views: "5.1k" },
-	{ title: "Configuring SAML SSO for your organisation", category: "Admin & Settings", views: "4.7k" },
+const SIMPLE_GUIDES = [
+	{
+		title: "Set up your workspace in 5 minutes",
+		category: "Getting Started",
+		views: "12.4k",
+		summary: "Create the workspace, add first channels, and invite your team.",
+		steps: [
+			"Open Settings, then Workspace.",
+			"Set your workspace name and timezone.",
+			"Create #general, #announcements, and one team channel.",
+			"Invite teammates by email.",
+			"Post a welcome message in #general."
+		]
+	},
+	{
+		title: "Reset your session quickly",
+		category: "Getting Started",
+		views: "8.2k",
+		summary: "Fix login loops or stale sessions in under a minute.",
+		steps: [
+			"Sign out from Settings.",
+			"Close and reopen the app.",
+			"Sign in again with your normal account.",
+			"If it still fails, use 'Submit a ticket' below and include the time of the error."
+		]
+	},
+	{
+		title: "Create and manage channels",
+		category: "Channels & Messaging",
+		views: "11.1k",
+		summary: "Set up channels your team can navigate easily.",
+		steps: [
+			"Use clear names like #ops, #design, #sales.",
+			"Pin one message with channel purpose and rules.",
+			"Use threads for side topics to keep channels clean.",
+			"Archive channels that are no longer active."
+		]
+	},
+	{
+		title: "Fix missing or delayed messages",
+		category: "Channels & Messaging",
+		views: "7.6k",
+		summary: "Quick checks when messages do not appear.",
+		steps: [
+			"Refresh the channel once.",
+			"Check that you are in the correct workspace and channel.",
+			"Verify your network connection.",
+			"If only one channel is affected, ask a workspace admin to confirm permissions."
+		]
+	},
+	{
+		title: "Register a mesh node",
+		category: "Mesh Network",
+		views: "9.8k",
+		summary: "Connect a device to your mesh in a few steps.",
+		steps: [
+			"Open Mesh view.",
+			"Choose 'Register node'.",
+			"Give the node a clear name (for example: Floor-2-Tablet).",
+			"Confirm it appears as active in the node list."
+		]
+	},
+	{
+		title: "Revoke a compromised mesh node",
+		category: "Mesh Network",
+		views: "6.2k",
+		summary: "Remove node access if a device is lost.",
+		steps: [
+			"Open Mesh view and locate the device.",
+			"Choose Revoke on that node.",
+			"Confirm the node status changes to revoked.",
+			"Register a replacement node if needed."
+		]
+	},
+	{
+		title: "Log your commute correctly",
+		category: "Carbon Tracker",
+		views: "5.1k",
+		summary: "Use the bottom quick actions to keep carbon data accurate.",
+		steps: [
+			"Open Carbon view.",
+			"Tap the transport button matching your commute.",
+			"Wait for the success notice.",
+			"Repeat once per commute type used that day."
+		]
+	},
+	{
+		title: "Understand leaderboard scores",
+		category: "Carbon Tracker",
+		views: "4.3k",
+		summary: "Know how score and kg values are shown.",
+		steps: [
+			"Higher points indicate better carbon performance.",
+			"Avg shows estimated kg impact.",
+			"Your highlighted row marks your account.",
+			"Ask support if totals look incorrect after a full refresh."
+		]
+	},
+	{
+		title: "Read pulse scores simply",
+		category: "Pulse & Sentiment",
+		views: "7.2k",
+		summary: "Turn pulse values into practical team actions.",
+		steps: [
+			"Green/high means healthy communication.",
+			"Neutral means monitor trends, no urgent action.",
+			"Low or critical means check recent conflict-heavy threads.",
+			"Reassess after key announcements."
+		]
+	},
+	{
+		title: "Troubleshoot pulse 422/empty data",
+		category: "Pulse & Sentiment",
+		views: "3.9k",
+		summary: "What to do when pulse data fails to load.",
+		steps: [
+			"Refresh channels first.",
+			"Confirm channel exists and you can open messages.",
+			"Try another channel to isolate the issue.",
+			"Submit a ticket with channel name and timestamp if still failing."
+		]
+	},
+	{
+		title: "Set secure workspace defaults",
+		category: "Security & Privacy",
+		views: "6.9k",
+		summary: "Apply baseline security with minimal setup.",
+		steps: [
+			"Review member roles and remove old accounts.",
+			"Require strong passwords and session expiry.",
+			"Use private channels for sensitive discussions.",
+			"Rotate credentials for shared service accounts."
+		]
+	},
+	{
+		title: "Respond to suspicious activity",
+		category: "Security & Privacy",
+		views: "5.4k",
+		summary: "Contain risk quickly if access looks suspicious.",
+		steps: [
+			"Revoke suspicious sessions and mesh nodes.",
+			"Reset affected user passwords.",
+			"Review recent channel/message activity.",
+			"Contact support with incident timeline."
+		]
+	},
+	{
+		title: "Use Settings view effectively",
+		category: "Admin & Settings",
+		views: "4.7k",
+		summary: "Find profile, appearance, shortcuts, and account options fast.",
+		steps: [
+			"Open Settings from sidebar or Carbon header.",
+			"Use the left tabs to switch sections.",
+			"Save one section before moving to the next.",
+			"Use the shortcut list to speed up daily actions."
+		]
+	},
+	{
+		title: "Common admin checklist",
+		category: "Admin & Settings",
+		views: "3.8k",
+		summary: "Weekly checks for stable workspace operations.",
+		steps: [
+			"Review member list and roles.",
+			"Check support tickets with high priority.",
+			"Verify mesh node health and revoke unused nodes.",
+			"Review carbon and pulse trends for anomalies."
+		]
+	},
+	{
+		title: "Enable accessibility quickly",
+		category: "Accessibility",
+		views: "3.2k",
+		summary: "Turn on readability tools in less than two minutes.",
+		steps: [
+			"Open Accessibility view.",
+			"Enable needed toggles (high contrast, simplified mode, TTS).",
+			"Adjust font size and color mode.",
+			"Test chat readability immediately."
+		]
+	},
+	{
+		title: "Accessibility troubleshooting",
+		category: "Accessibility",
+		views: "2.7k",
+		summary: "Fix common accessibility preference issues.",
+		steps: [
+			"Change one setting at a time.",
+			"Refresh the page after major changes.",
+			"Check browser/system accessibility settings for conflicts.",
+			"Contact support if a toggle does not persist."
+		]
+	}
 ];
 
 const STATUS_ITEMS = [
@@ -247,6 +426,13 @@ export default function SupportView() {
 	const [search, setSearch] = useState("");
 	const [activeCategory, setActiveCategory] = useState(null);
 	const [showContact, setShowContact] = useState(false);
+	const [selectedGuideTitle, setSelectedGuideTitle] = useState("");
+
+	const articleCountsByCategory = SIMPLE_GUIDES.reduce((counts, guide) => {
+		const key = String(guide.category || "");
+		counts[key] = Number(counts[key] || 0) + 1;
+		return counts;
+	}, {});
 
 	const filteredCategories = search.trim()
 		? CATEGORIES.filter(
@@ -257,12 +443,20 @@ export default function SupportView() {
 		: CATEGORIES;
 
 	const filteredArticles = search.trim()
-		? POPULAR_ARTICLES.filter(
+		? SIMPLE_GUIDES.filter(
 				(a) =>
 					a.title.toLowerCase().includes(search.toLowerCase()) ||
-					a.category.toLowerCase().includes(search.toLowerCase())
+					a.category.toLowerCase().includes(search.toLowerCase()) ||
+					a.summary.toLowerCase().includes(search.toLowerCase())
 		  )
-		: POPULAR_ARTICLES;
+		: SIMPLE_GUIDES;
+
+	const displayedGuides = activeCategory
+		? filteredArticles.filter((a) => a.category === activeCategory)
+		: filteredArticles;
+
+	const selectedGuide =
+		displayedGuides.find((guide) => guide.title === selectedGuideTitle) || displayedGuides[0] || null;
 
 	const overallStatus = STATUS_ITEMS.some((s) => s.status === "outage")
 		? "outage"
@@ -274,12 +468,12 @@ export default function SupportView() {
 	const statusColour = { operational: "text-green-600", degraded: "text-yellow-600", outage: "text-red-600" };
 
 	return (
-		<div className="h-full overflow-y-auto bg-surface">
+		<div className="h-full overflow-y-auto bg-surface p-8 w-full view-transition">
 			{showContact && <ContactModal onClose={() => setShowContact(false)} />}
 
 			{/* Header */}
-			<div className="border-b border-outline-variant/10 bg-surface-container-lowest px-8 py-10">
-				<div className="max-w-3xl mx-auto text-center space-y-4">
+			<div className="border-b border-outline-variant/10 bg-surface-container-lowest px-8 py-10 rounded-2xl">
+				<div className="w-full text-center space-y-4">
 					<h1 className="text-3xl font-extrabold tracking-tight text-on-surface">How can we help?</h1>
 					<p className="text-on-surface-variant">
 						Search our documentation, browse help topics, or reach out directly.
@@ -309,7 +503,7 @@ export default function SupportView() {
 				</div>
 			</div>
 
-			<div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
+			<div className="w-full px-2 py-8 space-y-10">
 				{/* System status banner */}
 				<div className="flex items-center justify-between bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-3">
 					<div className="flex items-center gap-3">
@@ -326,9 +520,13 @@ export default function SupportView() {
 							</div>
 						))}
 					</div>
-					<a href="#" className="text-xs font-semibold text-primary hover:underline flex-shrink-0">
-						Status page →
-					</a>
+					<button
+						type="button"
+						onClick={() => setShowContact(true)}
+						className="text-xs font-semibold text-primary hover:underline flex-shrink-0"
+					>
+						Report issue →
+					</button>
 				</div>
 
 				{/* Help topic grid */}
@@ -340,6 +538,7 @@ export default function SupportView() {
 								<CategoryCard
 									key={cat.title}
 									{...cat}
+									articles={articleCountsByCategory[cat.title] || 0}
 									active={activeCategory === cat.title}
 									onClick={() => setActiveCategory(activeCategory === cat.title ? null : cat.title)}
 								/>
@@ -350,48 +549,66 @@ export default function SupportView() {
 					)}
 				</section>
 
-				{/* Popular articles */}
+				{/* Simple guides */}
 				<section>
 					<h2 className="text-base font-bold text-on-surface mb-4">
-						{activeCategory ? `Articles in "${activeCategory}"` : "Popular articles"}
+						{activeCategory ? `Simple guides in "${activeCategory}"` : "Simple guides"}
 					</h2>
-					<div className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest divide-y divide-outline-variant/10 overflow-hidden">
-						{(activeCategory
-							? filteredArticles.filter((a) => a.category === activeCategory)
-							: filteredArticles
-						).length > 0 ? (
-							(activeCategory
-								? filteredArticles.filter((a) => a.category === activeCategory)
-								: filteredArticles
-							).map((article) => (
-								<a
-									key={article.title}
-									href="#"
-									className="flex items-center gap-4 px-5 py-4 hover:bg-surface-container transition-colors group"
-								>
-									<span className="material-symbols-outlined text-on-surface-variant text-base flex-shrink-0 group-hover:text-primary transition-colors">
-										article
-									</span>
-									<div className="flex-1 min-w-0">
-										<p className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors truncate">
-											{article.title}
-										</p>
-										<p className="text-xs text-on-surface-variant">{article.category}</p>
+					<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+						<div className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest divide-y divide-outline-variant/10 overflow-hidden">
+							{displayedGuides.length > 0 ? (
+								displayedGuides.map((article) => (
+									<button
+										type="button"
+										key={article.title}
+										onClick={() => setSelectedGuideTitle(article.title)}
+										className={`w-full text-left flex items-center gap-4 px-5 py-4 transition-colors group ${selectedGuide?.title === article.title ? "bg-primary/5" : "hover:bg-surface-container"}`}
+									>
+										<span className="material-symbols-outlined text-on-surface-variant text-base flex-shrink-0 group-hover:text-primary transition-colors">
+											article
+										</span>
+										<div className="flex-1 min-w-0">
+											<p className="text-sm font-medium text-on-surface group-hover:text-primary transition-colors truncate">
+												{article.title}
+											</p>
+											<p className="text-xs text-on-surface-variant">{article.category}</p>
+										</div>
+										<span className="text-xs text-on-surface-variant/60 flex-shrink-0">{article.views}</span>
+									</button>
+								))
+							) : (
+								<div className="px-5 py-8 text-center text-sm text-on-surface-variant">
+									No guides found.{" "}
+									<button type="button" onClick={() => setShowContact(true)} className="text-primary hover:underline font-medium">
+										Contact support instead.
+									</button>
+								</div>
+							)}
+						</div>
+
+						<div className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-5">
+							{selectedGuide ? (
+								<div className="space-y-4">
+									<div>
+										<p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Simple guide</p>
+										<h3 className="text-base font-bold text-on-surface mt-1">{selectedGuide.title}</h3>
+										<p className="text-sm text-on-surface-variant mt-2">{selectedGuide.summary}</p>
 									</div>
-									<span className="text-xs text-on-surface-variant/60 flex-shrink-0">{article.views} views</span>
-									<span className="material-symbols-outlined text-on-surface-variant/40 text-base group-hover:text-primary transition-colors">
-										chevron_right
-									</span>
-								</a>
-							))
-						) : (
-							<div className="px-5 py-8 text-center text-sm text-on-surface-variant">
-								No articles found.{" "}
-								<button type="button" onClick={() => setShowContact(true)} className="text-primary hover:underline font-medium">
-									Contact support instead.
-								</button>
-							</div>
-						)}
+									<div className="space-y-2">
+										{selectedGuide.steps.map((step, idx) => (
+											<div key={`${selectedGuide.title}-${idx}`} className="flex items-start gap-3">
+												<span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex-shrink-0">
+													{idx + 1}
+												</span>
+												<p className="text-sm text-on-surface leading-relaxed">{step}</p>
+											</div>
+										))}
+									</div>
+								</div>
+							) : (
+								<p className="text-sm text-on-surface-variant">Pick a guide to see step-by-step instructions.</p>
+							)}
+						</div>
 					</div>
 				</section>
 
@@ -422,16 +639,20 @@ export default function SupportView() {
 							</div>
 						</a>
 
-						<a
-							href="#"
-							className="flex flex-col items-start gap-3 p-5 rounded-xl border border-outline-variant/20 bg-surface-container-lowest hover:bg-surface-container-low hover:border-primary/30 transition-all group"
+						<button
+							type="button"
+							onClick={() => {
+								setActiveCategory("Channels & Messaging");
+								setSelectedGuideTitle("Create and manage channels");
+							}}
+							className="flex flex-col items-start gap-3 p-5 rounded-xl border border-outline-variant/20 bg-surface-container-lowest hover:bg-surface-container-low hover:border-primary/30 transition-all group text-left"
 						>
 							<span className="material-symbols-outlined text-2xl text-primary">forum</span>
 							<div>
 								<p className="font-semibold text-sm text-on-surface group-hover:text-primary transition-colors">Community forum</p>
-								<p className="text-xs text-on-surface-variant mt-0.5">Ask the community</p>
+								<p className="text-xs text-on-surface-variant mt-0.5">Open messaging guides</p>
 							</div>
-						</a>
+						</button>
 					</div>
 				</section>
 			</div>

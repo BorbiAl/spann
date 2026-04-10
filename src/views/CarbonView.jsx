@@ -5,10 +5,53 @@ export default function CarbonView({
 	currentUserId,
 	onLogAction,
 	isSubmitting,
-	errorText
+	errorText,
+	onOpenSettings,
+	onOpenSupport
 }) {
+	function toUserInitial(nameValue) {
+		const safeName = String(nameValue || "").trim();
+		return safeName ? safeName.charAt(0).toUpperCase() : "?";
+	}
+
+	function formatAvg(kgValue) {
+		const numeric = Number(kgValue);
+		if (!Number.isFinite(numeric)) {
+			return "0.0kg";
+		}
+		return `${numeric.toFixed(1)}kg`;
+	}
+
+	const quickLogActions = [
+		{ key: "walk", label: "Walk", icon: "directions_walk", kgCo2: 0, note: "Logged walking commute", tone: "tertiary" },
+		{ key: "bike", label: "Bike", icon: "pedal_bike", kgCo2: 0, note: "Logged biking commute", tone: "tertiary" },
+		{ key: "bus", label: "Bus", icon: "directions_bus", kgCo2: 0.5, note: "Logged bus commute", tone: "primary" },
+		{ key: "train", label: "Train", icon: "train", kgCo2: 0.3, note: "Logged train commute", tone: "primary" },
+		{ key: "car", label: "Car", icon: "directions_car", kgCo2: 2.8, note: "Logged car commute", tone: "primary" }
+	];
+
+	const normalizedLeaderboard = Array.isArray(leaderboard)
+		? leaderboard.map((entry) => {
+			const id = String(entry?.id || entry?.user_id || "");
+			const name = String(entry?.name || entry?.display_name || "Member");
+			const score = Number(entry?.score ?? entry?.total_score ?? 0);
+			const avg = String(entry?.avg || formatAvg(entry?.total_kg_co2));
+			const avatar = typeof entry?.avatar === "string" ? entry.avatar : "";
+			const isMe = entry?.isMe != null ? Boolean(entry.isMe) : (id && String(currentUserId || "") === id);
+
+			return {
+				id: id || `member-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+				name,
+				score: Number.isFinite(score) ? score : 0,
+				avg,
+				avatar,
+				isMe
+			};
+		})
+		: [];
+
 	// Fallback leaderboard data if empty
-	const topUsers = leaderboard.length > 0 ? leaderboard : [
+	const topUsers = normalizedLeaderboard.length > 0 ? normalizedLeaderboard : [
 		{ id: "1", name: "Marcus Chen", score: 980, avg: "0.8kg", avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuDbToWXTJtpLAu6OLo0gisg1VaLHAUN7GmHCRxb5HD9d_2Wkbo_5TubIliJIL6KlckguOalSFV3RMhcrFMbmPggGIZ8pgT7Rnyfupr24h6XXJVwDTgHXWEmO94QVGkAmkpmWZkxZsipH4M1BhtSTPj_Ng0jdXA_Lj7fqCJvPMaxqrPMGshMqmBxCTaz2Hn9FohXrvO6rphJWCMop3T8ripQR01MWL-eC2cNRDyqhAFumZsmdjkIjgJDYp-fEPvvBYCYl0TyZY_mcbnN", isMe: false },
 		{ id: "2", name: "Alex Rivera", score: 845, avg: "1.2kg", avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCjWDvIzVLkqHgTAdsOQaXIY1-WRuPFbLy3EHGzYGK4xJa8LvaH4qQY8ui7wGlU8Kw0NJox87YskH_-NrfkOvTxs3NzrE8OSqJBFtEFEqTwmgZw62DkB3lf6qWViIoZM3DAS-A0U2LCA3p3ynn1rDjB2dA4g8xL2iVESaY0MNGVkwCueiRYqGXnBYC6jg1uuD3w3q93GoCEFj2qKZTsvdrQZw2Bz5sabL9S9IyZiGgEdXmq6BDIYwkZA4jX22b1DwxFp-7bY_RErFcs", isMe: true },
 		{ id: "3", name: "Jordan Smith", score: 720, avg: "1.5kg", avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuDywbLAw_cvjxu2AsAQBMqu2LkM71uMpZYDw_98tytHx1rZRMGLa5xXcBwhP8jwEpDlIk66ORU2JXLmdqbcfG2K7UKltsnVKbn4WCMDHoBgr84RPtmw1aHPcUfkpJ-GyaXk1Jf0AyZZw-D1zPpyYbv7NzR809y2dE8ba2K5hZsUre1rwskG-EEqQmLVUMvisSnrnOjtqBpXNR_RQYl2YUqZAymppCC0RS9l-R1MJ5qR5D7QooYXqDywhfMW04Mpidq62fNpSICLlCFB", isMe: false },
@@ -16,9 +59,17 @@ export default function CarbonView({
 	];
 
 	return (
-		<div className="flex-1 flex flex-col h-full w-full bg-surface font-body text-on-surface antialiased selection:bg-primary-fixed relative">
+		<div className="flex-1 flex flex-col w-full bg-surface font-body text-on-surface antialiased selection:bg-primary-fixed relative">
+			{errorText ? (
+				<div className="mx-auto mt-4 w-full max-w-[80rem] px-8">
+					<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700">
+						{errorText}
+					</div>
+				</div>
+			) : null}
+
 			{/* TopNavBar */}
-			<header className="w-full top-0 sticky bg-slate-50/70 dark:bg-slate-950/70 backdrop-blur-xl shadow-sm z-40 flex justify-between items-center px-6 h-12 font-['Segoe_UI_Variable',sans-serif] text-sm antialiased">
+			<header className="w-full top-0 sticky bg-slate-50/70 dark:bg-slate-950/70 backdrop-blur-xl shadow-sm z-40 flex justify-between items-center px-5 sm:px-6 h-12 font-['Segoe_UI_Variable',sans-serif] text-sm antialiased">
 				<div className="flex items-center gap-8">
 					<span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">Spann</span>
 					<div className="flex items-center bg-slate-200/30 px-3 py-1 rounded-full gap-2">
@@ -28,25 +79,30 @@ export default function CarbonView({
 				</div>
 				<div className="flex items-center gap-4">
 					<div className="flex items-center gap-6 px-4">
-						<span className="text-blue-600 dark:text-blue-400 font-medium border-b-2 border-blue-600 cursor-pointer h-12 flex items-center">Insights</span>
-						<span className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer h-12 flex items-center">Community</span>
-						<span className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer h-12 flex items-center">Market</span>
+						<span className="text-blue-600 dark:text-blue-400 font-medium border-b-2 border-blue-600 h-12 flex items-center">Insights</span>
 					</div>
-					<div className="flex items-center gap-2">
-						<button className="p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors active:scale-95 duration-150">
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>settings</span>
+					<div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+						<button
+							type="button"
+							onClick={onOpenSettings}
+							className="inline-flex items-center gap-1 rounded-full bg-slate-100/80 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-semibold hover:bg-slate-200/70 dark:hover:bg-slate-700/70"
+						>
+							<span className="material-symbols-outlined text-[16px]" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>settings</span>
+							<span>Settings</span>
 						</button>
-						<button className="p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors active:scale-95 duration-150">
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>help</span>
-						</button>
-						<button className="p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors active:scale-95 duration-150">
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>account_circle</span>
+						<button
+							type="button"
+							onClick={onOpenSupport}
+							className="inline-flex items-center gap-1 rounded-full bg-slate-100/80 dark:bg-slate-800/50 px-3 py-1.5 text-xs font-semibold hover:bg-slate-200/70 dark:hover:bg-slate-700/70"
+						>
+							<span className="material-symbols-outlined text-[16px]" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>help</span>
+							<span>Support</span>
 						</button>
 					</div>
 				</div>
 			</header>
 
-			<div className="p-8 pb-12 max-w-[80rem] mx-auto w-full grid grid-cols-12 gap-8">
+			<div className="p-6 pb-10 max-w-[80rem] mx-auto w-full grid grid-cols-12 gap-6">
 				{/* Bento Grid Layout */}
 				{/* Main Impact Ring Section */}
 				<div className="col-span-12 lg:col-span-8 space-y-8">
@@ -87,14 +143,15 @@ export default function CarbonView({
 								</div>
 							</div>
 							
-							<div className="flex gap-4">
-								<button className="bg-gradient-to-r from-primary to-primary-container text-on-primary px-6 py-3 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 flex items-center gap-2 hover:opacity-90 transition-opacity">
-									<span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>auto_awesome</span>
-									Analyze Details
-								</button>
-								<button className="bg-surface-container-highest text-on-surface px-6 py-3 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors">
-									History
-								</button>
+							<div className="flex flex-wrap gap-2">
+								<span className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-3 py-1.5 text-xs font-bold">
+									<span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>insights</span>
+									Live insights
+								</span>
+								<span className="inline-flex items-center gap-2 rounded-full bg-surface-container-high text-on-surface px-3 py-1.5 text-xs font-bold">
+									<span className="material-symbols-outlined text-sm" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>history</span>
+									History soon
+								</span>
 							</div>
 						</div>
 					</section>
@@ -103,7 +160,7 @@ export default function CarbonView({
 					<section className="space-y-4">
 						<div className="flex justify-between items-center px-2">
 							<h3 className="text-lg font-bold text-on-surface">Environmental Achievements</h3>
-							<button className="text-primary text-xs font-bold flex items-center gap-1 hover:underline">View All <span className="material-symbols-outlined text-xs" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>chevron_right</span></button>
+							<span className="text-primary text-xs font-bold flex items-center gap-1 opacity-70">View All <span className="material-symbols-outlined text-xs" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>chevron_right</span></span>
 						</div>
 						<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 							<div className="bg-white/60 backdrop-blur-[12px] border border-outline-variant/20 p-6 rounded-3xl flex flex-col items-center text-center group hover:scale-[1.02] transition-transform shadow-sm">
@@ -155,7 +212,7 @@ export default function CarbonView({
 											<img alt="User" src={user.avatar} className="w-10 h-10 rounded-xl object-cover" />
 										) : (
 											<div className="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center">
-												<span className="text-xs font-bold">{user.name.charAt(0)}</span>
+												<span className="text-xs font-bold">{toUserInitial(user.name)}</span>
 											</div>
 										)}
 										{index === 0 && (
@@ -187,48 +244,28 @@ export default function CarbonView({
 			</div>
 
 			{/* Bottom Quick-Log Buttons */}
-			<div className="sticky bottom-8 w-full z-50 pointer-events-none flex justify-center pb-0 mt-auto px-8">
-				<div className="bg-white/80 backdrop-blur-xl border border-slate-200/50 rounded-[40px] shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-2 flex items-center justify-between w-full max-w-[840px] overflow-hidden pointer-events-auto">
+			<div className="sticky bottom-4 sm:bottom-8 w-full z-50 pointer-events-none flex justify-center pb-0 mt-auto px-3 sm:px-6">
+				<div className="bg-white/85 backdrop-blur-xl border border-slate-200/50 rounded-[24px] sm:rounded-[32px] shadow-[0_10px_30px_rgba(0,0,0,0.1)] p-2 sm:p-2.5 flex items-center justify-between w-full max-w-[860px] overflow-x-auto pointer-events-auto gap-3">
 					<div className="px-6">
 						<p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Quick Log Transport</p>
 					</div>
-					<div className="flex items-center gap-1">
-						<button 
-							disabled={isSubmitting}
-							onClick={() => onLogAction?.({ transportType: 'walk', kgCo2: 0, note: "Logged walking commute" })}
-							className="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-tertiary/10 text-tertiary hover:bg-tertiary hover:text-white transition-all active:scale-95 border-none"
-						>
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>directions_walk</span>
-							<span className="text-[9px] font-bold mt-0.5">Walk</span>
-						</button>
-						<button 
-							disabled={isSubmitting}
-							onClick={() => onLogAction?.({ transportType: 'bike', kgCo2: 0, note: "Logged biking commute" })}
-							className="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-tertiary/10 text-tertiary hover:bg-tertiary hover:text-white transition-all active:scale-95 border-none"
-						>
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>pedal_bike</span>
-							<span className="text-[9px] font-bold mt-0.5">Bike</span>
-						</button>
-						<button 
-							disabled={isSubmitting}
-							onClick={() => onLogAction?.({ transportType: 'bus', kgCo2: 0.5, note: "Logged bus commute" })}
-							className="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all active:scale-95 border-none"
-						>
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>directions_bus</span>
-							<span className="text-[9px] font-bold mt-0.5">Bus</span>
-						</button>
-						<button 
-							disabled={isSubmitting}
-							onClick={() => onLogAction?.({ transportType: 'train', kgCo2: 0.3, note: "Logged train commute" })}
-							className="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all active:scale-95 border-none"
-						>
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>train</span>
-							<span className="text-[9px] font-bold mt-0.5">Train</span>
-						</button>
-						<div className="w-px h-8 bg-slate-200 mx-2"></div>
-						<button className="w-14 h-14 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center hover:bg-surface-container-high transition-colors border-none">
-							<span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>add</span>
-						</button>
+					<div className="flex items-center gap-2 pr-1 min-w-max">
+						{quickLogActions.map((action) => (
+							<button
+								key={action.key}
+								disabled={isSubmitting}
+								onClick={() => onLogAction?.({ transportType: action.key, kgCo2: action.kgCo2, note: action.note })}
+								className={`flex flex-col items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-full border border-transparent transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
+									action.tone === "tertiary"
+										? "bg-tertiary/10 text-tertiary hover:bg-tertiary hover:text-white"
+										: "bg-primary/10 text-primary hover:bg-primary hover:text-white"
+								}`}
+								aria-label={`Quick log ${action.label.toLowerCase()} commute`}
+							>
+								<span className="material-symbols-outlined text-[18px]" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>{action.icon}</span>
+								<span className="text-[10px] sm:text-[11px] font-bold mt-0.5">{action.label}</span>
+							</button>
+						))}
 					</div>
 				</div>
 			</div>

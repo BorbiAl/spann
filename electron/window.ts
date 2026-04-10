@@ -17,6 +17,7 @@ export function createMainWindow(): BrowserWindow {
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#111113',
+    fullscreen: true,
     show: false, // show after ready-to-show to avoid flash
     webPreferences: {
       preload: resolveElectronPath('preload.js'),

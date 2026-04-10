@@ -230,6 +230,7 @@ export default function TranslatorView() {
 		try {
 			const payload = await apiRequest('/translate', {
 				method: 'POST',
+				allowAuthFailOpen: true,
 				body: JSON.stringify({
 					phrase: trimmed,
 					source_locale: sourceOption?.locale || 'en-US',
@@ -250,20 +251,10 @@ export default function TranslatorView() {
 			const targetLocale = String(targetOption?.locale || 'en-US');
 			const looksLikeFailOpen =
 				sourceLocale !== targetLocale &&
-				(String(nextCultural).trim() === trimmed || String(nextNote).toLowerCase().includes('fallback'));
+				(String(nextLiteral).trim() === trimmed || String(nextCultural).trim() === trimmed);
 
 			if (looksLikeFailOpen) {
-				try {
-					const legacyResult = await requestLegacyAdaptation(trimmed, sourceCulture, targetCulture);
-					if (legacyResult) {
-						nextLiteral = legacyResult.literal;
-						nextCultural = legacyResult.cultural;
-						nextNote = legacyResult.note;
-					}
-				} catch (legacyError) {
-					nextCultural = buildCultureFallback(targetCulture, trimmed);
-					nextNote = 'Translation fallback applied for selected language.';
-				}
+				setStatusNote('Primary translator returned partial output. Please retry.');
 			}
 			const nextTags = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : INITIAL_RESULT.tags;
 			const nextSentiment = Number.isFinite(data.sentiment_score)
@@ -281,27 +272,7 @@ export default function TranslatorView() {
 			});
 			setHistory((current) => [toHistoryEntry(sourceCulture, targetCulture, String(nextLiteral), String(nextCultural)), ...current].slice(0, 8));
 		} catch (error) {
-			let fallbackLiteral = trimmed;
-			let fallbackCultural = `[${cultureLabel(targetCulture)}] ${trimmed}`;
-			let fallbackNote = 'Translation service is unavailable. Showing local fallback output.';
-
-			try {
-				const legacyResult = await requestLegacyAdaptation(trimmed, sourceCulture, targetCulture);
-				if (legacyResult) {
-					fallbackLiteral = legacyResult.literal;
-					fallbackCultural = legacyResult.cultural;
-					fallbackNote = 'Primary translator unavailable. Used compatibility translator output.';
-				}
-			} catch (legacyError) {
-				fallbackCultural = buildCultureFallback(targetCulture, trimmed);
-			}
-			setResult((current) => ({
-				...current,
-				literal: fallbackLiteral,
-				cultural: fallbackCultural
-			}));
-			setHistory((current) => [toHistoryEntry(sourceCulture, targetCulture, fallbackLiteral, fallbackCultural), ...current].slice(0, 8));
-			setStatusNote(fallbackNote);
+			setStatusNote('Translation service is unavailable right now. Please try again.');
 		} finally {
 			setIsTranslating(false);
 		}

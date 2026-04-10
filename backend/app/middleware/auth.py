@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 UNPROTECTED_PATHS = {
     "/health",
     "/metrics",
+    "/translate",
+    "/translate/",
+    "/api/translate",
+    "/api/translate/",
+    "/speech-to-text",
+    "/speech-to-text/",
+    "/api/speech-to-text",
+    "/api/speech-to-text/",
     "/auth/register",
     "/auth/login",
     "/auth/refresh",
@@ -50,8 +58,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         path = request.url.path
         method = request.method.upper()
+        normalized_path = path.rstrip("/")
 
-        if method == "OPTIONS" or path in UNPROTECTED_PATHS:
+        is_unprotected_stt = (
+            normalized_path.endswith("/speech-to-text")
+            or normalized_path == "/speech-to-text"
+        )
+        is_unprotected_translate = (
+            normalized_path.endswith("/translate")
+            or normalized_path == "/translate"
+        )
+
+        if method == "OPTIONS" or path in UNPROTECTED_PATHS or is_unprotected_stt or is_unprotected_translate:
             response = await call_next(request)
             response.headers[settings.request_id_header] = request_id
             return response

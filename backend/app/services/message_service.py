@@ -153,13 +153,23 @@ async def _get_raw_message(db: Any, message_id: str) -> MessageRow | None:
     return rows[0] if rows else None
 
 
-async def create_message(db: Any, user_id: str, channel_id: str, workspace_id: str, text: str, mesh_origin: bool, source_locale: str | None) -> MessageRow:
+async def create_message(
+    db: Any,
+    user_id: str,
+    channel_id: str,
+    workspace_id: str,
+    text: str,
+    text_translated: str | None,
+    mesh_origin: bool,
+    source_locale: str | None,
+) -> MessageRow:
     if _use_local_channel(channel_id):
         created = local_store.create_message(
             channel_id=channel_id,
             user_id=user_id,
             workspace_id=workspace_id,
             text=text.strip(),
+            text_translated=text_translated,
             mesh_origin=bool(mesh_origin),
             source_locale=source_locale,
         )
@@ -176,7 +186,7 @@ async def create_message(db: Any, user_id: str, channel_id: str, workspace_id: s
         "user_id": user_id,
         "workspace_id": workspace_id,
         "text": text.strip(),
-        "text_translated": None,
+        "text_translated": text_translated.strip() if isinstance(text_translated, str) and text_translated.strip() else None,
         "source_locale": source_locale,
         "sentiment_score": None,
         "mesh_origin": bool(mesh_origin),

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "../app/ThemeProvider";
-import { apiRequest } from "../data/constants";
+import { apiRequest, getAuthState, setAuthState } from "../data/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -40,6 +40,7 @@ const TIMEZONES = [
 const LOCALES = [
 	{ value: "en-US", label: "English (US)" },
 	{ value: "en-GB", label: "English (UK)" },
+	{ value: "bg-BG", label: "Български" },
 	{ value: "es-ES", label: "Español" },
 	{ value: "fr-FR", label: "Français" },
 	{ value: "de-DE", label: "Deutsch" },
@@ -178,9 +179,24 @@ function SaveBar({ state, onSave, onReset, dirty }) {
 function ProfileSection({ authState }) {
 	const [profile, setProfile] = useState(null);
 	const [loading, setLoading] = useState(true);
-	const [form, setForm] = useState({ display_name: "", bio: "", timezone: "", locale: "en-US" });
+	const [form, setForm] = useState({
+		display_name: "",
+		bio: "",
+		timezone: "",
+		locale: "en-US",
+		avatar_url: "",
+	});
 	const [original, setOriginal] = useState(null);
 	const [saveState, setSaveState] = useState("idle");
+	const avatarInputRef = useRef(null);
+
+	const toProfileForm = useCallback((data) => ({
+		display_name: data?.display_name || authState?.user?.display_name || authState?.user?.name || "",
+		bio: data?.bio || "",
+		timezone: data?.timezone || "",
+		locale: data?.locale || authState?.user?.locale || "en-US",
+		avatar_url: data?.avatar_url || "",
+	}), [authState?.user?.display_name, authState?.user?.locale, authState?.user?.name]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -189,30 +205,20 @@ function ProfileSection({ authState }) {
 			.then((payload) => {
 				if (cancelled) return;
 				const data = payload?.data || payload || {};
-				const next = {
-					display_name: data.display_name || authState?.user?.display_name || authState?.user?.name || "",
-					bio: data.bio || "",
-					timezone: data.timezone || "",
-					locale: data.locale || authState?.user?.locale || "en-US",
-				};
+				const next = toProfileForm(data);
 				setProfile(data);
 				setForm(next);
 				setOriginal(next);
 			})
 			.catch(() => {
 				if (cancelled) return;
-				const fallback = {
-					display_name: authState?.user?.display_name || authState?.user?.name || "",
-					bio: "",
-					timezone: "",
-					locale: authState?.user?.locale || "en-US",
-				};
+				const fallback = toProfileForm({});
 				setForm(fallback);
 				setOriginal(fallback);
 			})
 			.finally(() => { if (!cancelled) setLoading(false); });
 		return () => { cancelled = true; };
-	}, []);
+	}, [toProfileForm]);
 
 	const dirty = original && JSON.stringify(form) !== JSON.stringify(original);
 
@@ -222,29 +228,70 @@ function ProfileSection({ authState }) {
 			const profileChanged =
 				form.display_name !== original.display_name ||
 				form.bio !== original.bio ||
-				form.timezone !== original.timezone;
+				form.timezone !== original.timezone ||
+				form.avatar_url !== original.avatar_url;
 
 			// Only call PATCH /users/me when name/bio/timezone actually changed
 			if (profileChanged) {
+				const safeDisplayName = form.display_name.trim() || original.display_name || authState?.user?.display_name || authState?.user?.name || "";
+				const profilePayload = {
+					display_name: safeDisplayName || undefined,
+					bio: form.bio.trim(),
+					timezone: form.timezone || "",
+				};
+
+				if (String(email || "").trim()) {
+					profilePayload.email = String(email).trim();
+				}
+
+				if (form.avatar_url !== original.avatar_url) {
+					profilePayload.avatar_url = form.avatar_url || "";
+				}
+
 				await apiRequest("/users/me", {
 					method: "PATCH",
+					body: JSON.stringify(profilePayload),
+				});
+			}
+
+			const onboardingChanged = form.locale !== original.locale;
+
+			if (onboardingChanged) {
+				await apiRequest("/users/me/preferences", {
+					method: "PATCH",
 					body: JSON.stringify({
-						display_name: form.display_name.trim() || undefined,
-						bio: form.bio.trim() || undefined,
-						timezone: form.timezone || undefined,
+						locale: form.locale,
 					}),
 				});
 			}
 
-			// Only call preferences when locale actually changed
-			if (form.locale !== original.locale) {
-				await apiRequest("/users/me/preferences", {
-					method: "PATCH",
-					body: JSON.stringify({ locale: form.locale }),
-				});
-			}
+			const latestPayload = await apiRequest("/users/me");
+			const latestData = latestPayload?.data || latestPayload || {};
+			const currentAuth = authState || getAuthState();
+			if (currentAuth?.accessToken && currentAuth?.refreshToken) {
+				const nextUser = {
+					...(currentAuth.user || {}),
+					display_name: latestData?.display_name || currentAuth?.user?.display_name || currentAuth?.user?.name || "",
+					avatar_url: latestData?.avatar_url ?? currentAuth?.user?.avatar_url ?? null,
+					bio: latestData?.bio ?? currentAuth?.user?.bio ?? null,
+					timezone: latestData?.timezone ?? currentAuth?.user?.timezone ?? null,
+					locale: latestData?.locale || form.locale || currentAuth?.user?.locale || "en-US",
+					email: latestData?.email || currentAuth?.user?.email || email || "",
+					name: latestData?.display_name || currentAuth?.user?.name || currentAuth?.user?.display_name || "",
+				};
 
-			setOriginal({ ...form });
+				setAuthState(
+					{
+						...currentAuth,
+						user: nextUser,
+					},
+					{ persist: Boolean(currentAuth?.persist) }
+				);
+			}
+			const next = toProfileForm(latestData);
+			setProfile(latestData);
+			setForm(next);
+			setOriginal(next);
 			setSaveState("saved");
 			setTimeout(() => setSaveState("idle"), 2500);
 		} catch {
@@ -256,6 +303,25 @@ function ProfileSection({ authState }) {
 	function handleReset() {
 		setForm({ ...original });
 		setSaveState("idle");
+	}
+
+	function handleAvatarSelect(event) {
+		const file = event.target.files?.[0];
+		if (!file) {
+			return;
+		}
+		if (!file.type.startsWith("image/")) {
+			return;
+		}
+		const reader = new FileReader();
+		reader.onload = () => {
+			const result = typeof reader.result === "string" ? reader.result : "";
+			if (!result) {
+				return;
+			}
+			setForm((current) => ({ ...current, avatar_url: result }));
+		};
+		reader.readAsDataURL(file);
 	}
 
 	const email = profile?.email || authState?.user?.email || authState?.email || "";
@@ -280,9 +346,9 @@ function ProfileSection({ authState }) {
 					{/* Avatar */}
 					<div className="flex items-center gap-5 pb-7 border-b border-outline-variant/10">
 						<div className="relative group">
-							{profile?.avatar_url ? (
+							{form.avatar_url ? (
 								<img
-									src={profile.avatar_url}
+									src={form.avatar_url}
 									alt="Avatar"
 									className="w-20 h-20 rounded-full object-cover border-2 border-outline-variant/20"
 								/>
@@ -293,12 +359,20 @@ function ProfileSection({ authState }) {
 							)}
 							<button
 								type="button"
+								onClick={() => avatarInputRef.current?.click()}
 								className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
 								aria-label="Change avatar"
-								title="Avatar upload coming soon"
+								title="Change avatar"
 							>
 								<span className="material-symbols-outlined text-white text-xl">photo_camera</span>
 							</button>
+							<input
+								ref={avatarInputRef}
+								type="file"
+								accept="image/*"
+								onChange={handleAvatarSelect}
+								className="hidden"
+							/>
 						</div>
 						<div>
 							<p className="font-semibold text-on-surface">{form.display_name || "—"}</p>
@@ -388,6 +462,7 @@ function ProfileSection({ authState }) {
 								</select>
 							</div>
 						</div>
+
 					</div>
 
 					<SaveBar state={saveState} onSave={handleSave} onReset={handleReset} dirty={dirty} />

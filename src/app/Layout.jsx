@@ -90,6 +90,68 @@ function normalizePulseScore(scoreValue) {
 	return Math.max(0, Math.min(100, Math.round(raw)));
 }
 
+function isUuidLike(value) {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function hasCyrillicText(value) {
+	return /[\u0400-\u04FF]/.test(String(value || ""));
+}
+
+function detectSourceLanguage(text) {
+	const value = String(text || "").trim();
+	if (!value) {
+		return { locale: "en-US", culture: "American", isEnglish: true };
+	}
+
+	const checks = [
+		{ regex: /[\u0400-\u04FF]/, locale: "bg-BG", culture: "Bulgarian" },
+		{ regex: /[\u0370-\u03FF]/, locale: "el-GR", culture: "Greek" },
+		{ regex: /[\u0590-\u05FF]/, locale: "he-IL", culture: "Israeli" },
+		{ regex: /[\u0600-\u06FF]/, locale: "ar-SA", culture: "Arabian" },
+		{ regex: /[\u0900-\u097F]/, locale: "hi-IN", culture: "Indian" },
+		{ regex: /[\u0E00-\u0E7F]/, locale: "th-TH", culture: "Thai" },
+		{ regex: /[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/, locale: "ko-KR", culture: "Korean" },
+		{ regex: /[\u3040-\u30FF]/, locale: "ja-JP", culture: "Japanese" },
+		{ regex: /[\u4E00-\u9FFF]/, locale: "zh-CN", culture: "Chinese" }
+	];
+
+	for (const check of checks) {
+		if (check.regex.test(value)) {
+			return { locale: check.locale, culture: check.culture, isEnglish: false };
+		}
+	}
+
+	const lowered = value.toLowerCase();
+	const latinRules = [
+		{ locale: "es-ES", culture: "Spanish", pattern: /\b(hola|gracias|por favor|buenos|equipo|mensaje|necesito)\b/ },
+		{ locale: "fr-FR", culture: "French", pattern: /\b(bonjour|merci|s'il vous plait|équipe|besoin|message)\b/ },
+		{ locale: "de-DE", culture: "German", pattern: /\b(hallo|danke|bitte|team|nachricht|brauche)\b/ },
+		{ locale: "it-IT", culture: "Italian", pattern: /\b(ciao|grazie|per favore|squadra|messaggio|bisogno)\b/ },
+		{ locale: "pt-BR", culture: "Brazilian", pattern: /\b(olá|obrigado|por favor|equipe|mensagem|preciso)\b/ },
+		{ locale: "nl-NL", culture: "Dutch", pattern: /\b(hallo|dank|alsjeblieft|team|bericht|nodig)\b/ },
+		{ locale: "tr-TR", culture: "Turkish", pattern: /\b(merhaba|teşekkürler|lütfen|takım|mesaj|ihtiyacım)\b/ },
+		{ locale: "pl-PL", culture: "Polish", pattern: /\b(cześć|dziękuję|proszę|zespół|wiadomość|potrzebuję)\b/ }
+	];
+
+	for (const rule of latinRules) {
+		if (rule.pattern.test(lowered)) {
+			return { locale: rule.locale, culture: rule.culture, isEnglish: false };
+		}
+	}
+
+	const hasExtendedLatin = /[\u00C0-\u024F]/.test(value);
+	if (hasExtendedLatin) {
+		return { locale: "auto", culture: "Global", isEnglish: false };
+	}
+
+	return { locale: "en-US", culture: "American", isEnglish: true };
+}
+
+function isDirectChannel(channel) {
+	return String(channel?.kind || "").toLowerCase() === "dm" || String(channel?.id || "").startsWith("dm:") || String(channel?.name || "").startsWith("@");
+}
+
 function formatMessageTime(timestamp) {
 	const date = timestamp ? new Date(timestamp) : new Date();
 	if (Number.isNaN(date.getTime())) {
@@ -102,6 +164,8 @@ function toUiMessage(apiMessage) {
 	const reactions = Array.isArray(apiMessage?.reactions)
 		? apiMessage.reactions.map((reaction) => `${reaction.emoji || ""} ${Number(reaction.count) || 0}`.trim())
 		: [];
+	const originalText = String(apiMessage?.text || "").trim();
+	const translatedText = String(apiMessage?.text_translated || "").trim();
 
 	return {
 		id: String(apiMessage?.id || Date.now()),
@@ -109,10 +173,11 @@ function toUiMessage(apiMessage) {
 		initials: String(apiMessage?.user?.initials || "US"),
 		color: String(apiMessage?.user?.color || "#0f67b7"),
 		time: formatMessageTime(apiMessage?.created_at),
-		text: String(apiMessage?.text_translated || apiMessage?.text || ""),
+		text: originalText || translatedText,
+		translatedText: translatedText || null,
 		reactions,
-		translated: Boolean(apiMessage?.text_translated),
-		lang: apiMessage?.source_locale ? `=��� ${apiMessage.source_locale}` : undefined
+		translated: Boolean(translatedText),
+		lang: apiMessage?.source_locale ? `${apiMessage.source_locale} -> en-US` : undefined
 	};
 }
 
@@ -195,7 +260,7 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, jumpRef, collapsed }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, onJoinChannel, onLeaveChannel, joinedChannelIds, jumpRef, collapsed }) {
 	const [jumpSearch, setJumpSearch] = useState("");
 
 	if (isChatLayout) {
@@ -237,6 +302,9 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					channelUnread={channelUnread}
 					onCreateChannel={onCreateChannel}
 					onStartDirectMessage={onStartDirectMessage}
+					onJoinChannel={onJoinChannel}
+					onLeaveChannel={onLeaveChannel}
+					joinedChannelIds={joinedChannelIds}
 					variant="teams"
 				/>
 			</aside>
@@ -273,6 +341,9 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					activeChannelId={activeChannelId}
 					onChannelChange={onChannelChange}
 					channelUnread={channelUnread}
+					onJoinChannel={onJoinChannel}
+					onLeaveChannel={onLeaveChannel}
+					joinedChannelIds={joinedChannelIds}
 				/>
 			) : (
 				<SideSection activeView={activeView} />
@@ -513,6 +584,7 @@ function MainPanel({
 					channelMood={channelMood}
 					messages={messages}
 					accessibilityPrefs={accessibilityPrefs}
+					preferredLocale={authState?.user?.locale || "en-US"}
 					onSendMessage={onSendMessage}
 					onReactMessage={onReactMessage}
 					translateEnabled={translateEnabled}
@@ -544,6 +616,8 @@ function MainPanel({
 					onLogAction={onLogCarbon}
 					isSubmitting={carbonSaving}
 					errorText={carbonError}
+					onOpenSettings={() => onViewChange("settings")}
+					onOpenSupport={() => onViewChange("support")}
 				/>
 			);
 		}
@@ -616,6 +690,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const [channelUnread, setChannelUnread] = useState(() => loadFromStorage("spann-channel-unread", toFallbackUnread()));
 	const [translateEnabled, setTranslateEnabled] = useState(() => loadFromStorage("spann-translate-enabled", true));
 	const [showNudge, setShowNudge] = useState(() => loadFromStorage("spann-show-nudge", true));
+	const [joinedChannelIds, setJoinedChannelIds] = useState(() => loadFromStorage("spann-joined-channel-ids", []));
+	const [myReactionsByMessage, setMyReactionsByMessage] = useState(() => loadFromStorage("spann-my-reactions", {}));
 	const [channelMoodById, setChannelMoodById] = useState(() => toFallbackMoodByChannel());
 	const [pulseChannels, setPulseChannels] = useState(() =>
 		fallbackChannels.map((channel) => ({ id: channel.id, name: channel.name, energy: Number(channel.mood || 60) }))
@@ -810,6 +886,14 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}, [showNudge]);
 
 	useEffect(() => {
+		localStorage.setItem("spann-my-reactions", JSON.stringify(myReactionsByMessage));
+	}, [myReactionsByMessage]);
+
+	useEffect(() => {
+		localStorage.setItem("spann-joined-channel-ids", JSON.stringify(joinedChannelIds));
+	}, [joinedChannelIds]);
+
+	useEffect(() => {
 		setForcedTheme("light");
 
 		return () => {
@@ -865,6 +949,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			return;
 		}
 
+		if (!isUuidLike(channelId)) {
+			return;
+		}
+
 		try {
 			const payload = await apiRequest(`/channels/${encodeURIComponent(channelId)}/messages?limit=100`);
 			const apiMessages = Array.isArray(payload?.data?.messages) ? payload.data.messages : [];
@@ -895,6 +983,14 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		try {
 			const snapshots = await Promise.all(
 				channelRows.map(async (channel) => {
+					if (!isUuidLike(channel?.id)) {
+						return {
+							id: channel.id,
+							name: channel.name,
+							energy: Number(channelMoodById[channel.id] || 60)
+						};
+					}
+
 					try {
 						const payload = await apiRequest(`/pulse/${encodeURIComponent(channel.id)}`);
 						const snapshot = payload?.data || {};
@@ -1012,7 +1108,16 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						  }))
 						: fallbackChannels;
 
-				setChannels(mappedChannels);
+				setChannels((current) => {
+					const localOnlyChannels = (current || []).filter((channel) => !isUuidLike(channel?.id));
+					const merged = [...mappedChannels];
+					localOnlyChannels.forEach((channel) => {
+						if (!merged.some((row) => String(row.id) === String(channel.id))) {
+							merged.push(channel);
+						}
+					});
+					return merged;
+				});
 				setBackendConnected(true);
 
 				const nextChannelId = mappedChannels.some((channel) => String(channel.id) === String(activeChannelId))
@@ -1098,6 +1203,30 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		});
 	}, [channels]);
 
+	useEffect(() => {
+		setJoinedChannelIds((current) => {
+			const joinedSet = new Set((current || []).map((id) => String(id)));
+			let changed = false;
+			channels.forEach((channel) => {
+				if (isDirectChannel(channel)) {
+					return;
+				}
+				const id = String(channel.id || "");
+				if (!id) {
+					return;
+				}
+				if (!joinedSet.has(id)) {
+					joinedSet.add(id);
+					changed = true;
+				}
+			});
+			if (!changed) {
+				return current;
+			}
+			return Array.from(joinedSet);
+		});
+	}, [channels]);
+
 	function handleChannelChange(channelId) {
 		setChannelUnread((current) => ({
 			...current,
@@ -1150,25 +1279,134 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	function handleStartDirectMessage(person) {
-		const personName = String(person?.name || "teammate").trim();
+		const inputName = String(person?.name || "").trim();
+		const rawName = inputName || (typeof window !== "undefined" ? window.prompt("Start direct message with", "Sarah Chen") : "");
+		const personName = String(rawName || "").trim();
+		if (!personName) {
+			return;
+		}
+
+		const dmId = `dm:${personName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+		const dmName = `@${personName}`;
+
+		setChannels((current) => {
+			if (current.some((channel) => String(channel.id) === dmId)) {
+				return current;
+			}
+			return [
+				...current,
+				{
+					id: dmId,
+					name: dmName,
+					mood: 60,
+					kind: "dm"
+				}
+			];
+		});
+		setMessagesByChannel((current) => ({
+			...current,
+			[dmId]: current[dmId] || []
+		}));
+		setChannelUnread((current) => ({
+			...current,
+			[dmId]: 0
+		}));
+		setActiveView("chat");
+		setActiveChannelId(dmId);
 		pushAppNotice(`Started direct chat with ${personName}.`, "success");
 	}
 
-	async function handleSendMessage(channelId, text, translated) {
+	function handleJoinChannel(channelId) {
+		const id = String(channelId || "");
+		if (!id) {
+			return;
+		}
+		setJoinedChannelIds((current) => {
+			const set = new Set((current || []).map((value) => String(value)));
+			set.add(id);
+			return Array.from(set);
+		});
+		setActiveView("chat");
+		setActiveChannelId(id);
+		pushAppNotice("Joined group.", "success");
+	}
+
+	function handleLeaveChannel(channelId) {
+		const id = String(channelId || "");
+		if (!id) {
+			return;
+		}
+		setJoinedChannelIds((current) => (current || []).filter((value) => String(value) !== id));
+		if (String(activeChannelId) === id) {
+			const joinedSet = new Set((joinedChannelIds || []).map((value) => String(value)).filter((value) => value !== id));
+			const fallbackChannel = channels.find((channel) => isDirectChannel(channel) || joinedSet.has(String(channel.id)));
+			if (fallbackChannel) {
+				setActiveChannelId(fallbackChannel.id);
+			}
+		}
+		pushAppNotice("Left group.", "info");
+	}
+
+	async function handleSendMessage(channelId, text, translated, sendOptions = {}) {
 		if (!channelId) {
 			return;
 		}
 
+		let outboundText = String(text || "");
+		let sourceLocale = translated ? "en-US" : null;
+		let wasAutoTranslated = false;
+		let translatedEnglishText = "";
+		const fromVoice = String(sendOptions?.origin || "").toLowerCase() === "voice";
+		const voiceSourceLocale = String(sendOptions?.sourceLocale || "").trim();
+		const shouldUseAiAdaptation = translated || fromVoice || Boolean(sendOptions?.autoDetectLanguage) || Boolean(sendOptions?.applyCulturalMeaning);
+		const detected = detectSourceLanguage(text);
+
+		if (shouldUseAiAdaptation && (!detected.isEnglish || fromVoice)) {
+			try {
+				const channelTone = String(channels.find((channel) => String(channel.id) === String(channelId))?.tone || "neutral");
+				const translationPayload = await apiRequest("/translate", {
+					method: "POST",
+					body: JSON.stringify({
+						phrase: text,
+						source_locale: fromVoice ? "auto" : (detected.locale || voiceSourceLocale || "auto"),
+						target_locale: "en-US",
+						source_culture: fromVoice ? "auto" : (detected.culture || "Global"),
+						target_culture: "American",
+						workplace_tone: channelTone
+					})
+				});
+
+				const translationData = translationPayload?.data || translationPayload || {};
+				const literal = String(translationData?.literal || "").trim();
+				const cultural = String(translationData?.cultural || "").trim();
+				const culturallyAdapted = cultural || literal;
+				if (culturallyAdapted) {
+					translatedEnglishText = culturallyAdapted;
+					sourceLocale = fromVoice ? (voiceSourceLocale || "auto") : detected.locale;
+					wasAutoTranslated = true;
+					const localeLabel = fromVoice ? (voiceSourceLocale || "auto") : detected.locale;
+					pushAppNotice(`Translated from ${localeLabel} to English with cultural adaptation.`, "info");
+				}
+			} catch (error) {
+				if (fromVoice) {
+					pushAppNotice("AI translation unavailable right now. Sent original voice transcript.", "info");
+				} else {
+					pushAppNotice("Translation unavailable right now. Sent original text.", "info");
+				}
+			}
+		}
+
 		let usedLocalFallback = false;
 
-		if (backendConnected) {
+		if (backendConnected && isUuidLike(channelId)) {
 			try {
 				const payload = await apiRequest("/messages", {
 					method: "POST",
 					body: JSON.stringify({
 						channel_id: channelId,
-						text,
-						source_locale: translated ? "en-US" : null
+						text: String(text || "").trim(),
+						text_translated: translatedEnglishText || undefined,
+						source_locale: sourceLocale
 					})
 				});
 
@@ -1199,10 +1437,12 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			initials: "YU",
 			color: "#0f67b7",
 			time: formatted,
-			text,
+			text: String(text || "").trim(),
+			translatedText: translatedEnglishText || null,
+			origin: fromVoice ? "voice" : "text",
 			reactions: ["G�� 1"],
-			translated,
-			lang: translated ? "=��� en-US" : undefined
+			translated: wasAutoTranslated,
+			lang: wasAutoTranslated ? `${sourceLocale || "auto"} -> en-US` : undefined
 		};
 
 		setMessagesByChannel((current) => ({
@@ -1217,9 +1457,17 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			return;
 		}
 
+		const messageKey = String(messageId);
+		const emojiKey = String(emoji);
+		const alreadyReacted = Array.isArray(myReactionsByMessage?.[messageKey]) && myReactionsByMessage[messageKey].includes(emojiKey);
+		if (alreadyReacted) {
+			pushAppNotice("You already used that reaction on this message.", "info");
+			return;
+		}
+
 		let usedLocalFallback = false;
 
-		if (backendConnected) {
+		if (backendConnected && isUuidLike(channelId) && isUuidLike(messageId)) {
 			try {
 				const payload = await apiRequest(`/messages/${encodeURIComponent(messageId)}/reactions`, {
 					method: "POST",
@@ -1238,6 +1486,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 							reactions: reactions.map((reaction) => `${reaction.emoji} ${reaction.count}`)
 						};
 					})
+				}));
+				setMyReactionsByMessage((current) => ({
+					...current,
+					[messageKey]: [...(current[messageKey] || []), emojiKey]
 				}));
 				pushAppNotice("Reaction added.", "success");
 				return;
@@ -1262,6 +1514,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 					reactions: incrementReaction(message.reactions || [], emoji)
 				};
 			})
+		}));
+		setMyReactionsByMessage((current) => ({
+			...current,
+			[messageKey]: [...(current[messageKey] || []), emojiKey]
 		}));
 		pushAppNotice(usedLocalFallback ? "Reaction saved locally." : "Reaction added.", usedLocalFallback ? "info" : "success");
 	}
@@ -1447,6 +1703,9 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								onViewChange={setActiveView}
 								onCreateChannel={handleCreateChannel}
 								onStartDirectMessage={handleStartDirectMessage}
+								onJoinChannel={handleJoinChannel}
+								onLeaveChannel={handleLeaveChannel}
+								joinedChannelIds={joinedChannelIds}
 								jumpRef={jumpInputRef}
 								collapsed={sidebarCollapsed}
 								isChatLayout
@@ -1460,9 +1719,9 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 									activeChannel={activeChannel}
 									channelMood={activeMood}
 									messages={currentMessages}
-									onSendMessage={(channelLabel, text, translated) => {
+									onSendMessage={(channelLabel, text, translated, sendOptions) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-										return handleSendMessage(channel?.id || activeChannelId, text, translated);
+										return handleSendMessage(channel?.id || activeChannelId, text, translated, sendOptions);
 									}}
 									onReactMessage={(channelLabel, messageId, emoji) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);

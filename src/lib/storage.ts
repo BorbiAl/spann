@@ -1,4 +1,3 @@
-import Store from 'electron-store'
 import type { TranslationResult } from '../types/api'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,39 +61,95 @@ const defaults: StoreSchema = {
   offlineMessageQueue: [],
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Store instance
-// ─────────────────────────────────────────────────────────────────────────────
+// Conditional import: electron-store only in Electron, localStorage fallback in browser
+let store: any = null
 
-const store = new Store<StoreSchema>({
-  name: 'spann-prefs',
-  defaults,
-  // Encrypt sensitive fields at rest
-  encryptionKey: 'spann-local-enc-key-v1',
-  clearInvalidConfig: true,
-})
+// Try to load electron-store if in Electron context
+if (typeof window === 'undefined' || (window as any).__ELECTRON__) {
+  try {
+    const Store = require('electron-store').default
+    store = new Store<StoreSchema>({
+      name: 'spann-prefs',
+      defaults,
+      // Encrypt sensitive fields at rest
+      encryptionKey: 'spann-local-enc-key-v1',
+      clearInvalidConfig: true,
+    })
+  } catch (e) {
+    // electron-store not available, will use localStorage fallback
+  }
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Typed accessors
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function get<K extends keyof StoreSchema>(key: K): StoreSchema[K] {
-  return store.get(key)
+export function get<K extends keyof StoreSchema>(key: K): StoreSchema[K] | undefined {
+  if (store) {
+    return store.get(key)
+  }
+  // Fallback to localStorage
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(`spann-${String(key)}`) : null
+    if (raw === null) {
+      return undefined
+    }
+    return JSON.parse(raw)
+  } catch {
+    return undefined
+  }
 }
 
-export function set<K extends keyof StoreSchema>(
-  key: K,
-  value: StoreSchema[K],
-): void {
-  store.set(key, value)
+export function set<K extends keyof StoreSchema>(key: K, value: StoreSchema[K]): void {
+  if (store) {
+    store.set(key, value)
+  } else if (typeof window !== 'undefined') {
+    // Fallback to localStorage
+    try {
+      localStorage.setItem(`spann-${String(key)}`, JSON.stringify(value))
+    } catch {
+      // localStorage may be unavailable in some contexts
+    }
+  }
+}
+
+export function delete_(key: keyof StoreSchema): void {
+  if (store) {
+    store.delete(key)
+  } else if (typeof window !== 'undefined') {
+    // Fallback to localStorage
+    try {
+      localStorage.removeItem(`spann-${String(key)}`)
+    } catch {
+      // localStorage may be unavailable in some contexts
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clear all store data
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function clear(): void {
+  if (store) {
+    store.clear()
+  } else if (typeof window !== 'undefined') {
+    // Clear all spann-* keys from localStorage
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('spann-')) {
+          localStorage.removeItem(key)
+        }
+      })
+    } catch {
+      // localStorage may be unavailable in some contexts
+    }
+  }
 }
 
 export function deleteKey<K extends keyof StoreSchema>(key: K): void {
-  store.delete(key)
-}
-
-export function clear(): void {
-  store.clear()
+  delete_(key)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

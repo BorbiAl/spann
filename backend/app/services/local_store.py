@@ -40,6 +40,7 @@ class LocalUser:
     accessibility_settings: dict[str, Any] | None = None
     bio: str | None = None
     timezone: str | None = None
+    avatar_url: str | None = None
 
 
 class LocalStore:
@@ -95,7 +96,15 @@ class LocalStore:
             return False
         return "." in domain and domain not in PERSONAL_EMAIL_DOMAINS
 
-    def register_user(self, *, email: str, password: str, name: str, company_name: str | None = None) -> dict[str, Any]:
+    def register_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        name: str,
+        company_name: str | None = None,
+        locale: str | None = None,
+    ) -> dict[str, Any]:
         normalized_email = email.strip().lower()
         if normalized_email in self.users_by_email:
             raise ValueError("email_already_exists")
@@ -107,6 +116,7 @@ class LocalStore:
             email=normalized_email,
             password_hash=self._hash_password(password),
             display_name=display_name,
+            locale=locale or "en-US",
             accessibility_settings={},
         )
         self.users_by_email[normalized_email] = user
@@ -234,7 +244,7 @@ class LocalStore:
             "locale": user.locale,
             "coaching_enabled": user.coaching_enabled,
             "role": "member",
-            "avatar_url": None,
+            "avatar_url": user.avatar_url,
         }
 
     def update_user_profile(
@@ -244,6 +254,7 @@ class LocalStore:
         display_name: str | None,
         bio: str | None,
         timezone: str | None,
+        avatar_url: str | None,
     ) -> dict[str, Any] | None:
         user = self.users_by_id.get(user_id)
         if user is None:
@@ -254,6 +265,8 @@ class LocalStore:
             user.bio = bio.strip() or None
         if timezone is not None:
             user.timezone = timezone or None
+        if avatar_url is not None:
+            user.avatar_url = avatar_url or None
         return self.get_user_profile(user_id)
 
     def create_refresh_token(
@@ -376,6 +389,7 @@ class LocalStore:
         user_id: str,
         workspace_id: str,
         text: str,
+        text_translated: str | None,
         mesh_origin: bool,
         source_locale: str | None,
     ) -> dict[str, Any]:
@@ -386,7 +400,7 @@ class LocalStore:
             "user_id": user_id,
             "workspace_id": workspace_id,
             "text": text,
-            "text_translated": None,
+            "text_translated": text_translated,
             "source_locale": source_locale,
             "sentiment_score": None,
             "mesh_origin": bool(mesh_origin),

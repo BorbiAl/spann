@@ -17,6 +17,7 @@ from app.config import settings
 # in the workers.
 _celery_loop: Optional[asyncio.AbstractEventLoop] = None
 _celery_thread: Optional[threading.Thread] = None
+_fallback_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 @worker_process_init.connect
@@ -40,7 +41,14 @@ def run_async(coro):
     """Run an async coroutine on the background worker loop synchronously."""
     if _celery_loop is None or not _celery_loop.is_running():
         # Fallback for eager task execution in tests or the main process.
-        return asyncio.run(coro)
+        # Use a persistent fallback loop that doesn't get closed.
+        global _fallback_loop
+        
+        if _fallback_loop is None or _fallback_loop.is_closed():
+            _fallback_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(_fallback_loop)
+        
+        return _fallback_loop.run_until_complete(coro)
     return asyncio.run_coroutine_threadsafe(coro, _celery_loop).result()
 
 celery_app = Celery(

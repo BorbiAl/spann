@@ -41,7 +41,27 @@ async def patch_me(
         display_name=payload.display_name,
         bio=payload.bio,
         timezone=payload.timezone,
+        avatar_url=payload.avatar_url,
     )
+
+    if updated is None:
+        resolved_email = await db.resolve_user_email(user_id=user_id, fallback_email=payload.email)
+        if resolved_email:
+            bootstrap_name = payload.display_name or resolved_email.split("@", 1)[0]
+            await db.upsert_user_profile(
+                user_id=user_id,
+                email=resolved_email,
+                display_name=bootstrap_name,
+                locale="en-US",
+            )
+            updated = await db.update_user_profile(
+                user_id=user_id,
+                display_name=payload.display_name,
+                bio=payload.bio,
+                timezone=payload.timezone,
+                avatar_url=payload.avatar_url,
+            )
+
     if updated is None:
         return JSONResponse(status_code=404, content={"detail": {"error_code": "user_not_found", "message": "User not found."}})
     return success_response(updated)
