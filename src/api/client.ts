@@ -5,6 +5,8 @@ import axios, {
 } from 'axios'
 import { tokenManager } from '../lib/tokens'
 
+type RuntimeWindow = Window & { SPANN_API_BASE?: string }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,8 +56,26 @@ function uuidv4(): string {
 // Axios instance
 // ─────────────────────────────────────────────────────────────────────────────
 
+const runtimeApiBase =
+  typeof window !== 'undefined'
+    ? (window as RuntimeWindow).SPANN_API_BASE ?? ''
+    : ''
+const envApiBase = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? ''
+const isFileProtocol =
+  typeof window !== 'undefined' && window.location?.protocol === 'file:'
+const isAndroid =
+  typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent ?? '')
+const nativeDefaultApiBase = isAndroid
+  ? 'http://10.0.2.2:8000'
+  : 'http://127.0.0.1:8000'
+const fallbackApiBase = isFileProtocol ? nativeDefaultApiBase : '/api'
+const resolvedApiBase = String(runtimeApiBase || envApiBase || fallbackApiBase).replace(
+  /\/+$/,
+  '',
+)
+
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8000',
+  baseURL: resolvedApiBase,
   timeout: 15_000,
   headers: {
     'Content-Type': 'application/json',
@@ -96,7 +116,11 @@ apiClient.interceptors.response.use(
 
     // Never retry auth endpoints — avoids infinite loops
     const url = originalRequest.url ?? ''
-    if (url.includes('/auth/refresh') || url.includes('/auth/login')) {
+    if (
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/login') ||
+      url.includes('/auth/register')
+    ) {
       return Promise.reject(error)
     }
 
@@ -126,7 +150,31 @@ apiClient.interceptors.response.use(
       const { authApi } = await import('./auth')
       // Get email from store to look up refresh token
       const { useAuthStore } = await import('../store/auth')
-      const email = useAuthStore.getState().user?.email ?? ''
+      let email = useAuthStore.getState().user?.email?.trim() ?? ''
+
+      if (!email) {
+        try {
+          const { get: storeGet } = await import('../lib/storage')
+          const lastEmail = storeGet('lastEmail')
+          if (typeof lastEmail === 'string' && lastEmail.trim()) {
+            email = lastEmail.trim()
+          }
+        } catch {
+          // Ignore storage fallback failures and keep trying other fallbacks.
+        }
+      }
+
+      if (!email && typeof localStorage !== 'undefined') {
+        const lastEmail = localStorage.getItem('lastEmail')
+        if (lastEmail?.trim()) {
+          email = lastEmail.trim()
+        }
+      }
+
+      if (!email) {
+        throw new Error('No account email available for refresh token lookup')
+      }
+
       const storedRefresh = await tokenManager.getRefreshToken(email)
 
       if (!storedRefresh) {
@@ -137,9 +185,7 @@ apiClient.interceptors.response.use(
       tokenManager.setAccessToken(refreshed.access_token)
 
       // Persist new refresh token
-      if (email) {
-        await tokenManager.saveRefreshToken(email, refreshed.refresh_token)
-      }
+      await tokenManager.saveRefreshToken(email, refreshed.refresh_token)
 
       processQueue(null, refreshed.access_token)
 

@@ -46,19 +46,32 @@ def _resolve_database_url() -> str:
     for env_file in candidates:
         if not env_file.exists():
             continue
+        discovered: dict[str, str] = {}
         for raw_line in env_file.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
-            if key.strip() in {
+            normalized_key = key.strip()
+            if normalized_key not in {
                 "SUPABASE_TRANSACTION_POOLER_URL",
                 "SUPABASE_DB_URL",
                 "DATABASE_URL",
             }:
-                cleaned = value.strip().strip('"').strip("'")
-                if cleaned:
-                    return _normalize_database_url(cleaned)
+                continue
+
+            cleaned = value.strip().strip('"').strip("'")
+            if cleaned:
+                discovered[normalized_key] = cleaned
+
+        for key in (
+            "SUPABASE_TRANSACTION_POOLER_URL",
+            "SUPABASE_DB_URL",
+            "DATABASE_URL",
+        ):
+            selected = discovered.get(key)
+            if selected:
+                return _normalize_database_url(selected)
 
     raise RuntimeError(
         "SUPABASE_TRANSACTION_POOLER_URL, SUPABASE_DB_URL, or DATABASE_URL "

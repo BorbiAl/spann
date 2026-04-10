@@ -49,6 +49,8 @@ class LocalStore:
         self.workspaces: dict[str, dict[str, Any]] = {}
         self.workspace_members: list[dict[str, Any]] = []
         self.workspace_domains: dict[str, str] = {}
+        self.workspace_invitations: list[dict[str, Any]] = []
+        self.workspace_join_requests: list[dict[str, Any]] = []
 
         self.refresh_tokens: dict[str, dict[str, Any]] = {}
         self.channels: dict[str, dict[str, Any]] = {}

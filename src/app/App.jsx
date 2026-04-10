@@ -7,11 +7,18 @@ import {
 	APP_NOTICE_EVENT_NAME,
 	NETWORK_LOADING_EVENT_NAME,
 	apiRequest,
+	createOrganization,
+	decideOrganizationInvitation,
+	decideOrganizationJoinRequest,
+	fetchOrganizationOnboarding,
 	getAuthState,
+	inviteOrganizationMember,
 	loginWithPassword,
 	normalizeApiError,
 	logoutSession,
-	registerWithPassword
+	registerWithPassword,
+	requestOrganizationJoin,
+	setAuthState
 } from "../data/constants";
 
 const ENTRY_STAGE_KEY = "spann-entry-stage";
@@ -184,6 +191,10 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 			return "This email is already registered. Try signing in or use Forgot password.";
 		}
 
+		if (code === "passwords_do_not_match") {
+			return "Passwords do not match. Please re-enter them.";
+		}
+
 		if (code === "invalid_credentials") {
 			return "We could not sign you in. Check your email and password, then try again.";
 		}
@@ -277,6 +288,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 				const result = await registerWithPassword({
 					email: email.trim(),
 					password,
+					confirmPassword,
 					name: name.trim(),
 					companyName: null,
 					persistSession: true,
@@ -607,11 +619,11 @@ function AppFlow() {
 	const noticeTimerRef = useRef(null);
 	const [entryStage, setEntryStage] = useState(() => {
 		if (initialAuth?.accessToken) {
-			return "workspace";
+			return "organization";
 		}
 
 		const raw = localStorage.getItem(ENTRY_STAGE_KEY);
-		if (raw === "landing" || raw === "auth" || raw === "workspace") {
+		if (raw === "landing" || raw === "auth" || raw === "organization" || raw === "workspace") {
 			return raw;
 		}
 		return "landing";
@@ -715,7 +727,7 @@ function AppFlow() {
 		content = (
 			<LandingScreen
 				onContinueWeb={() => setEntryStage("auth")}
-				onContinueWorkspace={() => setEntryStage(hasSession ? "workspace" : "auth")}
+				onContinueWorkspace={() => setEntryStage(hasSession ? "organization" : "auth")}
 				hasSession={hasSession}
 			/>
 		);
@@ -725,9 +737,20 @@ function AppFlow() {
 				onBack={() => setEntryStage("landing")}
 				onAuthenticated={(nextAuthState) => {
 					setAuthState(nextAuthState);
-					setEntryStage("workspace");
+					setEntryStage("organization");
 				}}
 				defaultEmail={authState?.user?.email || ""}
+			/>
+		);
+	} else if (entryStage === "organization") {
+		content = (
+			<OrganizationOnboardingScreen
+				authState={authState}
+				onWorkspaceReady={(nextAuthState) => {
+					setAuthState(nextAuthState || authState);
+					setEntryStage("workspace");
+				}}
+				onLogout={handleLogout}
 			/>
 		);
 	} else {
@@ -757,5 +780,338 @@ export default function App() {
 		<ThemeProvider>
 			<AppFlow />
 		</ThemeProvider>
+	);
+}
+
+function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout }) {
+	const [mode, setMode] = useState("create");
+	const [loading, setLoading] = useState(true);
+	const [submitting, setSubmitting] = useState(false);
+	const [errorText, setErrorText] = useState("");
+	const [infoText, setInfoText] = useState("");
+	const [createName, setCreateName] = useState("");
+	const [inviteEmails, setInviteEmails] = useState("");
+	const [joinMessage, setJoinMessage] = useState("");
+	const [state, setState] = useState({
+		my_organizations: [],
+		discoverable_organizations: [],
+		pending_invitations: [],
+		pending_join_requests: [],
+		current_workspace_id: ""
+	});
+
+	async function loadState() {
+		setLoading(true);
+		setErrorText("");
+		try {
+			const payload = await fetchOrganizationOnboarding();
+			setState({
+				my_organizations: Array.isArray(payload?.my_organizations) ? payload.my_organizations : [],
+				discoverable_organizations: Array.isArray(payload?.discoverable_organizations) ? payload.discoverable_organizations : [],
+				pending_invitations: Array.isArray(payload?.pending_invitations) ? payload.pending_invitations : [],
+				pending_join_requests: Array.isArray(payload?.pending_join_requests) ? payload.pending_join_requests : [],
+				current_workspace_id: String(payload?.current_workspace_id || "")
+			});
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Could not load organization setup state.");
+			setErrorText(normalized.message || "Could not load organization setup state.");
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	useEffect(() => {
+		loadState();
+	}, []);
+
+	function persistWorkspaceId(workspaceId) {
+		const nextAuthState = {
+			...(authState || {}),
+			workspaceId: workspaceId || authState?.workspaceId || ""
+		};
+		const saved = setAuthState(nextAuthState, {
+			persist: Boolean(authState?.persist)
+		});
+		onWorkspaceReady(saved || nextAuthState);
+	}
+
+	async function handleCreateOrganization(event) {
+		event.preventDefault();
+		if (submitting) {
+			return;
+		}
+
+		if (!createName.trim()) {
+			setErrorText("Organization name is required.");
+			return;
+		}
+
+		setSubmitting(true);
+		setErrorText("");
+		setInfoText("");
+
+		try {
+			const created = await createOrganization({ name: createName.trim() });
+			const organization = created?.organization || created || {};
+			const workspaceId = String(organization.id || organization.workspace_id || "");
+			if (!workspaceId) {
+				throw new Error("Organization was created but workspace id is missing.");
+			}
+
+			const emails = inviteEmails
+				.split(/[\n,;]+/)
+				.map((email) => String(email || "").trim().toLowerCase())
+				.filter((email) => EMAIL_PATTERN.test(email));
+
+			let invitedCount = 0;
+			for (const email of emails) {
+				try {
+					await inviteOrganizationMember({
+						workspaceId,
+						email,
+						note: "You have been invited to join this organization."
+					});
+					invitedCount += 1;
+				} catch {
+					// Continue inviting remaining emails even if one fails.
+				}
+			}
+
+			if (invitedCount > 0) {
+				setInfoText(`Organization created. Sent ${invitedCount} invitation${invitedCount === 1 ? "" : "s"}.`);
+			} else {
+				setInfoText("Organization created successfully.");
+			}
+
+			persistWorkspaceId(workspaceId);
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Could not create organization.");
+			setErrorText(normalized.message || "Could not create organization.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	async function handleJoinRequest(workspaceId) {
+		if (!workspaceId || submitting) {
+			return;
+		}
+
+		setSubmitting(true);
+		setErrorText("");
+		setInfoText("");
+		try {
+			await requestOrganizationJoin({ workspaceId, message: joinMessage.trim() || null });
+			setInfoText("Join request submitted. An owner will approve or reject it.");
+			await loadState();
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Could not submit join request.");
+			setErrorText(normalized.message || "Could not submit join request.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	async function handleJoinDecision(joinRequestId, decision) {
+		if (!joinRequestId || submitting) {
+			return;
+		}
+
+		setSubmitting(true);
+		setErrorText("");
+		setInfoText("");
+		try {
+			await decideOrganizationJoinRequest({ joinRequestId, decision });
+			setInfoText(decision === "approve" ? "Join request approved." : "Join request rejected.");
+			await loadState();
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Could not update join request.");
+			setErrorText(normalized.message || "Could not update join request.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	async function handleInvitationDecision(invitationId, decision, workspaceId) {
+		if (!invitationId || submitting) {
+			return;
+		}
+
+		setSubmitting(true);
+		setErrorText("");
+		setInfoText("");
+		try {
+			await decideOrganizationInvitation({ invitationId, decision });
+			if (decision === "accept") {
+				setInfoText("Invitation accepted.");
+				persistWorkspaceId(workspaceId || authState?.workspaceId || "");
+				return;
+			}
+			setInfoText("Invitation rejected.");
+			await loadState();
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Could not update invitation.");
+			setErrorText(normalized.message || "Could not update invitation.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	const myOrganizations = Array.isArray(state?.my_organizations) ? state.my_organizations : [];
+	const discoverableOrganizations = Array.isArray(state?.discoverable_organizations) ? state.discoverable_organizations : [];
+	const pendingInvitations = Array.isArray(state?.pending_invitations) ? state.pending_invitations : [];
+	const pendingJoinRequests = Array.isArray(state?.pending_join_requests) ? state.pending_join_requests : [];
+	const hasOrganization = myOrganizations.length > 0;
+
+	return (
+		<div className="auth-shell auth-mode-register">
+			<section className="auth-card register">
+				<div className="auth-main" style={{ width: "100%" }}>
+					<div className="auth-head">
+						<h2>Create an organization or join one</h2>
+						<p>Choose how you want to start collaborating in Spann.</p>
+					</div>
+
+					<div className="auth-inline-row" style={{ marginBottom: 12 }}>
+						<button type="button" className="auth-text-link inline" onClick={() => setMode("create")}>Create organization</button>
+						<button type="button" className="auth-text-link inline" onClick={() => setMode("join")}>Join organization</button>
+					</div>
+
+					{errorText ? (
+						<div className="auth-banner error" role="alert" aria-live="assertive">
+							<span>{errorText}</span>
+							<button type="button" onClick={() => setErrorText("")} aria-label="Dismiss alert">
+								<Icon name="close" size={14} />
+							</button>
+						</div>
+					) : null}
+					{!errorText && infoText ? (
+						<div className="auth-banner info" role="status" aria-live="polite">
+							<span>{infoText}</span>
+							<button type="button" onClick={() => setInfoText("")} aria-label="Dismiss info">
+								<Icon name="close" size={14} />
+							</button>
+						</div>
+					) : null}
+
+					{loading ? <p>Loading organization options...</p> : null}
+
+					{!loading && mode === "create" ? (
+						<form className="auth-form" onSubmit={handleCreateOrganization}>
+							<label className="auth-field">
+								<span>Organization name</span>
+								<input
+									type="text"
+									className="auth-input"
+									value={createName}
+									onChange={(event) => setCreateName(event.target.value)}
+									placeholder="Acme Engineering"
+									required
+								/>
+							</label>
+							<label className="auth-field">
+								<span>Invite emails (comma or newline separated)</span>
+								<textarea
+									className="auth-input"
+									value={inviteEmails}
+									onChange={(event) => setInviteEmails(event.target.value)}
+									placeholder="teammate1@company.com, teammate2@company.com"
+									rows={4}
+								/>
+							</label>
+							<button type="submit" className="accent-btn auth-submit" disabled={submitting}>
+								{submitting ? "Creating..." : "Create organization"}
+							</button>
+						</form>
+					) : null}
+
+					{!loading && mode === "join" ? (
+						<div className="auth-form">
+							<label className="auth-field">
+								<span>Optional message to owner</span>
+								<textarea
+									className="auth-input"
+									value={joinMessage}
+									onChange={(event) => setJoinMessage(event.target.value)}
+									placeholder="Hi, I work with your team and need access to this workspace."
+									rows={3}
+								/>
+							</label>
+							<div className="auth-form-grid" style={{ display: "grid", gap: 10 }}>
+								{discoverableOrganizations.length === 0 ? <p>No public organizations available right now.</p> : null}
+								{discoverableOrganizations.map((organization) => (
+									<div key={organization.id} className="auth-inline-row" style={{ justifyContent: "space-between", border: "1px solid var(--line)", borderRadius: 14, padding: "10px 12px" }}>
+										<div>
+											<strong>{organization.name}</strong>
+											<div className="status-subtext">{organization.slug}</div>
+										</div>
+										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
+											Request to join
+										</button>
+									</div>
+								))}
+							</div>
+						</div>
+					) : null}
+
+					{pendingInvitations.length > 0 ? (
+						<div style={{ marginTop: 14 }}>
+							<h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Invitations</h3>
+							{pendingInvitations.map((invitation) => (
+								<div key={invitation.id} className="auth-inline-row" style={{ justifyContent: "space-between", border: "1px solid var(--line)", borderRadius: 14, padding: "10px 12px", marginBottom: 8 }}>
+									<div>
+										<strong>{invitation.workspace_name || "Organization"}</strong>
+										<div className="status-subtext">{invitation.email}</div>
+									</div>
+									<div className="auth-inline-row">
+										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "accept", invitation.workspace_id)}>Accept</button>
+										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "reject", invitation.workspace_id)}>Reject</button>
+									</div>
+								</div>
+							))}
+						</div>
+					) : null}
+
+					{pendingJoinRequests.length > 0 ? (
+						<div style={{ marginTop: 14 }}>
+							<h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Pending join requests</h3>
+							{pendingJoinRequests.map((requestItem) => (
+								<div key={requestItem.id} className="auth-inline-row" style={{ justifyContent: "space-between", border: "1px solid var(--line)", borderRadius: 14, padding: "10px 12px", marginBottom: 8 }}>
+									<div>
+										<strong>{requestItem.requester_display_name || requestItem.requester_email || "User"}</strong>
+										<div className="status-subtext">{requestItem.workspace_name || "Organization"}</div>
+									</div>
+									<div className="auth-inline-row">
+										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "approve")}>Approve</button>
+										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "reject")}>Reject</button>
+									</div>
+								</div>
+							))}
+						</div>
+					) : null}
+
+					{myOrganizations.length > 0 ? (
+						<div style={{ marginTop: 14 }}>
+							<h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Your organizations</h3>
+							<div className="status-subtext">
+								{myOrganizations.map((item) => `${item.name || "Organization"} (${item.role})`).join(" • ")}
+							</div>
+						</div>
+					) : null}
+
+					<div className="auth-inline-row" style={{ marginTop: 16, justifyContent: "space-between" }}>
+						<button type="button" className="auth-text-link inline" onClick={onLogout}>Sign out</button>
+						<button
+							type="button"
+							className="accent-btn auth-submit"
+							disabled={!hasOrganization && !authState?.workspaceId}
+							onClick={() => onWorkspaceReady(authState)}
+						>
+							Continue to workspace
+						</button>
+					</div>
+				</div>
+			</section>
+		</div>
 	);
 }

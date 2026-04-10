@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -277,6 +278,31 @@ class DatabaseClient:
         return "already registered" in text or "already exists" in text or "email_exists" in text
 
     @staticmethod
+    def _is_users_email_conflict(exc: Exception) -> bool:
+        """Return True when users table email unique constraint is violated."""
+
+        parts = [str(exc).lower()]
+        for attr in ("message", "details", "hint", "code"):
+            value = getattr(exc, attr, None)
+            if value:
+                parts.append(str(value).lower())
+        text = " ".join(parts)
+        return (
+            "users_email_key" in text
+            or ("duplicate key" in text and "email" in text)
+            or ("23505" in text and "email" in text)
+        )
+
+    @staticmethod
+    async def _close_async_client_safely(client: Any) -> None:
+        """Attempt to close ephemeral async clients without surfacing cleanup errors."""
+
+        close_fn = getattr(client, "aclose", None)
+        if callable(close_fn):
+            with suppress(Exception):
+                await close_fn()
+
+    @staticmethod
     def _workspace_name_for_registration(*, display_name: str, company_name: str | None, email_domain: str | None) -> str:
         if company_name:
             return f"{company_name} Workspace"
@@ -459,6 +485,8 @@ class DatabaseClient:
                         company_name=safe_company_name,
                     )
                 raise
+        finally:
+            await self._close_async_client_safely(auth_client)
 
         if user is None:
             raise HTTPException(
@@ -467,12 +495,17 @@ class DatabaseClient:
             )
 
         user_id = str(user.id)
-        await self.upsert_user_profile(
-            user_id=user_id,
-            email=user.email or normalized_email,
-            display_name=display_name,
-            locale="en-US",
-        )
+        try:
+            await self.upsert_user_profile(
+                user_id=user_id,
+                email=user.email or normalized_email,
+                display_name=display_name,
+                locale="en-US",
+            )
+        except Exception as exc:
+            if self._is_users_email_conflict(exc):
+                raise ValueError("email_already_exists") from exc
+            raise
 
         write_client = await self._privileged_client()
 
@@ -623,6 +656,656 @@ class DatabaseClient:
             ),
         )
 
+    async def list_user_organizations(self, *, user_id: str) -> list[dict[str, Any]]:
+        """Return organizations where the user is a member."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode:
+            memberships = [m for m in local_store.workspace_members if m.get("user_id") == safe_user_id]
+            memberships.sort(key=lambda row: str(row.get("joined_at", "")))
+            rows: list[dict[str, Any]] = []
+            for member in memberships:
+                workspace = local_store.workspaces.get(str(member.get("workspace_id")), {})
+                rows.append(
+                    {
+                        "workspace_id": str(member.get("workspace_id", "")),
+                        "role": str(member.get("role", "member")).lower(),
+                        "joined_at": member.get("joined_at"),
+                        "workspace": {
+                            "id": workspace.get("id"),
+                            "name": workspace.get("name"),
+                            "slug": workspace.get("slug"),
+                            "created_at": workspace.get("created_at"),
+                        },
+                    }
+                )
+            return rows
+
+        client = await self._privileged_client()
+        response = await self._execute(
+            "list_user_organizations",
+            client.table("workspace_members")
+            .select("workspace_id,role,joined_at,workspaces(id,name,slug,created_at)")
+            .eq("user_id", safe_user_id)
+            .order("joined_at", desc=False),
+        )
+        rows = self._extract_data(response) or []
+        normalized: list[dict[str, Any]] = []
+        for row in rows:
+            workspace = row.get("workspaces") if isinstance(row, dict) else None
+            normalized.append(
+                {
+                    "workspace_id": str(row.get("workspace_id", "")),
+                    "role": str(row.get("role", "member")).lower(),
+                    "joined_at": row.get("joined_at"),
+                    "workspace": {
+                        "id": workspace.get("id") if isinstance(workspace, dict) else row.get("workspace_id"),
+                        "name": workspace.get("name") if isinstance(workspace, dict) else None,
+                        "slug": workspace.get("slug") if isinstance(workspace, dict) else None,
+                        "created_at": workspace.get("created_at") if isinstance(workspace, dict) else None,
+                    },
+                }
+            )
+        return normalized
+
+    async def list_discoverable_organizations(
+        self,
+        *,
+        user_id: str,
+        search: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List organizations that the user is not yet a member of."""
+
+        safe_search = self._sanitize_optional_text(search, max_len=120)
+        memberships = await self.list_user_organizations(user_id=user_id)
+        my_workspace_ids = {
+            str(row.get("workspace_id", ""))
+            for row in memberships
+            if isinstance(row, dict)
+        }
+
+        if settings.test_mode:
+            rows = []
+            for workspace in local_store.workspaces.values():
+                workspace_id = str(workspace.get("id", ""))
+                if not workspace_id or workspace_id in my_workspace_ids:
+                    continue
+                if safe_search and safe_search.lower() not in str(workspace.get("name", "")).lower():
+                    continue
+                rows.append(
+                    {
+                        "id": workspace.get("id"),
+                        "name": workspace.get("name"),
+                        "slug": workspace.get("slug"),
+                        "created_at": workspace.get("created_at"),
+                    }
+                )
+            rows.sort(key=lambda item: str(item.get("name", "")).lower())
+            return rows[: max(1, min(limit, 200))]
+
+        client = await self._privileged_client()
+        query = client.table("workspaces").select("id,name,slug,created_at").order("created_at", desc=False)
+        if safe_search:
+            query = query.ilike("name", f"%{safe_search}%")
+        response = await self._execute("list_discoverable_organizations", query.limit(max(1, min(limit, 200))))
+        rows = self._extract_data(response) or []
+        return [
+            row
+            for row in rows
+            if str(row.get("id", "")) not in my_workspace_ids
+        ]
+
+    async def create_organization(self, *, owner_user_id: str, name: str) -> dict[str, Any]:
+        """Create a new organization and assign owner membership."""
+
+        safe_owner_id = self._sanitize_text(owner_user_id, max_len=128)
+        safe_name = self._sanitize_text(name, max_len=120)
+        if not safe_name:
+            raise HTTPException(status_code=422, detail={"code": "invalid_name", "message": "Organization name is required."})
+
+        workspace_id = str(uuid4())
+        now_iso = datetime.now(UTC).isoformat()
+        payload = {
+            "id": workspace_id,
+            "name": safe_name,
+            "slug": f"ws-{workspace_id[:8]}",
+            "created_at": now_iso,
+        }
+
+        if settings.test_mode:
+            local_store.workspaces[workspace_id] = payload
+            await self.add_workspace_member(
+                workspace_id=workspace_id,
+                user_id=safe_owner_id,
+                role="owner",
+            )
+            return payload
+
+        client = await self._privileged_client()
+        response = await self._execute("create_organization", client.table("workspaces").insert(payload))
+        rows = self._extract_data(response) or []
+        created = cast(dict[str, Any], rows[0]) if rows else payload
+        await self.add_workspace_member(
+            workspace_id=workspace_id,
+            user_id=safe_owner_id,
+            role="owner",
+        )
+        return created
+
+    async def get_user_email(self, *, user_id: str) -> str | None:
+        """Lookup canonical user email address from profile store."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode:
+            user = local_store.users_by_id.get(safe_user_id)
+            return user.email if user is not None else None
+
+        client = await self._privileged_client()
+        response = await self._execute(
+            "get_user_email",
+            client.table("users").select("email").eq("id", safe_user_id).limit(1),
+        )
+        rows = self._extract_data(response) or []
+        if not rows:
+            return None
+        email = rows[0].get("email")
+        return str(email).lower() if email else None
+
+    async def invite_user_by_email(
+        self,
+        *,
+        workspace_id: str,
+        invited_by_user_id: str,
+        email: str,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Invite a user email to join an organization."""
+
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        safe_inviter_id = self._sanitize_text(invited_by_user_id, max_len=128)
+        safe_email = self._sanitize_text(email.lower(), max_len=320)
+        safe_note = self._sanitize_optional_text(note, max_len=500)
+        now_iso = datetime.now(UTC).isoformat()
+
+        if settings.test_mode:
+            invited_user = local_store.users_by_email.get(safe_email)
+            if invited_user is not None:
+                member = local_store.verify_workspace_access(
+                    user_id=invited_user.id,
+                    workspace_id=safe_workspace_id,
+                    required_role=None,
+                )
+                if member is not None:
+                    return {
+                        "status": "already_member",
+                        "workspace_id": safe_workspace_id,
+                        "email": safe_email,
+                    }
+
+            existing = next(
+                (
+                    row
+                    for row in local_store.workspace_invitations
+                    if row.get("workspace_id") == safe_workspace_id and row.get("email") == safe_email
+                ),
+                None,
+            )
+            payload = {
+                "id": str(uuid4()),
+                "workspace_id": safe_workspace_id,
+                "email": safe_email,
+                "invited_user_id": invited_user.id if invited_user is not None else None,
+                "invited_by_user_id": safe_inviter_id,
+                "status": "pending",
+                "note": safe_note,
+                "created_at": now_iso,
+                "responded_at": None,
+            }
+            if existing is None:
+                local_store.workspace_invitations.append(payload)
+                return payload
+            existing.update(payload)
+            existing["id"] = existing.get("id") or str(uuid4())
+            return existing
+
+        client = await self._privileged_client()
+
+        invited_user_id: str | None = None
+        user_lookup = await self._execute(
+            "invite_lookup_user_by_email",
+            client.table("users").select("id").eq("email", safe_email).limit(1),
+        )
+        user_rows = self._extract_data(user_lookup) or []
+        if user_rows:
+            invited_user_id = str(user_rows[0].get("id", ""))
+
+        if invited_user_id:
+            membership_lookup = await self._execute(
+                "invite_lookup_existing_member",
+                client.table("workspace_members")
+                .select("workspace_id")
+                .eq("workspace_id", safe_workspace_id)
+                .eq("user_id", invited_user_id)
+                .limit(1),
+            )
+            membership_rows = self._extract_data(membership_lookup) or []
+            if membership_rows:
+                return {
+                    "status": "already_member",
+                    "workspace_id": safe_workspace_id,
+                    "email": safe_email,
+                }
+
+        payload = {
+            "id": str(uuid4()),
+            "workspace_id": safe_workspace_id,
+            "email": safe_email,
+            "invited_user_id": invited_user_id,
+            "invited_by_user_id": safe_inviter_id,
+            "status": "pending",
+            "note": safe_note,
+            "created_at": now_iso,
+            "responded_at": None,
+        }
+
+        response = await self._execute(
+            "invite_user_by_email",
+            client.table("workspace_invitations").upsert(cast(Any, payload), on_conflict="workspace_id,email"),
+        )
+        rows = self._extract_data(response) or []
+        return cast(dict[str, Any], rows[0]) if rows else payload
+
+    async def list_pending_invitations_for_user(self, *, user_id: str) -> list[dict[str, Any]]:
+        """List pending organization invitations for the authenticated user."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        user_email = await self.get_user_email(user_id=safe_user_id)
+        if not user_email:
+            return []
+
+        if settings.test_mode:
+            rows = []
+            for row in local_store.workspace_invitations:
+                if row.get("status") != "pending":
+                    continue
+                if row.get("invited_user_id") != safe_user_id and str(row.get("email", "")).lower() != user_email:
+                    continue
+                workspace = local_store.workspaces.get(str(row.get("workspace_id")), {})
+                rows.append(
+                    {
+                        "id": row.get("id"),
+                        "workspace_id": row.get("workspace_id"),
+                        "workspace_name": workspace.get("name"),
+                        "workspace_slug": workspace.get("slug"),
+                        "email": row.get("email"),
+                        "status": row.get("status"),
+                        "note": row.get("note"),
+                        "created_at": row.get("created_at"),
+                    }
+                )
+            rows.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+            return rows
+
+        client = await self._privileged_client()
+
+        by_user_response = await self._execute(
+            "list_invitations_by_user",
+            client.table("workspace_invitations")
+            .select("id,workspace_id,email,status,note,created_at")
+            .eq("status", "pending")
+            .eq("invited_user_id", safe_user_id)
+            .order("created_at", desc=True),
+        )
+        by_email_response = await self._execute(
+            "list_invitations_by_email",
+            client.table("workspace_invitations")
+            .select("id,workspace_id,email,status,note,created_at")
+            .eq("status", "pending")
+            .eq("email", user_email)
+            .order("created_at", desc=True),
+        )
+
+        deduped: dict[str, dict[str, Any]] = {}
+        for row in (self._extract_data(by_user_response) or []) + (self._extract_data(by_email_response) or []):
+            invitation_id = str(row.get("id", ""))
+            if invitation_id:
+                deduped[invitation_id] = cast(dict[str, Any], row)
+
+        workspace_ids = {
+            str(row.get("workspace_id", ""))
+            for row in deduped.values()
+            if row.get("workspace_id")
+        }
+        workspace_map: dict[str, dict[str, Any]] = {}
+        if workspace_ids:
+            workspace_response = await self._execute(
+                "list_invitations_workspace_lookup",
+                client.table("workspaces").select("id,name,slug").in_("id", list(workspace_ids)),
+            )
+            for workspace in self._extract_data(workspace_response) or []:
+                workspace_map[str(workspace.get("id", ""))] = cast(dict[str, Any], workspace)
+
+        rows = []
+        for row in deduped.values():
+            workspace = workspace_map.get(str(row.get("workspace_id", "")), {})
+            rows.append(
+                {
+                    "id": row.get("id"),
+                    "workspace_id": row.get("workspace_id"),
+                    "workspace_name": workspace.get("name"),
+                    "workspace_slug": workspace.get("slug"),
+                    "email": row.get("email"),
+                    "status": row.get("status"),
+                    "note": row.get("note"),
+                    "created_at": row.get("created_at"),
+                }
+            )
+        rows.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+        return rows
+
+    async def decide_invitation(
+        self,
+        *,
+        invitation_id: str,
+        user_id: str,
+        decision: str,
+    ) -> dict[str, Any]:
+        """Accept or reject an invitation for the current user."""
+
+        safe_invitation_id = self._sanitize_text(invitation_id, max_len=128)
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        normalized_decision = self._sanitize_text(decision.lower(), max_len=16)
+        if normalized_decision not in {"accept", "reject"}:
+            raise HTTPException(status_code=422, detail={"code": "invalid_decision", "message": "Decision must be accept or reject."})
+
+        user_email = await self.get_user_email(user_id=safe_user_id)
+        if not user_email:
+            raise HTTPException(status_code=404, detail={"code": "user_not_found", "message": "User profile not found."})
+
+        now_iso = datetime.now(UTC).isoformat()
+
+        if settings.test_mode:
+            row = next((r for r in local_store.workspace_invitations if str(r.get("id", "")) == safe_invitation_id), None)
+            if row is None:
+                raise HTTPException(status_code=404, detail={"code": "invitation_not_found", "message": "Invitation not found."})
+            if str(row.get("status", "")).lower() != "pending":
+                raise HTTPException(status_code=409, detail={"code": "invitation_not_pending", "message": "Invitation has already been decided."})
+
+            invitation_email = str(row.get("email", "")).lower()
+            invitation_user_id = str(row.get("invited_user_id", "") or "")
+            if invitation_email != user_email and invitation_user_id != safe_user_id:
+                raise HTTPException(status_code=403, detail={"code": "forbidden_invitation", "message": "Invitation does not belong to current user."})
+
+            row["status"] = "accepted" if normalized_decision == "accept" else "rejected"
+            row["responded_at"] = now_iso
+            row["invited_user_id"] = safe_user_id
+            if normalized_decision == "accept":
+                await self.add_workspace_member(
+                    workspace_id=str(row.get("workspace_id", "")),
+                    user_id=safe_user_id,
+                    role="member",
+                )
+            return row
+
+        client = await self._privileged_client()
+        lookup_response = await self._execute(
+            "decide_invitation_lookup",
+            client.table("workspace_invitations")
+            .select("id,workspace_id,email,invited_user_id,status")
+            .eq("id", safe_invitation_id)
+            .limit(1),
+        )
+        rows = self._extract_data(lookup_response) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail={"code": "invitation_not_found", "message": "Invitation not found."})
+
+        row = cast(dict[str, Any], rows[0])
+        if str(row.get("status", "")).lower() != "pending":
+            raise HTTPException(status_code=409, detail={"code": "invitation_not_pending", "message": "Invitation has already been decided."})
+
+        invitation_email = str(row.get("email", "")).lower()
+        invitation_user_id = str(row.get("invited_user_id", "") or "")
+        if invitation_email != user_email and invitation_user_id != safe_user_id:
+            raise HTTPException(status_code=403, detail={"code": "forbidden_invitation", "message": "Invitation does not belong to current user."})
+
+        status_value = "accepted" if normalized_decision == "accept" else "rejected"
+        update_payload = {
+            "status": status_value,
+            "responded_at": now_iso,
+            "invited_user_id": safe_user_id,
+        }
+        response = await self._execute(
+            "decide_invitation_update",
+            client.table("workspace_invitations")
+            .update(cast(Any, update_payload))
+            .eq("id", safe_invitation_id),
+        )
+        updated_rows = self._extract_data(response) or []
+        updated = cast(dict[str, Any], updated_rows[0]) if updated_rows else {**row, **update_payload}
+
+        if normalized_decision == "accept":
+            await self.add_workspace_member(
+                workspace_id=str(row.get("workspace_id", "")),
+                user_id=safe_user_id,
+                role="member",
+            )
+        return updated
+
+    async def create_join_request(
+        self,
+        *,
+        workspace_id: str,
+        requester_user_id: str,
+        message: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or refresh a pending request to join an organization."""
+
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        safe_requester_id = self._sanitize_text(requester_user_id, max_len=128)
+        safe_message = self._sanitize_optional_text(message, max_len=500)
+
+        if await self.user_has_workspace_access(user_id=safe_requester_id, workspace_id=safe_workspace_id):
+            raise HTTPException(status_code=409, detail={"code": "already_workspace_member", "message": "User is already a member of this organization."})
+
+        now_iso = datetime.now(UTC).isoformat()
+
+        if settings.test_mode:
+            existing = next(
+                (
+                    row
+                    for row in local_store.workspace_join_requests
+                    if row.get("workspace_id") == safe_workspace_id and row.get("requester_user_id") == safe_requester_id
+                ),
+                None,
+            )
+            payload = {
+                "id": str(uuid4()),
+                "workspace_id": safe_workspace_id,
+                "requester_user_id": safe_requester_id,
+                "status": "pending",
+                "message": safe_message,
+                "reviewed_by_user_id": None,
+                "created_at": now_iso,
+                "reviewed_at": None,
+            }
+            if existing is None:
+                local_store.workspace_join_requests.append(payload)
+                return payload
+            existing.update(payload)
+            existing["id"] = existing.get("id") or str(uuid4())
+            return existing
+
+        client = await self._privileged_client()
+        payload = {
+            "id": str(uuid4()),
+            "workspace_id": safe_workspace_id,
+            "requester_user_id": safe_requester_id,
+            "status": "pending",
+            "message": safe_message,
+            "reviewed_by_user_id": None,
+            "created_at": now_iso,
+            "reviewed_at": None,
+        }
+        response = await self._execute(
+            "create_join_request",
+            client.table("workspace_join_requests").upsert(
+                cast(Any, payload),
+                on_conflict="workspace_id,requester_user_id",
+            ),
+        )
+        rows = self._extract_data(response) or []
+        return cast(dict[str, Any], rows[0]) if rows else payload
+
+    async def list_workspace_join_requests(self, *, workspace_id: str) -> list[dict[str, Any]]:
+        """List pending join requests for an organization."""
+
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+
+        if settings.test_mode:
+            rows = [
+                row
+                for row in local_store.workspace_join_requests
+                if row.get("workspace_id") == safe_workspace_id and row.get("status") == "pending"
+            ]
+            rows.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+            enriched: list[dict[str, Any]] = []
+            for row in rows:
+                requester = local_store.users_by_id.get(str(row.get("requester_user_id", "")))
+                enriched.append(
+                    {
+                        **row,
+                        "requester_email": requester.email if requester else None,
+                        "requester_display_name": requester.display_name if requester else None,
+                    }
+                )
+            return enriched
+
+        client = await self._privileged_client()
+        response = await self._execute(
+            "list_workspace_join_requests",
+            client.table("workspace_join_requests")
+            .select("id,workspace_id,requester_user_id,status,message,created_at,reviewed_at,reviewed_by_user_id")
+            .eq("workspace_id", safe_workspace_id)
+            .eq("status", "pending")
+            .order("created_at", desc=True),
+        )
+        rows = self._extract_data(response) or []
+
+        requester_ids = {
+            str(row.get("requester_user_id", ""))
+            for row in rows
+            if row.get("requester_user_id")
+        }
+        requester_map: dict[str, dict[str, Any]] = {}
+        if requester_ids:
+            requester_response = await self._execute(
+                "list_workspace_join_requests_users",
+                client.table("users").select("id,email,display_name").in_("id", list(requester_ids)),
+            )
+            for user in self._extract_data(requester_response) or []:
+                requester_map[str(user.get("id", ""))] = cast(dict[str, Any], user)
+
+        enriched_rows: list[dict[str, Any]] = []
+        for row in rows:
+            requester = requester_map.get(str(row.get("requester_user_id", "")), {})
+            enriched_rows.append(
+                {
+                    **row,
+                    "requester_email": requester.get("email"),
+                    "requester_display_name": requester.get("display_name"),
+                }
+            )
+        return enriched_rows
+
+    async def decide_join_request(
+        self,
+        *,
+        join_request_id: str,
+        reviewer_user_id: str,
+        decision: str,
+    ) -> dict[str, Any]:
+        """Approve or reject an organization join request."""
+
+        safe_request_id = self._sanitize_text(join_request_id, max_len=128)
+        safe_reviewer_id = self._sanitize_text(reviewer_user_id, max_len=128)
+        normalized_decision = self._sanitize_text(decision.lower(), max_len=16)
+        if normalized_decision not in {"approve", "reject"}:
+            raise HTTPException(status_code=422, detail={"code": "invalid_decision", "message": "Decision must be approve or reject."})
+
+        now_iso = datetime.now(UTC).isoformat()
+
+        if settings.test_mode:
+            row = next((r for r in local_store.workspace_join_requests if str(r.get("id", "")) == safe_request_id), None)
+            if row is None:
+                raise HTTPException(status_code=404, detail={"code": "join_request_not_found", "message": "Join request not found."})
+            if str(row.get("status", "")).lower() != "pending":
+                raise HTTPException(status_code=409, detail={"code": "join_request_not_pending", "message": "Join request has already been reviewed."})
+
+            await self.verify_workspace_access(
+                user_id=UUID(safe_reviewer_id),
+                workspace_id=UUID(str(row.get("workspace_id", ""))),
+                required_role="owner",
+            )
+
+            next_status = "approved" if normalized_decision == "approve" else "rejected"
+            row["status"] = next_status
+            row["reviewed_by_user_id"] = safe_reviewer_id
+            row["reviewed_at"] = now_iso
+
+            if normalized_decision == "approve":
+                await self.add_workspace_member(
+                    workspace_id=str(row.get("workspace_id", "")),
+                    user_id=str(row.get("requester_user_id", "")),
+                    role="member",
+                )
+            return row
+
+        client = await self._privileged_client()
+        lookup_response = await self._execute(
+            "decide_join_request_lookup",
+            client.table("workspace_join_requests")
+            .select("id,workspace_id,requester_user_id,status,message,created_at")
+            .eq("id", safe_request_id)
+            .limit(1),
+        )
+        rows = self._extract_data(lookup_response) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail={"code": "join_request_not_found", "message": "Join request not found."})
+
+        row = cast(dict[str, Any], rows[0])
+        if str(row.get("status", "")).lower() != "pending":
+            raise HTTPException(status_code=409, detail={"code": "join_request_not_pending", "message": "Join request has already been reviewed."})
+
+        await self.verify_workspace_access(
+            user_id=UUID(safe_reviewer_id),
+            workspace_id=UUID(str(row.get("workspace_id", ""))),
+            required_role="owner",
+        )
+
+        next_status = "approved" if normalized_decision == "approve" else "rejected"
+        update_payload = {
+            "status": next_status,
+            "reviewed_by_user_id": safe_reviewer_id,
+            "reviewed_at": now_iso,
+        }
+        response = await self._execute(
+            "decide_join_request_update",
+            client.table("workspace_join_requests")
+            .update(cast(Any, update_payload))
+            .eq("id", safe_request_id),
+        )
+        updated_rows = self._extract_data(response) or []
+        updated = cast(dict[str, Any], updated_rows[0]) if updated_rows else {**row, **update_payload}
+
+        if normalized_decision == "approve":
+            await self.add_workspace_member(
+                workspace_id=str(row.get("workspace_id", "")),
+                user_id=str(row.get("requester_user_id", "")),
+                role="member",
+            )
+        return updated
+
     async def authenticate_user(self, email: str, password: str) -> dict[str, Any] | None:
         """Authenticate with Supabase Auth and ensure profile exists."""
 
@@ -641,6 +1324,8 @@ class DatabaseClient:
             if settings.auth_fallback_enabled:
                 return local_store.authenticate_user(email=normalized_email, password=password)
             return None
+        finally:
+            await self._close_async_client_safely(auth_client)
 
         user = getattr(auth_response, "user", None)
         session = getattr(auth_response, "session", None)
@@ -650,12 +1335,21 @@ class DatabaseClient:
             return None
 
         display_name = user.user_metadata.get("full_name") if isinstance(getattr(user, "user_metadata", None), dict) else None
-        await self.upsert_user_profile(
-            user_id=user.id,
-            email=user.email or normalized_email,
-            display_name=display_name,
-            locale="en-US",
-        )
+        try:
+            await self.upsert_user_profile(
+                user_id=user.id,
+                email=user.email or normalized_email,
+                display_name=display_name,
+                locale="en-US",
+            )
+        except Exception as exc:
+            if self._is_users_email_conflict(exc):
+                logger.warning(
+                    "auth_profile_email_conflict",
+                    extra={"email": normalized_email, "user_id": user.id, "error": str(exc)},
+                )
+            else:
+                raise
 
         return {
             "user": {"id": user.id, "email": user.email or normalized_email, "display_name": display_name},
@@ -670,7 +1364,10 @@ class DatabaseClient:
 
         client = await self.auth_client()
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
-        await client.auth.sign_in_with_otp({"email": normalized_email})
+        try:
+            await client.auth.sign_in_with_otp({"email": normalized_email})
+        finally:
+            await self._close_async_client_safely(client)
 
     async def upsert_user_profile(
         self,

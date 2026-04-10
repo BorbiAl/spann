@@ -211,8 +211,10 @@ export interface LoginResponse {
   refresh_token: string
   token_type: 'bearer'
   expires_in: number
-  user: User
-  workspace: Workspace | null
+  user?: User
+  workspace_id?: string
+  workspace?: Workspace | null
+  supabase_access_token?: string | null
 }
 
 export interface RefreshResponse {

@@ -106,6 +106,13 @@ async def login(payload: LoginRequest, request: Request, _rate_limit: None = Dep
 async def register(payload: RegisterRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)) -> JSONResponse:
     """Register a user, create default workspace, and issue initial token pair."""
 
+    if payload.confirm_password is not None and payload.password != payload.confirm_password:
+        return error_response(
+            status_code=422,
+            code="passwords_do_not_match",
+            message="Password and confirm password must match.",
+        )
+
     try:
         created = await db.register_user(
             email=payload.email,
@@ -120,7 +127,14 @@ async def register(payload: RegisterRequest, request: Request, _rate_limit: None
         code = str(detail.get("code", "register_failed"))
         message = str(detail.get("message", "Unable to register user."))
         return error_response(status_code=exc.status_code, code=code, message=message)
-    except Exception:
+    except Exception as exc:
+        text = str(exc).lower()
+        if "users_email_key" in text or ("duplicate key" in text and "email" in text):
+            return error_response(
+                status_code=409,
+                code="email_already_exists",
+                message="A user with this email already exists.",
+            )
         return error_response(status_code=400, code="register_failed", message="Unable to register user.")
 
     user = created["user"]

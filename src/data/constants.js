@@ -555,13 +555,14 @@ export async function loginWithPassword({ email, password, deviceHint, persistSe
 	};
 }
 
-export async function registerWithPassword({ email, password, name, companyName, deviceHint, persistSession = true }) {
+export async function registerWithPassword({ email, password, confirmPassword, name, companyName, deviceHint, persistSession = true }) {
 	const payload = await apiRequest("/auth/register", {
 		method: "POST",
 		auth: false,
 		body: JSON.stringify({
 			email,
 			password,
+			confirm_password: confirmPassword || null,
 			name,
 			company_name: companyName || null,
 			device_hint: deviceHint || null
@@ -603,4 +604,56 @@ export async function logoutSession() {
 	} finally {
 		clearAuthState();
 	}
+}
+
+export async function fetchOrganizationOnboarding(search) {
+	const query = search ? `?search=${encodeURIComponent(String(search))}` : "";
+	const payload = await apiRequest(`/organizations/onboarding${query}`);
+	return payload?.data || payload || {};
+}
+
+export async function createOrganization({ name }) {
+	const payload = await apiRequest("/organizations", {
+		method: "POST",
+		body: JSON.stringify({ name })
+	});
+	return payload?.data || payload || {};
+}
+
+export async function inviteOrganizationMember({ workspaceId, email, note }) {
+	const payload = await apiRequest(`/organizations/${encodeURIComponent(workspaceId)}/invites`, {
+		method: "POST",
+		body: JSON.stringify({
+			email,
+			note: note || null
+		})
+	});
+	return payload?.data || payload || {};
+}
+
+export async function requestOrganizationJoin({ workspaceId, message }) {
+	const payload = await apiRequest("/organizations/join-requests", {
+		method: "POST",
+		body: JSON.stringify({
+			workspace_id: workspaceId,
+			message: message || null
+		})
+	});
+	return payload?.data || payload || {};
+}
+
+export async function decideOrganizationJoinRequest({ joinRequestId, decision }) {
+	const payload = await apiRequest(`/organizations/join-requests/${encodeURIComponent(joinRequestId)}/decision`, {
+		method: "POST",
+		body: JSON.stringify({ decision })
+	});
+	return payload?.data || payload || {};
+}
+
+export async function decideOrganizationInvitation({ invitationId, decision }) {
+	const payload = await apiRequest(`/organizations/invitations/${encodeURIComponent(invitationId)}/decision`, {
+		method: "POST",
+		body: JSON.stringify({ decision })
+	});
+	return payload?.data || payload || {};
 }

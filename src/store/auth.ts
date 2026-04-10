@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { authApi } from '../api/auth'
+import { setLogoutCallback } from '../api/client'
 import { tokenManager } from '../lib/tokens'
 import { get as storeGet, set as storeSet } from '../lib/storage'
 import type { User } from '../types/api'
@@ -9,6 +10,7 @@ import type { User } from '../types/api'
 // ─────────────────────────────────────────────────────────────────────────────
 
 function friendlyError(errorCode: string, fallback: string): string {
+  const normalizedCode = errorCode.toLowerCase()
   const map: Record<string, string> = {
     invalid_credentials: 'Incorrect email or password. Please try again.',
     email_already_exists: 'An account with this email already exists.',
@@ -16,10 +18,11 @@ function friendlyError(errorCode: string, fallback: string): string {
       'We could not create your account right now. Please try again later, or use Sign In / Forgot password if you already have an account.',
     account_disabled: 'Your account has been disabled. Contact support.',
     too_many_requests: 'Too many attempts. Please wait a moment and try again.',
+    passwords_do_not_match: 'Passwords do not match. Please re-enter them.',
     token_expired: 'Your session expired. Please sign in again.',
     token_invalid: 'Invalid session. Please sign in again.',
   }
-  return map[errorCode] ?? fallback
+  return map[normalizedCode] ?? fallback
 }
 
 function extractErrorCode(err: unknown): { code: string; message: string } {
@@ -71,7 +74,24 @@ interface AuthState {
 // Store
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set, get) => {
+  // Keep axios refresh-failure handling and store state in sync.
+  setLogoutCallback(async () => {
+    const lastEmail = storeGet('lastEmail')
+    tokenManager.clearAccessToken()
+    if (lastEmail) {
+      await tokenManager.clearRefreshToken(lastEmail)
+    }
+    set({
+      user: null,
+      accessToken: null,
+      workspaceId: null,
+      isAuthenticated: false,
+      error: null,
+    })
+  })
+
+  return {
   user: null,
   accessToken: null,
   workspaceId: null,
@@ -142,7 +162,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({
         isLoading: false,
         isAuthenticated: false,
-        error: friendlyError(code, message),
+        error: friendlyError(code.toLowerCase(), message),
       })
       throw err
     }
@@ -180,7 +200,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({
         isLoading: false,
         isAuthenticated: false,
-        error: friendlyError(code, message),
+        error: friendlyError(code.toLowerCase(), message),
       })
       throw err
     }
@@ -241,6 +261,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return true
     } catch {
       tokenManager.clearAccessToken()
+      set({
+        accessToken: null,
+        workspaceId: null,
+        isAuthenticated: false,
+      })
       return false
     }
   },
@@ -255,4 +280,5 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     tokenManager.setAccessToken(token)
     set({ accessToken: token })
   },
-}))
+  }
+})
