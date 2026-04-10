@@ -18,19 +18,28 @@ export default function ThemeProvider({ children }) {
 		}
 		return "light";
 	});
+	const [forcedTheme, setForcedTheme] = useState(null);
+	const resolvedTheme = forcedTheme || theme;
 
 	useEffect(() => {
-		document.documentElement.setAttribute("data-theme", theme);
+		document.documentElement.setAttribute("data-theme", resolvedTheme);
+		document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
+	}, [resolvedTheme]);
+
+	useEffect(() => {
 		localStorage.setItem("spann-theme", theme);
 	}, [theme]);
 
 	const value = useMemo(
 		() => ({
 			theme,
+			resolvedTheme,
+			forcedTheme,
+			setForcedTheme,
 			setTheme,
 			toggleTheme: () => setTheme((current) => (current === "dark" ? "light" : "dark"))
 		}),
-		[theme]
+		[theme, resolvedTheme, forcedTheme]
 	);
 
 	return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

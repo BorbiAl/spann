@@ -1,9 +1,21 @@
 import React, { useEffect, useState } from "react";
-import Badge from "../components/Badge";
 import Icon from "../components/Icon";
 import Message from "../components/Message";
-import Toggle from "../components/Toggle";
 import { CHANNELS } from "../data/constants";
+
+const PRESENCE_MEMBERS = [
+	{
+		id: "sarah",
+		name: "Sarah Chen",
+		avatar:
+			"https://lh3.googleusercontent.com/aida-public/AB6AXuCeX83POcK2ErUQRuh8dLEiZzV2zBzREt2WJ06F2PjbO7eT9obL2mn3MNVweL9NJEUSctvCB5_9w0xkWD_IjeNDBZsWh3LjbBhrt5CYyK1dYy2hEAPPPu5YO0w7obgjjPhyx8BZ7NyWuK6w1nDnSwpycWhj2ty3n9ITfSGoUHDuTTMjz1OsJKRDF5ZSeA7KY-2LUIVsTIt4NQqD5L9Wpnf4Q1SwIbL-SOHN96csvROrp6AlL7dLgcs3fPi2Z2cOT9pZuZv1OgfJZx1U"
+	},
+	{
+		id: "marcus",
+		name: "Marcus Kane",
+		initials: "MK"
+	}
+];
 
 export default function ChatView({
 	activeChannel,
@@ -19,9 +31,8 @@ export default function ChatView({
 	const [inputValue, setInputValue] = useState("");
 
 	const sentimentScore = Number(channelMood || CHANNELS.find((channel) => channel.name === activeChannel)?.mood || 65);
-	const sentimentTone = sentimentScore > 70 ? "green" : sentimentScore > 45 ? "orange" : "red";
-	const sentimentLabel =
-		sentimentScore > 70 ? "Calm Momentum" : sentimentScore > 45 ? "Focused Tension" : "Escalation Risk";
+	const sentimentLabel = sentimentScore > 70 ? "Collaborative" : sentimentScore > 45 ? "Neutral" : "Critical";
+	const trimmedMessages = Array.isArray(messages) ? messages.slice(-12) : [];
 
 	useEffect(() => {
 		setInputValue("");
@@ -38,26 +49,43 @@ export default function ChatView({
 	}
 
 	return (
-		<div className="view-transition">
-			<section className="card">
-				<div className="hero-row">
-					<div>
-						<p className="title" style={{ marginBottom: 4 }}>
-							{activeChannel}
-						</p>
-						<p className="caption">Sentiment Pulse: live emotional balance across the channel</p>
+		<div className="chat-page view-transition">
+			<header className="chat-room-header">
+				<div className="chat-room-title">
+					<span className="chat-room-hash" aria-hidden="true">
+						<Icon name="tag" size={18} />
+					</span>
+					<h3>{String(activeChannel || "#general").replace(/^#/, "")}</h3>
+					<button className="chat-room-star" type="button" aria-label="Star channel">
+						<Icon name="star" size={14} />
+					</button>
+				</div>
+				<div className="chat-room-actions">
+					<div className="chat-room-presence" aria-hidden="true">
+						{PRESENCE_MEMBERS.slice(0, 2).map((member, index) => (
+							<span key={member.id} className={`presence-avatar ${index === 0 ? "a" : "b"}`} title={member.name}>
+								{member.avatar ? (
+									<img className="presence-avatar-image" src={member.avatar} alt={`${member.name} avatar`} />
+								) : (
+									<span className="presence-avatar-initials">{member.initials || member.name.slice(0, 2).toUpperCase()}</span>
+								)}
+							</span>
+						))}
+						<span className="presence-count">+12</span>
 					</div>
-					<Badge tone={sentimentTone}>{sentimentLabel}</Badge>
+					<button className="chat-room-btn chat-help-btn" type="button" aria-label="Help">
+						<Icon name="help" size={16} />
+					</button>
 				</div>
-				<div className="sentiment-track">
-					<div className="sentiment-knob" style={{ left: `${sentimentScore}%` }} />
-				</div>
-			</section>
+			</header>
 
-			<section className="card">
-				<p className="title">Conversation Thread</p>
-				<div className="messages-list">
-					{messages.map((message, index) => (
+			<div className="chat-thread-scroll">
+				<div className="chat-day-divider">
+					<span>TODAY</span>
+				</div>
+
+				<div className="chat-thread-list">
+					{trimmedMessages.map((message, index) => (
 						<Message
 							key={message.id}
 							message={message}
@@ -67,67 +95,86 @@ export default function ChatView({
 					))}
 				</div>
 
-				<div className="chat-composer">
-					{showNudge ? (
-						<div className="nudge">
-							<span>💡 Try rephrasing this as a suggestion</span>
-							<button className="tiny-btn" onClick={() => setShowNudge(false)} aria-label="Dismiss nudge">
-								<Icon name="close" size={14} />
-							</button>
+				{showNudge ? (
+					<div className="chat-coach-card">
+						<div className="chat-coach-icon">
+							<Icon name="info" size={14} />
 						</div>
-					) : null}
-
-					<div className="toolbar-row">
-						<div className="tool-group">
-							<button
-								className="tiny-btn"
-								aria-label="Add emoji"
-								onClick={() => setInputValue((current) => `${current}${current ? " " : ""}🙂`)}
-							>
-								<Icon name="emoji" size={17} />
-							</button>
-							<button
-								className="tiny-btn"
-								aria-label="Attach file"
-								onClick={() =>
-									setInputValue((current) => `${current}${current ? " " : ""}[attached: status-report.pdf]`)
-								}
-							>
-								<Icon name="attach" size={17} />
-							</button>
-							<button
-								className="tiny-btn"
-								aria-label="Voice input"
-								onClick={() => setInputValue((current) => `${current}${current ? " " : ""}[voice note transcribed]`)}
-							>
-								<Icon name="mic" size={17} />
-							</button>
-						</div>
-						<div className="toggle-pill">
-							<span>Translate</span>
-							<Toggle value={translateEnabled} onChange={setTranslateEnabled} />
-						</div>
+						<p>Try rephrasing for better clarity. Your last message has a formal tone that might be perceived as rigid in this context.</p>
+						<button className="chat-coach-dismiss" onClick={() => setShowNudge(false)} aria-label="Dismiss tip" type="button">
+							Dismiss
+						</button>
 					</div>
+				) : null}
 
-					<div className="composer-shell">
-						<input
-							value={inputValue}
-							onChange={(event) => setInputValue(event.target.value)}
-							className="composer-input"
-							placeholder={`Message ${activeChannel}`}
-							onKeyDown={(event) => {
-								if (event.key === "Enter") {
-									event.preventDefault();
-									sendMessage();
-								}
-							}}
-						/>
-						<button className="send-btn" onClick={sendMessage} aria-label="Send message">
-							<Icon name="send" size={16} />
+				<div className="chat-typing-note" aria-live="polite">
+					<span className="typing-dots" aria-hidden="true">
+						<span />
+						<span />
+						<span />
+					</span>
+					<span>Alex is typing...</span>
+				</div>
+			</div>
+
+			<footer className="chat-composer-dock">
+				<div className="chat-sentiment-row">
+					<span>Tone Sentiment</span>
+					<div className="chat-sentiment-track">
+						<div className="chat-sentiment-fill" style={{ width: `${sentimentScore}%` }} />
+					</div>
+					<span>{sentimentLabel}</span>
+				</div>
+
+				<div className="chat-composer-box">
+					<textarea
+						value={inputValue}
+						onChange={(event) => setInputValue(event.target.value)}
+						className="chat-composer-input"
+						placeholder={`Type a message to #${String(activeChannel || "general").replace(/^#/, "")}`}
+						rows={1}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && !event.shiftKey) {
+								event.preventDefault();
+								sendMessage();
+							}
+						}}
+					/>
+
+					<div className="chat-composer-tools">
+						<div className="chat-tool-group">
+							<button className="chat-tool-btn" type="button" aria-label="Add">
+								<Icon name="plusCircle" size={16} />
+							</button>
+							<button className="chat-tool-btn" type="button" aria-label="Add emoji">
+								<Icon name="emoji" size={15} />
+							</button>
+							<button className="chat-tool-btn" type="button" aria-label="Mention">
+								<Icon name="mention" size={16} />
+							</button>
+							<div className="chat-tools-divider" aria-hidden="true" />
+
+							<button
+								type="button"
+								className="chat-tool-translate"
+								onClick={() => setTranslateEnabled((current) => !current)}
+								aria-pressed={translateEnabled}
+							>
+								<Icon name="translate" size={13} />
+								<span>Translate</span>
+								<span className={`translate-switch ${translateEnabled ? "on" : "off"}`} aria-hidden="true">
+									<span />
+								</span>
+							</button>
+						</div>
+
+						<button className="chat-send-btn" onClick={sendMessage} aria-label="Send message" type="button">
+							Send
+							<Icon name="send" size={14} />
 						</button>
 					</div>
 				</div>
-			</section>
+			</footer>
 		</div>
 	);
 }

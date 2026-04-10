@@ -177,12 +177,51 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout }) {
+	if (isChatLayout) {
+		return (
+			<aside className="sidebar chat-sidebar">
+				<div className="chat-sidebar-head">
+					<p className="chat-sidebar-title">Teams</p>
+					<label className="chat-jump">
+						<Icon name="search" size={14} />
+						<input type="text" value="" placeholder="Jump to..." readOnly aria-label="Jump to" />
+					</label>
+				</div>
+
+				<ChannelList
+					channels={channels}
+					activeChannelId={activeChannelId}
+					onChannelChange={onChannelChange}
+					channelUnread={channelUnread}
+					variant="teams"
+				/>
+			</aside>
+		);
+	}
+
 	return (
 		<aside className="sidebar">
 			<div className="workspace-head">
 				<p className="workspace-title">Spann HQ</p>
 				<p className="workspace-sub">Reach Anyone. Anywhere. Always.</p>
+			</div>
+
+			<div className="sidebar-section">
+				<p className="section-title">Workspace</p>
+				<div className="sidebar-nav">
+					{navItems.map((item) => (
+						<button
+							key={item.key}
+							className={`sidebar-nav-item ${activeView === item.key ? "active" : ""}`}
+							onClick={() => onViewChange(item.key)}
+						>
+							<Icon name={item.icon} size={16} />
+							<span>{item.label}</span>
+							{item.badge > 0 ? <span className="channel-unread">{item.badge}</span> : null}
+						</button>
+					))}
+				</div>
 			</div>
 
 			{activeView === "chat" ? (
@@ -210,6 +249,96 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 						<span className="member-meta">{person.name}</span>
 					</button>
 				))}
+			</div>
+		</aside>
+	);
+}
+
+function ChatNavRail({ activeView, onChange, items }) {
+	const railLabels = {
+		chat: "Chat",
+		mesh: "Network",
+		carbon: "Carbon",
+		pulse: "Analytics",
+		accessibility: "Accessibility",
+		translator: "Translate"
+	};
+
+	const railIcons = {
+		chat: "chat",
+		mesh: "lan",
+		carbon: "eco",
+		pulse: "insert_chart",
+		accessibility: "accessibility_new",
+		translator: "translate"
+	};
+
+	return (
+		<aside className="chat-nav-rail" aria-label="Workspace navigation">
+			<div className="chat-nav-brand">
+				<div className="chat-nav-brand-logo">S</div>
+				<div>
+					<p className="chat-nav-brand-title">Workspace</p>
+					<p className="chat-nav-brand-sub">Premium Connectivity</p>
+				</div>
+			</div>
+
+			<nav className="chat-nav-list" aria-label="Primary navigation">
+				{items.map((item) => (
+					<button
+						key={item.key}
+						className={`chat-nav-item ${activeView === item.key ? "active" : ""}`}
+						onClick={() => onChange(item.key)}
+					>
+						<Icon name={railIcons[item.key] || item.icon} size={16} />
+						<span>{railLabels[item.key] || item.label}</span>
+					</button>
+				))}
+			</nav>
+
+			<div className="chat-nav-foot">
+				<button className="chat-nav-item muted" type="button">
+					<Icon name="settings" size={16} />
+					<span>Settings</span>
+				</button>
+				<button className="chat-nav-item muted" type="button">
+					<Icon name="contact_support" size={16} />
+					<span>Support</span>
+				</button>
+				<div className="chat-nav-user">
+					<img
+						className="chat-nav-user-avatar"
+						src="https://lh3.googleusercontent.com/aida-public/AB6AXuBB87Yxv06GHwMcjD11mHkEaMwMQt3vaTkpqpUWgZvcNvPE0eOoc4OVF6PQIfl-gj8UPDfdg1VtV2ZEjlZJCJmRw7vDzxFmy1HNAPVkT5ZWXDb4WpZOZOB3zCKpx7wIOvGNx7TMVCCVO1hJO0Sfl9l1jZP7eGDHAQZ1SsX2IQST7lmvJ69IF3Afq0BSXSchgYdwirZ46jJyX3sNw0uVgrcWHFMu_K0KKjn3GLSDByFh7e149m_C-Wme1UacI-3uZXNuYyP3Nm0Egofr"
+						alt="Alex River avatar"
+					/>
+					<div>
+						<p className="chat-nav-user-name">Alex River</p>
+						<p className="chat-nav-user-status">Online</p>
+					</div>
+				</div>
+			</div>
+		</aside>
+	);
+}
+
+function ChatUtilityRail() {
+	const tools = [
+		{ key: "threads", icon: "forum", label: "Threads" },
+		{ key: "mentions", icon: "person_search", label: "Mentions" },
+		{ key: "files", icon: "folder_open", label: "Files" }
+	];
+
+	return (
+		<aside className="chat-utility-rail" aria-label="Chat utility tools">
+			{tools.map((tool) => (
+				<button key={tool.key} className="chat-utility-btn" type="button" aria-label={tool.label}>
+					<Icon name={tool.icon} size={18} />
+				</button>
+			))}
+			<div className="chat-utility-end">
+				<button className="chat-utility-btn muted" type="button" aria-label="Collapse panel">
+					<Icon name="keyboard_double_arrow_right" size={18} />
+				</button>
 			</div>
 		</aside>
 	);
@@ -255,13 +384,47 @@ function BottomTabBar({ activeView, onChange, items }) {
 	);
 }
 
+function WorkspaceHeaderBar({ activeView, onToggleContext, onLogout }) {
+	const { theme, toggleTheme } = useTheme();
+	const titleMap = {
+		chat: "Team Chat",
+		mesh: "Mesh Network",
+		carbon: "Carbon Tracker",
+		pulse: "Crowd Pulse",
+		accessibility: "Accessibility Panel",
+		translator: "Cultural Translator"
+	};
+
+	return (
+		<section className="workspace-headerbar glass">
+			<div className="workspace-header-title">
+				<h2>{titleMap[activeView] || "Workspace"}</h2>
+				<p>Premium connectivity workspace</p>
+			</div>
+			<div className="workspace-header-search" aria-hidden="true">
+				<Icon name="search" size={14} />
+				<span>Search workspace...</span>
+			</div>
+			<div className="workspace-header-actions">
+				<button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+					<Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
+					<span>{theme === "dark" ? "Light" : "Dark"}</span>
+				</button>
+				<button className="header-btn" onClick={onToggleContext} aria-label="Toggle context panel">
+					<Icon name="panel" size={18} />
+				</button>
+				<button className="header-btn" onClick={onLogout} aria-label="Logout">
+					<Icon name="logout" size={18} />
+				</button>
+			</div>
+		</section>
+	);
+}
+
 function MainPanel({
 	activeView,
 	activeChannel,
 	channelMood,
-	contextOpen,
-	setContextOpen,
-	openMobileSheet,
 	messages,
 	onSendMessage,
 	onReactMessage,
@@ -269,7 +432,6 @@ function MainPanel({
 	setTranslateEnabled,
 	showNudge,
 	setShowNudge,
-	onLogout,
 	pulseChannels,
 	onRefreshPulse,
 	pulseLoading,
@@ -291,17 +453,6 @@ function MainPanel({
 	onChangeAccessibility,
 	accessibilitySaveState
 }) {
-	const { theme, toggleTheme } = useTheme();
-
-	const titleMap = {
-		chat: "Team Chat",
-		mesh: "Mesh Network",
-		carbon: "Carbon Tracker",
-		pulse: "Crowd Pulse",
-		accessibility: "Accessibility Panel",
-		translator: "Cultural Translator"
-	};
-
 	function renderView() {
 		if (activeView === "chat") {
 			return (
@@ -368,37 +519,8 @@ function MainPanel({
 	return (
 		<main className="main-panel">
 			<section className="main-surface">
-				<header className="view-header">
-					<div className="header-title">
-						<h2>{titleMap[activeView]}</h2>
-						<p>Reach Anyone. Anywhere. Always.</p>
-					</div>
-					<div className="header-actions">
-						<button className="header-btn hide-desktop" onClick={openMobileSheet} aria-label="Open details panel">
-							<Icon name="panel" size={18} />
-						</button>
-						<button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
-							<Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
-							<span>{theme === "dark" ? "Light" : "Dark"}</span>
-						</button>
-						<button className="header-btn" onClick={onLogout} aria-label="Logout">
-							<Icon name="logout" size={18} />
-						</button>
-						<button
-							className="header-btn"
-							onClick={() => setContextOpen((current) => !current)}
-							aria-label="Toggle context panel"
-						>
-							<Icon name="panel" size={18} />
-						</button>
-					</div>
-				</header>
-
-				<div className="main-content">
+				<div className="main-stage">
 					<section className="view-scroll">{renderView()}</section>
-					<aside className={`context-panel ${contextOpen ? "" : "collapsed"}`}>
-						<ContextContent activeView={activeView} activeChannel={activeChannel} />
-					</aside>
 				</div>
 			</section>
 		</main>
@@ -423,11 +545,12 @@ function MobileSheet({ open, onClose, activeView, activeChannel }) {
 }
 
 export default function Layout({ authState, onLogout, onSessionExpired }) {
+	const { setForcedTheme } = useTheme();
 	const fallbackChannels = useMemo(() => toFallbackChannels(), []);
 	const [activeView, setActiveView] = useState(() => loadFromStorage("spann-active-view", "chat"));
 	const [channels, setChannels] = useState(fallbackChannels);
 	const [activeChannelId, setActiveChannelId] = useState(() => loadFromStorage("spann-active-channel", fallbackChannels[0]?.id || ""));
-	const [contextOpen, setContextOpen] = useState(true);
+	const [contextOpen, setContextOpen] = useState(false);
 	const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
 	const [messagesByChannel, setMessagesByChannel] = useState(() => loadFromStorage("spann-messages-by-channel", toFallbackMessages()));
 	const [channelUnread, setChannelUnread] = useState(() => loadFromStorage("spann-channel-unread", toFallbackUnread()));
@@ -506,6 +629,14 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	useEffect(() => {
 		localStorage.setItem("spann-show-nudge", JSON.stringify(showNudge));
 	}, [showNudge]);
+
+	useEffect(() => {
+		setForcedTheme(activeView === "chat" || activeView === "carbon" || activeView === "mesh" ? "light" : null);
+
+		return () => {
+			setForcedTheme(null);
+		};
+	}, [activeView, setForcedTheme]);
 
 	useEffect(() => {
 		localStorage.setItem("spann-accessibility-preferences", JSON.stringify(accessibilityPrefs));
@@ -941,58 +1072,130 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		pushAppNotice(success ? "Nodes refreshed." : "Unable to refresh nodes.", success ? "success" : "error");
 	}
 
+	function handleContextAction() {
+		if (typeof window !== "undefined" && window.matchMedia("(max-width: 1140px)").matches) {
+			setMobileSheetOpen(true);
+			return;
+		}
+
+		setContextOpen((current) => !current);
+	}
+
 	return (
-		<div className="app-shell">
-			<IconRail activeView={activeView} onChange={setActiveView} items={navItems} />
-			<Sidebar
-				activeView={activeView}
-				activeChannelId={activeChannelId}
-				channels={channels}
-				onChannelChange={handleChannelChange}
-				channelUnread={channelUnread}
-			/>
-			<MainPanel
-				activeView={activeView}
-				activeChannel={activeChannel}
-				channelMood={activeMood}
-				contextOpen={contextOpen}
-				setContextOpen={setContextOpen}
-				openMobileSheet={() => setMobileSheetOpen(true)}
-				messages={currentMessages}
-				onSendMessage={(channelLabel, text, translated) => {
-					const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-					handleSendMessage(channel?.id || activeChannelId, text, translated);
-				}}
-				onReactMessage={(channelLabel, messageId, emoji) => {
-					const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-					handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
-				}}
-				translateEnabled={translateEnabled}
-				setTranslateEnabled={setTranslateEnabled}
-				showNudge={showNudge}
-				setShowNudge={setShowNudge}
-				onLogout={onLogout}
-				pulseChannels={pulseChannels}
-				onRefreshPulse={handleRefreshPulseAction}
-				pulseLoading={pulseLoading}
-				pulseError={pulseError}
-				micActive={micActive}
-				onToggleMic={handleToggleMic}
-				carbonLeaderboard={carbonLeaderboard}
-				onLogCarbon={handleLogCarbon}
-				carbonSaving={carbonSaving}
-				carbonError={carbonError}
-				currentUserId={currentUserId}
-				meshNodes={meshNodes}
-				onRefreshMesh={handleRefreshMeshAction}
-				onRegisterMesh={handleRegisterMeshNode}
-				onRevokeMesh={handleRevokeMeshNode}
-				meshBusy={meshBusy}
-				meshError={meshError}
-				accessibilityPrefs={accessibilityPrefs}
-				onChangeAccessibility={handleAccessibilityPreferenceChange}
-				accessibilitySaveState={accessibilitySaveState}
-			/>
+		<div className={`app-shell ${activeView === "chat" ? "chat-workspace" : ""}`}>
+			<div className="workspace-stack">
+				{activeView !== "chat" ? <WorkspaceHeaderBar activeView={activeView} onToggleContext={handleContextAction} onLogout={onLogout} /> : null}
+				<div className={`workspace-body ${contextOpen ? "context-open" : "context-closed"} ${activeView === "chat" ? "chat-layout" : ""}`}>
+					{activeView === "chat" ? (
+						<>
+							<ChatNavRail activeView={activeView} onChange={setActiveView} items={navItems} />
+							<Sidebar
+								activeView={activeView}
+								activeChannelId={activeChannelId}
+								channels={channels}
+								onChannelChange={handleChannelChange}
+								channelUnread={channelUnread}
+								navItems={navItems}
+								onViewChange={setActiveView}
+								isChatLayout={true}
+							/>
+							<MainPanel
+								activeView={activeView}
+								activeChannel={activeChannel}
+								channelMood={activeMood}
+								messages={currentMessages}
+								onSendMessage={(channelLabel, text, translated) => {
+									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+									handleSendMessage(channel?.id || activeChannelId, text, translated);
+								}}
+								onReactMessage={(channelLabel, messageId, emoji) => {
+									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+									handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
+								}}
+								translateEnabled={translateEnabled}
+								setTranslateEnabled={setTranslateEnabled}
+								showNudge={showNudge}
+								setShowNudge={setShowNudge}
+								pulseChannels={pulseChannels}
+								onRefreshPulse={handleRefreshPulseAction}
+								pulseLoading={pulseLoading}
+								pulseError={pulseError}
+								micActive={micActive}
+								onToggleMic={handleToggleMic}
+								carbonLeaderboard={carbonLeaderboard}
+								onLogCarbon={handleLogCarbon}
+								carbonSaving={carbonSaving}
+								carbonError={carbonError}
+								currentUserId={currentUserId}
+								meshNodes={meshNodes}
+								onRefreshMesh={handleRefreshMeshAction}
+								onRegisterMesh={handleRegisterMeshNode}
+								onRevokeMesh={handleRevokeMeshNode}
+								meshBusy={meshBusy}
+								meshError={meshError}
+								accessibilityPrefs={accessibilityPrefs}
+								onChangeAccessibility={handleAccessibilityPreferenceChange}
+								accessibilitySaveState={accessibilitySaveState}
+							/>
+							<ChatUtilityRail />
+						</>
+					) : (
+						<>
+							<Sidebar
+								activeView={activeView}
+								activeChannelId={activeChannelId}
+								channels={channels}
+								onChannelChange={handleChannelChange}
+								channelUnread={channelUnread}
+								navItems={navItems}
+								onViewChange={setActiveView}
+								isChatLayout={false}
+							/>
+							<MainPanel
+								activeView={activeView}
+								activeChannel={activeChannel}
+								channelMood={activeMood}
+								messages={currentMessages}
+								onSendMessage={(channelLabel, text, translated) => {
+									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+									handleSendMessage(channel?.id || activeChannelId, text, translated);
+								}}
+								onReactMessage={(channelLabel, messageId, emoji) => {
+									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+									handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
+								}}
+								translateEnabled={translateEnabled}
+								setTranslateEnabled={setTranslateEnabled}
+								showNudge={showNudge}
+								setShowNudge={setShowNudge}
+								pulseChannels={pulseChannels}
+								onRefreshPulse={handleRefreshPulseAction}
+								pulseLoading={pulseLoading}
+								pulseError={pulseError}
+								micActive={micActive}
+								onToggleMic={handleToggleMic}
+								carbonLeaderboard={carbonLeaderboard}
+								onLogCarbon={handleLogCarbon}
+								carbonSaving={carbonSaving}
+								carbonError={carbonError}
+								currentUserId={currentUserId}
+								meshNodes={meshNodes}
+								onRefreshMesh={handleRefreshMeshAction}
+								onRegisterMesh={handleRegisterMeshNode}
+								onRevokeMesh={handleRevokeMeshNode}
+								meshBusy={meshBusy}
+								meshError={meshError}
+								accessibilityPrefs={accessibilityPrefs}
+								onChangeAccessibility={handleAccessibilityPreferenceChange}
+								accessibilitySaveState={accessibilitySaveState}
+							/>
+							<aside className={`context-panel workspace-context-rail ${contextOpen ? "" : "collapsed"}`}>
+								<ContextContent activeView={activeView} activeChannel={activeChannel} />
+							</aside>
+						</>
+					)}
+				</div>
+			</div>
 			<BottomTabBar activeView={activeView} onChange={setActiveView} items={navItems} />
 			<MobileSheet
 				open={mobileSheetOpen}

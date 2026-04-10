@@ -156,19 +156,17 @@ function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
 function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	const [mode, setMode] = useState("login");
 	const [name, setName] = useState("");
-	const [companyName, setCompanyName] = useState("");
 	const [email, setEmail] = useState(defaultEmail || "");
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
-	const [showPassword, setShowPassword] = useState(false);
-	const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-	const [rememberSession, setRememberSession] = useState(true);
-	const [savePassword, setSavePassword] = useState(false);
+	const [rememberEmail, setRememberEmail] = useState(false);
+	const [agreeTerms, setAgreeTerms] = useState(false);
 	const [errorText, setErrorText] = useState("");
 	const [infoText, setInfoText] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isSendingMagicLink, setIsSendingMagicLink] = useState(false);
 	const passwordStrength = evaluatePasswordStrength(password);
+	const securePercent = Math.max(15, Math.min(100, passwordStrength.score * 25));
 
 	function toFriendlyAuthError(normalized, authMode) {
 		const code = String(normalized?.code || "").toLowerCase();
@@ -227,10 +225,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 			const parsed = JSON.parse(saved);
 			if (parsed?.email) {
 				setEmail(String(parsed.email));
-			}
-			if (parsed?.password) {
-				setPassword(String(parsed.password));
-				setSavePassword(true);
+				setRememberEmail(true);
 			}
 		} catch (error) {
 			localStorage.removeItem(SAVED_CREDENTIALS_KEY);
@@ -268,6 +263,11 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 			return;
 		}
 
+		if (mode === "register" && !agreeTerms) {
+			setErrorText("Please agree to the Terms of Service and Privacy Policy.");
+			return;
+		}
+
 		setErrorText("");
 		setInfoText("");
 		setIsSubmitting(true);
@@ -278,8 +278,8 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 					email: email.trim(),
 					password,
 					name: name.trim(),
-					companyName: companyName.trim() || null,
-					persistSession: rememberSession,
+					companyName: null,
+					persistSession: true,
 					deviceHint: "web-client"
 				});
 				onAuthenticated(result.authState);
@@ -287,18 +287,17 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 				const result = await loginWithPassword({
 					email: email.trim(),
 					password,
-					persistSession: rememberSession,
+					persistSession: true,
 					deviceHint: "web-client"
 				});
 				onAuthenticated(result.authState);
 			}
 
-			if (savePassword) {
+			if (rememberEmail) {
 				localStorage.setItem(
 					SAVED_CREDENTIALS_KEY,
 					JSON.stringify({
-						email: email.trim(),
-						password
+						email: email.trim()
 					})
 				);
 			} else {
@@ -354,188 +353,225 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	}
 
 	return (
-		<div className="auth-shell">
-			<section className="auth-card glass">
-				<div className="entry-topbar">
-					<EntryThemeToggle />
-				</div>
-				<div className="auth-head">
-					<p className="entry-kicker">Welcome back</p>
-					<h2>{mode === "login" ? "Sign in to Spann" : "Create your Spann account"}</h2>
-					<p>Continue to your team channels, accessibility settings, and translation workspace.</p>
-				</div>
-
-				<div className="auth-mode-toggle" role="tablist" aria-label="Authentication mode">
-					<button
-						type="button"
-						className={`auth-mode-btn ${mode === "login" ? "active" : ""}`}
-						onClick={() => setMode("login")}
-					>
-						Sign In
-					</button>
-					<button
-						type="button"
-						className={`auth-mode-btn ${mode === "register" ? "active" : ""}`}
-						onClick={() => setMode("register")}
-					>
-						Register
+		<div className={`auth-shell auth-mode-${mode}`}>
+			{errorText ? (
+				<div className="auth-banner error" role="alert" aria-live="assertive">
+					<span>{errorText}</span>
+					<button type="button" onClick={() => setErrorText("")} aria-label="Dismiss alert">
+						<Icon name="close" size={14} />
 					</button>
 				</div>
-
-				<form className="auth-form" onSubmit={handleSubmit}>
-					{mode === "register" ? (
-						<label className="auth-field">
-							<span>Full name</span>
-							<input
-								type="text"
-								className="auth-input"
-								value={name}
-								onChange={(event) => setName(event.target.value)}
-								required
-							/>
-						</label>
-					) : null}
-
-					{mode === "register" ? (
-						<label className="auth-field">
-							<span>Company name (optional)</span>
-							<input
-								type="text"
-								className="auth-input"
-								value={companyName}
-								onChange={(event) => setCompanyName(event.target.value)}
-								placeholder="e.g. Elsys"
-							/>
-						</label>
-					) : null}
-
-					<label className="auth-field">
-						<span>Email</span>
-						<input
-							type="email"
-							className="auth-input"
-							value={email}
-							onChange={(event) => setEmail(event.target.value)}
-							required
-						/>
-					</label>
-
-					<label className="auth-field">
-						<span>Password</span>
-						<div className="auth-password-row">
-							<input
-								type={showPassword ? "text" : "password"}
-								className="auth-input"
-								value={password}
-								onChange={(event) => setPassword(event.target.value)}
-								minLength={8}
-								required
-							/>
-							{mode === "register" ? (
-								<button
-									type="button"
-									className="auth-pass-suggest"
-									onClick={() => {
-										const suggested = generateStrongPassword();
-										setPassword(suggested);
-										setConfirmPassword(suggested);
-										setInfoText("A strong password was generated. You can edit it before submitting.");
-										setErrorText("");
-									}}
-								>
-									Suggest
-								</button>
-							) : null}
-							<button
-								type="button"
-								className="auth-pass-toggle"
-								onClick={() => setShowPassword((current) => !current)}
-							>
-								{showPassword ? "Hide" : "Show"}
-							</button>
+			) : null}
+			{!errorText && infoText ? (
+				<div className="auth-banner info" role="status" aria-live="polite">
+					<span>{infoText}</span>
+					<button type="button" onClick={() => setInfoText("")} aria-label="Dismiss info">
+						<Icon name="close" size={14} />
+					</button>
+				</div>
+			) : null}
+			<section className={`auth-card ${mode === "register" ? "register" : "login"}`}>
+				{mode === "register" ? (
+					<aside className="auth-aside">
+						<div className="auth-aside-brand">
+							<div className="logo-chip">
+								<Icon name="hub" size={18} />
+							</div>
+							<p>Spann</p>
 						</div>
-						{mode === "register" ? (
-							<div className="password-strength">
-								<div className="password-strength-head">
-									<span>Password strength</span>
-									<strong className={`password-strength-label ${passwordStrength.tone}`}>{passwordStrength.label}</strong>
+						<h3>The future of collaborative communication starts here.</h3>
+						<p>Join a workspace built on atmospheric focus and seamless connectivity.</p>
+						<div className="auth-aside-list">
+							<div className="auth-feature-row">
+								<div className="auth-feature-icon">
+									<Icon name="security" size={16} />
 								</div>
-								<div className="password-strength-track" role="progressbar" aria-valuemin={0} aria-valuemax={4} aria-valuenow={passwordStrength.score}>
-									<div className={`password-strength-fill ${passwordStrength.tone}`} style={{ width: `${(passwordStrength.score / 4) * 100}%` }} />
+								<div>
+									<strong>Enterprise Security</strong>
+									<span>End-to-end encrypted messaging.</span>
 								</div>
-								{passwordStrength.suggestions.length > 0 ? (
-									<p className="password-strength-note">Tip: {passwordStrength.suggestions[0]}</p>
-								) : (
-									<p className="password-strength-note success">Great password strength.</p>
-								)}
+							</div>
+							<div className="auth-feature-row">
+								<div className="auth-feature-icon">
+									<Icon name="bolt" size={16} />
+								</div>
+								<div>
+									<strong>Instant Sync</strong>
+									<span>Unified across all your devices.</span>
+								</div>
+							</div>
+						</div>
+					</aside>
+				) : null}
+
+				<div className="auth-main">
+					<div className="auth-head">
+						{mode === "login" ? (
+							<div className="auth-login-brand">
+								<div className="auth-login-logo">
+									<Icon name="hub" size={15} />
+								</div>
+								<strong>Spann</strong>
 							</div>
 						) : null}
-					</label>
+						<h2>{mode === "login" ? "Sign in" : "Create an account"}</h2>
+						{mode === "login" ? (
+							<p>Access your premium workspace</p>
+						) : (
+							<p>
+								Already have an account?{" "}
+								<button type="button" className="auth-text-link inline" onClick={() => setMode("login")}>
+									Log in
+								</button>
+							</p>
+						)}
+					</div>
 
-					{mode === "register" ? (
-						<label className="auth-field">
-							<span>Confirm password</span>
-							<div className="auth-password-row">
+					<form className="auth-form" onSubmit={handleSubmit}>
+						{mode === "register" ? (
+							<>
+								<label className="auth-field">
+									<span>Full name</span>
+									<input
+										type="text"
+										className="auth-input"
+										value={name}
+										onChange={(event) => setName(event.target.value)}
+										placeholder="John Doe"
+										required
+									/>
+								</label>
+
+								<label className="auth-field">
+									<span>Email address</span>
+									<input
+										type="email"
+										className="auth-input"
+										value={email}
+										onChange={(event) => setEmail(event.target.value)}
+										placeholder="name@company.com"
+										required
+									/>
+								</label>
+
+								<div className="auth-form-grid">
+									<label className="auth-field">
+										<span>Password</span>
+										<input
+											type="password"
+											className="auth-input"
+											value={password}
+											onChange={(event) => setPassword(event.target.value)}
+											placeholder="••••••••"
+											minLength={8}
+											required
+										/>
+									</label>
+									<label className="auth-field">
+										<span>Confirm password</span>
+										<input
+											type="password"
+											className="auth-input"
+											value={confirmPassword}
+											onChange={(event) => setConfirmPassword(event.target.value)}
+											placeholder="••••••••"
+											minLength={8}
+											required
+										/>
+									</label>
+								</div>
+
+								<div className="password-strength register-style">
+									<div className="password-strength-head">
+										<span>
+											Strength: <strong className={`password-strength-label ${passwordStrength.tone}`}>{passwordStrength.label}</strong>
+										</span>
+										<span>{securePercent}% secure</span>
+									</div>
+									<div className="password-strength-track" role="progressbar" aria-valuemin={0} aria-valuemax={4} aria-valuenow={passwordStrength.score}>
+										<div className={`password-strength-fill ${passwordStrength.tone}`} style={{ width: `${securePercent}%` }} />
+									</div>
+									<p className="password-strength-note">Hint: Use at least 12 characters, including numbers and symbols.</p>
+								</div>
+
+								<label className="auth-check register-check">
+									<input type="checkbox" checked={agreeTerms} onChange={(event) => setAgreeTerms(event.target.checked)} />
+									<span>
+										I agree to the <a href="#" onClick={(event) => event.preventDefault()}>Terms of Service</a> and <a href="#" onClick={(event) => event.preventDefault()}>Privacy Policy</a>.
+									</span>
+								</label>
+
+								<button type="submit" className="accent-btn auth-submit" disabled={isSubmitting}>
+									{isSubmitting ? "Registering..." : "Register"}
+									<span className="auth-submit-arrow">→</span>
+								</button>
+
+								<div className="auth-social-row" aria-hidden="true">
+									<button type="button" className="auth-social-btn">Google</button>
+									<button type="button" className="auth-social-btn">Microsoft</button>
+								</div>
+							</>
+						) : (
+							<>
 								<input
-									type={showConfirmPassword ? "text" : "password"}
+									type="text"
 									className="auth-input"
-									value={confirmPassword}
-									onChange={(event) => setConfirmPassword(event.target.value)}
-									minLength={8}
+									value={email}
+									onChange={(event) => setEmail(event.target.value)}
+									placeholder="Email, phone, or Skype"
 									required
 								/>
-								<button
-									type="button"
-									className="auth-pass-toggle"
-									onClick={() => setShowConfirmPassword((current) => !current)}
-								>
-									{showConfirmPassword ? "Hide" : "Show"}
+								<input
+									type="password"
+									className="auth-input"
+									value={password}
+									onChange={(event) => setPassword(event.target.value)}
+									placeholder="Password"
+									required
+								/>
+
+								<div className="auth-inline-row">
+									<label className="auth-check compact">
+										<input
+											type="checkbox"
+											checked={rememberEmail}
+											onChange={(event) => setRememberEmail(event.target.checked)}
+										/>
+										<span>Remember email</span>
+									</label>
+									<button type="button" className="auth-text-link inline" onClick={handleForgotPassword} disabled={isSendingMagicLink}>
+										{isSendingMagicLink ? "Sending..." : "Forgot password?"}
+									</button>
+								</div>
+
+								<button type="submit" className="accent-btn auth-submit" disabled={isSubmitting}>
+									{isSubmitting ? "Signing in..." : "Sign In"}
 								</button>
-							</div>
-						</label>
-					) : null}
 
-					{mode === "login" ? (
-						<button
-							type="button"
-							className="auth-text-link"
-							onClick={handleForgotPassword}
-							disabled={isSendingMagicLink}
-						>
-							{isSendingMagicLink ? "Sending reset link..." : "Forgot password?"}
-						</button>
-					) : null}
-
-					<label className="auth-check">
-						<input
-							type="checkbox"
-							checked={rememberSession}
-							onChange={(event) => setRememberSession(event.target.checked)}
-						/>
-						<span>Remember my session on this device</span>
-					</label>
-
-					<label className="auth-check">
-						<input
-							type="checkbox"
-							checked={savePassword}
-							onChange={(event) => setSavePassword(event.target.checked)}
-						/>
-						<span>Save password on this device</span>
-					</label>
-
-					{errorText ? <p className="auth-error">{errorText}</p> : null}
-					{infoText ? <p className="auth-info">{infoText}</p> : null}
-
-					<button type="submit" className="accent-btn auth-submit">
-						{isSubmitting ? "Please wait..." : mode === "login" ? "Enter Workspace" : "Create and Enter"}
-					</button>
-				</form>
-
-				<button className="entry-link" onClick={onBack}>
-					Back to landing
-				</button>
+								<p className="auth-inline-note">
+									No account?{" "}
+									<button type="button" className="auth-text-link inline" onClick={() => setMode("register")}>Create an account</button>
+								</p>
+							</>
+						)}
+					</form>
+				</div>
 			</section>
+			{mode === "register" ? (
+				<div className="auth-security-note">
+					<div className="auth-security-icon">
+						<Icon name="security" size={14} />
+					</div>
+					<p>Your data is stored securely using industry-standard AES-256 encryption.</p>
+				</div>
+			) : null}
+			{mode === "login" ? (
+				<div className="auth-login-footer">
+					<span>Terms of use</span>
+					<span>Privacy &amp; cookies</span>
+					<span>© 2024 Spann</span>
+				</div>
+			) : null}
 		</div>
 	);
 }
