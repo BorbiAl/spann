@@ -47,6 +47,7 @@ export type AppView =
   | 'accessibility'
   | 'translator'
   | 'settings'
+  | 'call'
 
 export interface UIState {
   /** Currently active top-level view */

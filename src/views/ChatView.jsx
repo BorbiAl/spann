@@ -27,7 +27,8 @@ export default function ChatView({
 	translateEnabled,
 	setTranslateEnabled,
 	showNudge,
-	setShowNudge
+	setShowNudge,
+	onStartCall
 }) {
 	const [inputValue, setInputValue] = useState("");
 	const [isSending, setIsSending] = useState(false);
@@ -35,9 +36,6 @@ export default function ChatView({
 	const [activeTypist, setActiveTypist] = useState("Alex");
 	const [localMessagesByChannel, setLocalMessagesByChannel] = useState({});
 	const [isAtBottom, setIsAtBottom] = useState(true);
-	const [voiceConnected, setVoiceConnected] = useState(false);
-	const [voiceMuted, setVoiceMuted] = useState(false);
-	const [voiceDeafened, setVoiceDeafened] = useState(false);
 	const [isDictating, setIsDictating] = useState(false);
 	const [dictationHint, setDictationHint] = useState("");
 	const viewportRef = useRef(null);
@@ -247,16 +245,7 @@ export default function ChatView({
 		onReactMessage(activeChannel, messageId, emoji);
 	}
 
-	function toggleVoiceRoom() {
-		setVoiceConnected((current) => {
-			const next = !current;
-			if (!next) {
-				setVoiceMuted(false);
-				setVoiceDeafened(false);
-			}
-			return next;
-		});
-	}
+	// Removed toggleVoiceRoom as it is handled by CallView now
 
 	function toggleDictation() {
 		if (!hasSpeechRecognition) {
@@ -334,14 +323,12 @@ export default function ChatView({
 					</button>
 					<button
 						type="button"
-						onClick={toggleVoiceRoom}
-						className={`text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 ${
-							voiceConnected ? "border-[#0f67b7]/30 text-[#0f67b7] bg-[#e9f3ff]" : "border-black/10 text-white bg-[#0f67b7]"
-						}`}
-						aria-label={voiceConnected ? "End call" : "Start call"}
+						onClick={onStartCall}
+						className="text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 border-black/10 text-white bg-[#0f67b7]"
+						aria-label="Start call"
 					>
-						<span className="material-symbols-outlined text-[16px]">{voiceConnected ? "call_end" : "call"}</span>
-						<span>{voiceConnected ? "End Call" : "Start Call"}</span>
+						<span className="material-symbols-outlined text-[16px]">call</span>
+						<span>Start Call</span>
 					</button>
 					<div className="flex -space-x-2">
 						{PRESENCE_MEMBERS.slice(0, 2).map((member, index) => (
@@ -435,31 +422,6 @@ export default function ChatView({
 			{/* Message Input Area */}
 			<footer className="px-10 pb-8 bg-white shrink-0">
 				<div className="w-full space-y-3">
-					{voiceConnected ? (
-						<div className="flex items-center justify-between gap-3 bg-[#f5f8fc] border border-[#e3e8ef] rounded-[10px] px-3 py-2">
-							<div className="flex items-center gap-2">
-								<span className="material-symbols-outlined text-[#0f67b7] text-[18px]">headset_mic</span>
-								<span className="text-[12px] font-semibold text-[#27415f]">Voice room active</span>
-							</div>
-							<div className="flex items-center gap-2">
-								<button
-									type="button"
-									onClick={() => setVoiceMuted((current) => !current)}
-									className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${voiceMuted ? "bg-[#ffecec] text-[#bf2d2d] border-[#f5c2c2]" : "bg-white text-[#415063] border-[#dce3ec]"}`}
-								>
-									{voiceMuted ? "Unmute" : "Mute"}
-								</button>
-								<button
-									type="button"
-									onClick={() => setVoiceDeafened((current) => !current)}
-									className={`text-[11px] font-semibold px-2 py-1 rounded-md border ${voiceDeafened ? "bg-[#fff6e6] text-[#9f5e00] border-[#f4dfb1]" : "bg-white text-[#415063] border-[#dce3ec]"}`}
-								>
-									{voiceDeafened ? "Undeafen" : "Deafen"}
-								</button>
-							</div>
-						</div>
-					) : null}
-
 					{/* Sentiment Bar */}
 					<div className="flex items-center gap-4 px-2 w-full max-w-full">
 						<span className="text-[10px] font-bold text-[#1D1D1F] opacity-70 uppercase tracking-widest whitespace-nowrap">

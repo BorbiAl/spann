@@ -9,6 +9,7 @@ import PulseView from "../views/PulseView";
 import AccessibilityView from "../views/AccessibilityView";
 import TranslatorView from "../views/TranslatorView";
 import SettingsView from "../views/SettingsView";
+import CallView from "../views/CallView";
 import { useTheme } from "./ThemeProvider";
 import {
 	CHANNELS,
@@ -428,6 +429,7 @@ function WorkspaceHeaderBar({ activeView, onToggleContext, onLogout }) {
 
 function MainPanel({
 	activeView,
+	onViewChange,
 	activeChannel,
 	channelMood,
 	messages,
@@ -461,6 +463,9 @@ function MainPanel({
 	onLogout
 }) {
 	function renderView() {
+		if (activeView === "call") {
+			return <CallView activeChannel={activeChannel} onEndCall={() => onViewChange("chat")} />;
+		}
 		if (activeView === "chat") {
 			return (
 				<ChatView
@@ -474,6 +479,7 @@ function MainPanel({
 					setTranslateEnabled={setTranslateEnabled}
 					showNudge={showNudge}
 					setShowNudge={setShowNudge}
+					onStartCall={() => onViewChange("call")}
 				/>
 			);
 		}
@@ -1304,6 +1310,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						<div className={`flex-1 min-h-0 flex ${activeView === "chat" ? "chat-main-stage overflow-hidden" : "overflow-y-auto"}`}>
 						<MainPanel
 									activeView={activeView}
+									onViewChange={setActiveView}
 									activeChannel={activeChannel}
 									channelMood={activeMood}
 									messages={currentMessages}
