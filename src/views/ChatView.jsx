@@ -29,6 +29,8 @@ export default function ChatView({
 	setShowNudge
 }) {
 	const [inputValue, setInputValue] = useState("");
+        const [isSending, setIsSending] = useState(false);
+
 
 	const sentimentScore = Number(channelMood || CHANNELS.find((channel) => channel.name === activeChannel)?.mood || 65);
 	const sentimentLabel = sentimentScore > 70 ? "Collaborative" : sentimentScore > 45 ? "Neutral" : "Critical";
@@ -38,22 +40,27 @@ export default function ChatView({
 		setInputValue("");
 	}, [activeChannel]);
 
-	function sendMessage() {
-		const text = inputValue.trim();
-		if (!text) {
-			return;
-		}
+	async function sendMessage() {
+                const text = inputValue.trim();
+                if (!text || isSending) {
+                        return;
+                }
 
-		onSendMessage(activeChannel, text, translateEnabled);
-		setInputValue("");
-	}
+                setIsSending(true);
+                try {
+                        await onSendMessage(activeChannel, text, translateEnabled);
+                } finally {
+                        setIsSending(false);
+                        setInputValue("");
+                }
+        }
 
 	return (
 		<div className="flex-1 flex flex-col min-w-0 bg-white">
 			{/* Top App Bar */}
 			<header className="h-[60px] flex items-center justify-between px-6 bg-white sticky top-0 z-10 border-b border-black/5">
 				<div className="flex items-center gap-3">
-					<span className="text-[#007AFF] text-[20px] font-medium">#</span>
+					<span className="text-[#0b4b8a] text-[20px] font-medium">#</span>
 					<h2 className="font-bold text-[#1D1D1F] text-[18px] tracking-tight">{String(activeChannel || "product-strategy").replace(/^#/, "")}</h2>
 					<span className="material-symbols-outlined text-[#1D1D1F] opacity-40 text-[18px] cursor-pointer" data-icon="star">
 						star
@@ -111,8 +118,8 @@ export default function ChatView({
 				))}
 
 				{showNudge ? (
-					<div className="bg-[#E1F0FF] px-4 py-3 flex items-start gap-4 rounded-[8px] w-full max-w-[85%] self-start border-l-4 border-l-[#0A84FF]">
-						<span className="material-symbols-outlined text-[#0A84FF] text-[20px] mt-0.5" data-icon="info">
+					<div className="bg-[#E1F0FF] px-4 py-3 flex items-start gap-4 rounded-[8px] w-full max-w-[85%] self-start border-l-4 border-l-[#0f67b7]">
+						<span className="material-symbols-outlined text-[#0f67b7] text-[20px] mt-0.5" data-icon="info">
 							info
 						</span>
 						<div className="flex flex-1 justify-between items-center pr-2">
@@ -120,7 +127,7 @@ export default function ChatView({
 								Try rephrasing for better clarity. Your last message has a formal tone that might be perceived as rigid in this context.
 							</p>
 							<button
-								className="text-[12px] font-bold uppercase tracking-widest text-[#007AFF] hover:underline"
+								className="text-[12px] font-bold uppercase tracking-widest text-[#0b4b8a] hover:underline"
 								onClick={() => setShowNudge(false)}
 							>
 								DISMISS
@@ -149,15 +156,15 @@ export default function ChatView({
 						</span>
 						<div className="flex-1 h-[6px] bg-[#E5E5EA] rounded-full overflow-hidden flex">
 							<div
-								className="h-full bg-[#0A84FF] transition-all duration-500 rounded-full"
+								className="h-full bg-[#0f67b7] transition-all duration-500 rounded-full"
 								style={{ width: `70%` }}
 							/>
 						</div>
-						<span className="text-[12px] font-bold text-[#0A84FF]">Collaborative</span>
+						<span className="text-[12px] font-bold text-[#0f67b7]">Collaborative</span>
 					</div>
 
 					{/* Input Box */}
-					<div className="bg-white rounded-[12px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-[#E5E5EA] p-3 focus-within:ring-2 focus-within:ring-[#0A84FF]/20 transition-all flex flex-col">
+					<div className="bg-white rounded-[12px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-[#E5E5EA] p-3 focus-within:ring-2 focus-within:ring-[#0f67b7]/20 transition-all flex flex-col">
 						<textarea
 							value={inputValue}
 							onChange={(event) => setInputValue(event.target.value)}
@@ -193,14 +200,15 @@ export default function ChatView({
 							</div>
 
 							<button
-								className="bg-[#0A84FF] text-white pl-4 pr-3 py-[6px] rounded-[16px] text-[14px] font-semibold flex items-center justify-center gap-1.5 hover:bg-[#007AFF] transition-all cursor-pointer shadow-sm active:scale-95"
-								onClick={sendMessage}
-								aria-label="Send message"
-								type="button"
-							>
-								<span>Send</span>
-								<span className="material-symbols-outlined text-[16px]" data-icon="send">send</span>
-							</button>
+                                                                className={`bg-[#0f67b7] text-white pl-4 pr-3 py-[6px] rounded-[16px] text-[14px] font-semibold flex items-center justify-center gap-1.5 hover:bg-[#0b4b8a] transition-all cursor-pointer shadow-sm ${isSending ? "opacity-75 cursor-wait" : "active:scale-95"}`}
+                                                                onClick={sendMessage}
+                                                                disabled={isSending}
+                                                                aria-label={isSending ? "Sending message..." : "Send message"}
+                                                                type="button"
+                                                        >
+                                                                <span>{isSending ? "Sending..." : "Send"}</span>
+                                                                {isSending ? <span className="material-symbols-outlined text-[16px] animate-spin" data-icon="sync">sync</span> : <span className="material-symbols-outlined text-[16px]" data-icon="send">send</span>}
+                                                        </button>
 						</div>
 					</div>
 				</div>

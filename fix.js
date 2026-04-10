@@ -1,0 +1,1 @@
+const fs = require('fs'); let c = fs.readFileSync('src/views/ChatView.jsx', 'utf8'); c = c.replace('const [inputValue, setInputValue] = useState("");', 'const [inputValue, setInputValue] = useState("");\n        const [isSending, setIsSending] = useState(false);'); fs.writeFileSync('src/views/ChatView.jsx', c);

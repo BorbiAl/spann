@@ -91,7 +91,7 @@ function toUiMessage(apiMessage) {
 		id: String(apiMessage?.id || Date.now()),
 		user: String(apiMessage?.user?.name || "Member"),
 		initials: String(apiMessage?.user?.initials || "US"),
-		color: String(apiMessage?.user?.color || "#0A84FF"),
+		color: String(apiMessage?.user?.color || "#0f67b7"),
 		time: formatMessageTime(apiMessage?.created_at),
 		text: String(apiMessage?.text_translated || apiMessage?.text || ""),
 		reactions,
@@ -240,7 +240,7 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 			<div className="sidebar-section">
 				<p className="section-title">Online</p>
 				{[
-					{ id: "AK", name: "Alex K", color: "#0A84FF" },
+					{ id: "AK", name: "Alex K", color: "#0f67b7" },
 					{ id: "MG", name: "Maria G", color: "#BF5AF2" },
 					{ id: "JP", name: "Jin Park", color: "#30D158" }
 				].map((person) => (
@@ -929,7 +929,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			id: Date.now() + Math.floor(Math.random() * 1000),
 			user: "You",
 			initials: "YU",
-			color: "#0A84FF",
+			color: "#0f67b7",
 			time: formatted,
 			text,
 			reactions: ["✅ 1"],
@@ -1107,7 +1107,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						<>
 							<aside className="w-[240px] flex-shrink-0 fixed left-0 h-screen bg-[#F5F5F7] border-r border-black/10 flex flex-col pt-6 pb-4 px-4 gap-2 font-[Inter,sans-serif] text-[14px] leading-relaxed z-50">
 								<div className="flex items-center gap-3 px-2 mb-6">
-									<div className="w-9 h-9 rounded-[8px] bg-[#0A84FF] flex items-center justify-center text-white font-bold text-[16px]">S</div>
+									<div className="w-9 h-9 rounded-[8px] bg-[#0f67b7] flex items-center justify-center text-white font-bold text-[16px]">S</div>
 									<div className="flex flex-col">
 										<span className="font-bold text-[#1D1D1F] leading-tight">Workspace</span>
 										<span className="text-[12px] text-[#1D1D1F] opacity-50 font-medium">Premium Connectivity</span>
@@ -1118,7 +1118,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 										onClick={() => setActiveView("chat")}
 										className={
 											activeView === "chat"
-												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 										}
 									>
@@ -1129,63 +1129,51 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 										onClick={() => setActiveView("mesh")}
 										className={
 											activeView === "mesh"
-												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 										}
 									>
 										<span className="material-symbols-outlined text-[20px]">wifi_tethering</span>
-										<span className="flex items-center gap-[6px]">
-											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "mesh" ? "opacity-90" : "opacity-50"} mt-[2px]`}>TOWER</span>
-											<span>Mesh</span>
-										</span>
+										<span>Network</span>
 									</div>
 									<div
 										onClick={() => setActiveView("carbon")}
 										className={
 											activeView === "carbon"
-												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 										}
 									>
 										<span className="material-symbols-outlined text-[20px]">energy_savings_leaf</span>
-										<span className="flex items-center gap-[6px]">
-											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "carbon" ? "opacity-90" : "opacity-50"} mt-[2px]`}>LEAF</span>
-											<span>Carbon</span>
-										</span>
+										<span>Carbon</span>
 									</div>
 									<div
 										onClick={() => setActiveView("pulse")}
 										className={
 											activeView === "pulse"
-												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 										}
 									>
 										<span className="material-symbols-outlined text-[20px]">monitor_heart</span>
-										<span className="flex items-center gap-[6px]">
-											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "pulse" ? "opacity-90" : "opacity-50"} mt-[2px]`}>WAVE</span>
-											<span>Pulse</span>
-										</span>
+										<span>Analytics</span>
 									</div>
 									<div
 										onClick={() => setActiveView("accessibility")}
 										className={
 											activeView === "accessibility"
-												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 										}
 									>
 										<span className="material-symbols-outlined text-[20px]">visibility</span>
-										<span className="flex items-center gap-[6px]">
-											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "accessibility" ? "opacity-90" : "opacity-50"} mt-[2px]`}>EYE</span>
-											<span>Access</span>
-										</span>
+										<span>Accessibility</span>
 									</div>
 									<div
 										onClick={() => setActiveView("translator")}
 										className={
 											activeView === "translator"
-												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
 										}
 									>
@@ -1218,7 +1206,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 										<h1 className="text-[22px] font-bold tracking-tight text-[#1D1D1F] mb-5">Teams</h1>
 										<div className="relative group shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
 											<span className="material-symbols-outlined absolute left-3 top-[7px] text-[#1D1D1F] opacity-40 text-[18px]">search</span>
-											<input className="w-full bg-white border border-[#E5E5EA] rounded-[8px] pl-9 py-1.5 text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-[#0A84FF]/20 transition-all text-[#1D1D1F] placeholder:text-[#1D1D1F] placeholder:font-medium placeholder:opacity-40" placeholder="Jump to..." type="text" />
+											<input className="w-full bg-white border border-[#E5E5EA] rounded-[8px] pl-9 py-1.5 text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-[#0f67b7]/20 transition-all text-[#1D1D1F] placeholder:text-[#1D1D1F] placeholder:font-medium placeholder:opacity-40" placeholder="Jump to..." type="text" />
 										</div>
 									</div>
 									<div className="flex-1 overflow-y-auto px-4 mt-2">
@@ -1241,7 +1229,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 															<span className="opacity-40 mr-3 font-medium">#</span>
 															{ch.name.replace(/^#/, "")}
 														</span>
-														{activeChannelId === ch.id && <span className="absolute right-3 w-2 h-2 rounded-full bg-[#0A84FF]"></span>}
+														{activeChannelId === ch.id && <span className="absolute right-3 w-2 h-2 rounded-full bg-[#0f67b7]"></span>}
 													</div>
 												))}
 											</div>
@@ -1271,7 +1259,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 									messages={currentMessages}
 									onSendMessage={(channelLabel, text, translated) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-										handleSendMessage(channel?.id || activeChannelId, text, translated);
+										return handleSendMessage(channel?.id || activeChannelId, text, translated);
 									}}
 									onReactMessage={(channelLabel, messageId, emoji) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
@@ -1325,7 +1313,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								messages={currentMessages}
 								onSendMessage={(channelLabel, text, translated) => {
 									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-									handleSendMessage(channel?.id || activeChannelId, text, translated);
+									return handleSendMessage(channel?.id || activeChannelId, text, translated);
 								}}
 								onReactMessage={(channelLabel, messageId, emoji) => {
 									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);

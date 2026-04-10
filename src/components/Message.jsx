@@ -40,7 +40,7 @@ export default function Message({ message, index, onReaction }) {
                                 <div
                                         className={
                                                 isSelf
-                                                        ? "bg-[#007AFF] text-white p-[14px] rounded-[8px] rounded-tr-sm max-w-[90%] shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex-shrink"
+                                                        ? "bg-[#0f67b7] text-white p-[14px] rounded-[8px] rounded-tr-sm max-w-[90%] shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex-shrink"
                                                         : "text-[#1D1D1F] px-1 py-1 w-full"
                                         }
                                 >
