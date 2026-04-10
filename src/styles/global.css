@@ -5068,14 +5068,52 @@
       }
     }
 
+      .carbon-status-strip {
+        min-height: 44px;
+        border-radius: 12px;
+        border: 1px solid #b7ddc4;
+        background: #eaf7ee;
+        color: #1a5c30;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 10px 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .carbon-status-strip-copy {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .carbon-status-strip-badge {
+        flex-shrink: 0;
+        min-height: 28px;
+        border-radius: 9px;
+        border: 1px solid #9dcfaf;
+        background: #d4f0de;
+        color: #1a5c30;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 0 12px;
+        display: grid;
+        place-items: center;
+      }
+
       .carbon-v2-page {
         min-height: 100%;
         display: flex;
         flex-direction: column;
-        gap: 18px;
-        padding: 20px 18px 22px;
+        gap: 14px;
+        padding: 14px 10px 18px;
         font-family: "Inter", var(--font-sans);
-        background: #f9f9f9;
         color: #1a1c1c;
       }
 
@@ -5083,8 +5121,8 @@
         flex: 1;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 2.1fr) minmax(300px, 1fr);
-        gap: 20px;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+        gap: 14px;
         align-items: start;
       }
 
@@ -5092,19 +5130,19 @@
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 14px;
       }
 
       .carbon-v2-hero-card {
-        background: rgba(255, 255, 255, 0.72);
-        border: 1px solid #d9e0ec;
-        border-radius: 22px;
+        background: #f8fafc;
+        border: 1px solid #dde4ee;
+        border-radius: 16px;
         padding: 24px;
         display: grid;
         grid-template-columns: 240px minmax(0, 1fr);
         gap: 24px;
         align-items: center;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
       }
 
       .carbon-v2-ring-wrap {
@@ -5148,12 +5186,12 @@
       }
 
       .carbon-v2-ring-copy strong {
-        font-size: 42px;
+        font-size: 36px;
         letter-spacing: -0.03em;
       }
 
       .carbon-v2-ring-copy p span {
-        font-size: 18px;
+        font-size: 15px;
         color: #4b5563;
         font-weight: 500;
       }
@@ -5161,9 +5199,9 @@
       .carbon-v2-ring-copy em {
         font-style: normal;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         color: #1160a4;
-        font-size: 18px;
+        font-size: 12px;
         font-weight: 700;
       }
 
@@ -5182,19 +5220,19 @@
 
       .carbon-v2-hero-copy h2 {
         margin: 0;
-        font-size: 50px;
-        line-height: 1.02;
-        letter-spacing: -0.03em;
+        font-size: 26px;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
         color: #111827;
-        max-width: 11ch;
+        max-width: none;
       }
 
       .carbon-v2-hero-copy p {
-        margin: 10px 0 16px;
+        margin: 8px 0 14px;
         color: #404752;
-        font-size: 18px;
-        line-height: 1.38;
-        max-width: 34ch;
+        font-size: 14px;
+        line-height: 1.5;
+        max-width: 38ch;
       }
 
       .carbon-v2-meter-labels {
@@ -5233,27 +5271,33 @@
       }
 
       .carbon-v2-btn {
-        min-height: 48px;
-        border-radius: 12px;
-        padding: 0 18px;
-        font-size: 15px;
+        min-height: 36px;
+        border-radius: 10px;
+        padding: 0 16px;
+        font-size: 13px;
         font-weight: 700;
         display: inline-flex;
         align-items: center;
-        gap: 7px;
+        gap: 6px;
         border: 1px solid transparent;
+        transition: opacity 0.15s, background-color 0.15s;
+      }
+
+      .carbon-v2-btn:hover {
+        opacity: 0.88;
       }
 
       .carbon-v2-btn.primary {
         color: #fff;
-        background: linear-gradient(180deg, #0078d4, #005faa);
-        box-shadow: 0 10px 22px rgba(0, 95, 170, 0.22);
+        background: #0f67b7;
+        border-color: #0f67b7;
+        box-shadow: 0 4px 10px rgba(15, 103, 183, 0.22);
       }
 
       .carbon-v2-btn.secondary {
-        color: #1f2937;
-        background: #e6e8ee;
-        border-color: #cfd6e3;
+        color: #374151;
+        background: #ffffff;
+        border-color: #dde4ee;
       }
 
       .carbon-v2-achievements {
@@ -5271,8 +5315,8 @@
 
       .carbon-v2-head-row h3 {
         margin: 0;
-        font-size: 28px;
-        letter-spacing: -0.02em;
+        font-size: 20px;
+        letter-spacing: -0.01em;
         color: #111827;
       }
 
@@ -5290,9 +5334,9 @@
 
       .carbon-v2-achievement {
         min-height: 152px;
-        border-radius: 20px;
-        border: 1px solid #d9e0ec;
-        background: rgba(255, 255, 255, 0.72);
+        border-radius: 16px;
+        border: 1px solid #dde4ee;
+        background: #f8fafc;
         padding: 14px;
         display: flex;
         flex-direction: column;
@@ -5300,6 +5344,7 @@
         justify-content: center;
         text-align: center;
         gap: 6px;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
       }
 
       .carbon-v2-achievement.locked {
@@ -5309,9 +5354,9 @@
       }
 
       .carbon-v2-achievement-icon {
-        width: 58px;
-        height: 58px;
-        border-radius: 16px;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
         display: grid;
         place-items: center;
         color: #1160a4;
@@ -5321,7 +5366,8 @@
 
       .carbon-v2-achievement h4 {
         margin: 0;
-        font-size: 17px;
+        font-size: 14px;
+        font-weight: 700;
         color: #111827;
       }
 
@@ -5334,14 +5380,14 @@
 
       .carbon-v2-leaderboard {
         min-height: 100%;
-        background: rgba(255, 255, 255, 0.72);
-        border: 1px solid #d9e0ec;
-        border-radius: 22px;
+        background: #f8fafc;
+        border: 1px solid #dde4ee;
+        border-radius: 16px;
         padding: 16px;
         display: flex;
         flex-direction: column;
         gap: 10px;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
       }
 
       .carbon-v2-leaderboard .carbon-v2-head-row {
@@ -5350,7 +5396,7 @@
       }
 
       .carbon-v2-leaderboard .carbon-v2-head-row h3 {
-        font-size: 24px;
+        font-size: 18px;
       }
 
       .carbon-v2-leaderboard .carbon-v2-head-row span {
@@ -5438,9 +5484,26 @@
         font-weight: 800;
       }
 
+      .carbon-v2-view-all-btn {
+        width: 100%;
+        min-height: 36px;
+        border-radius: 11px;
+        border: 1px solid #d8e0ec;
+        background: #f1f5f9;
+        color: #1f2937;
+        font-size: 13px;
+        font-weight: 700;
+        margin-top: auto;
+      }
+
+      .carbon-v2-view-all-btn:hover {
+        background: #e8eef6;
+      }
+
       .carbon-v2-goal {
         margin-top: 8px;
-        background: #1160a4;
+        background: linear-gradient(135deg, #0f67b7, #147bdb);
+        border: 1px solid #0f67b7;
         border-radius: 14px;
         color: #fff;
         padding: 12px;
@@ -5475,10 +5538,10 @@
       .carbon-v2-dock {
         align-self: center;
         width: min(100%, 760px);
-        border-radius: 999px;
-        border: 1px solid #d9e0ec;
-        background: rgba(255, 255, 255, 0.84);
-        box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+        border-radius: 14px;
+        border: 1px solid #dde4ee;
+        background: #f8fafc;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
         padding: 8px 10px;
         display: flex;
         align-items: center;
@@ -5508,18 +5571,18 @@
       }
 
       .carbon-v2-dock-btn {
-        width: 44px;
+        width: 52px;
         height: 44px;
-        border-radius: 50%;
-        background: #e8f2ff;
-        color: #1160a4;
-        border: 1px solid transparent;
+        border-radius: 10px;
+        background: #eef4fc;
+        color: #0f67b7;
+        border: 1px solid #dde4ee;
         display: inline-flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 2px;
-        transition: transform var(--motion), background-color var(--motion);
+        transition: background-color 0.15s, color 0.15s;
       }
 
       .carbon-v2-dock-btn span {
@@ -5529,13 +5592,20 @@
       }
 
       .carbon-v2-dock-btn:hover {
-        transform: translateY(-1px);
         background: #dbeafe;
+        color: #0f67b7;
       }
 
       .carbon-v2-dock-btn.add {
-        background: #eceef3;
-        color: #111827;
+        background: #0f67b7;
+        color: #ffffff;
+        border-color: #0f67b7;
+        box-shadow: 0 4px 10px rgba(15, 103, 183, 0.22);
+      }
+
+      .carbon-v2-dock-btn.add:hover {
+        background: #0c5a9e;
+        color: #ffffff;
       }
 
       .carbon-v2-dock-btn:disabled {
@@ -5590,7 +5660,7 @@
         }
 
         .carbon-v2-head-row h3 {
-          font-size: 22px;
+          font-size: 18px;
         }
 
         .carbon-v2-achievement-grid {
