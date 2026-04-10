@@ -1,4 +1,3 @@
-import './ChatView.css';
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import Message from "../components/Message";
@@ -50,129 +49,159 @@ export default function ChatView({
 	}
 
 	return (
-		<div className="chat-page view-transition">
-			<header className="chat-room-header">
-				<div className="chat-room-title">
-					<span className="chat-room-hash" aria-hidden="true">
-						<Icon name="tag" size={18} />
+		<div className="flex-1 flex flex-col min-w-0 bg-white">
+			{/* Top App Bar */}
+			<header className="h-[60px] flex items-center justify-between px-6 bg-white sticky top-0 z-10 border-b border-black/5">
+				<div className="flex items-center gap-3">
+					<span className="text-[#007AFF] text-[20px] font-medium">#</span>
+					<h2 className="font-bold text-[#1D1D1F] text-[18px] tracking-tight">{String(activeChannel || "product-strategy").replace(/^#/, "")}</h2>
+					<span className="material-symbols-outlined text-[#1D1D1F] opacity-40 text-[18px] cursor-pointer" data-icon="star">
+						star
 					</span>
-					<h3>{String(activeChannel || "#general").replace(/^#/, "")}</h3>
-					<button className="chat-room-star" type="button" aria-label="Star channel">
-						<Icon name="star" size={14} />
-					</button>
 				</div>
-				<div className="chat-room-actions">
-					<div className="chat-room-presence" aria-hidden="true">
+				<div className="flex items-center gap-4">
+					<div className="flex -space-x-2">
 						{PRESENCE_MEMBERS.slice(0, 2).map((member, index) => (
-							<span key={member.id} className={`presence-avatar ${index === 0 ? "a" : "b"}`} title={member.name}>
+							<React.Fragment key={member.id}>
 								{member.avatar ? (
-									<img className="presence-avatar-image" src={member.avatar} alt={`${member.name} avatar`} />
+									<img
+										className="w-8 h-8 rounded-full border-2 border-white object-cover"
+										src={member.avatar}
+										alt={`${member.name} avatar`}
+									/>
 								) : (
-									<span className="presence-avatar-initials">{member.initials || member.name.slice(0, 2).toUpperCase()}</span>
+									<div className="w-8 h-8 rounded-full border-2 border-white bg-[#E5E5EA] text-[#1D1D1F] text-[10px] flex items-center justify-center font-bold">
+										{member.initials || member.name.slice(0, 2).toUpperCase()}
+									</div>
 								)}
-							</span>
+							</React.Fragment>
 						))}
-						<span className="presence-count">+12</span>
+						<div className="w-8 h-8 rounded-full border-2 border-white bg-[#E5E5EA] text-[#1D1D1F] text-[11px] flex items-center justify-center font-bold">
+							+12
+						</div>
 					</div>
-					<button className="chat-room-btn chat-help-btn" type="button" aria-label="Help">
-						<Icon name="help" size={16} />
-					</button>
+					<span className="material-symbols-outlined text-[#1D1D1F] opacity-60 text-[22px] cursor-pointer hover:opacity-100 transition-colors" data-icon="help">
+						help
+					</span>
+					<span className="material-symbols-outlined text-[#1D1D1F] opacity-60 text-[22px] cursor-pointer hover:opacity-100 transition-colors" data-icon="settings">
+						settings
+					</span>
 				</div>
 			</header>
 
-			<div className="chat-thread-scroll">
-				<div className="chat-day-divider">
-					<span>TODAY</span>
+			{/* Message Area */}
+			<div className="flex-1 overflow-y-auto px-10 pt-8 pb-4 flex flex-col gap-6 scroll-smooth custom-scrollbar">
+				{/* Date Divider */}
+				<div className="relative flex justify-center items-center mt-2 mb-4">
+					<div className="absolute inset-0 flex items-center">
+						<div className="w-full border-t border-black/5" />
+					</div>
+					<span className="relative px-4 bg-white text-[11px] font-bold text-[#1D1D1F] opacity-60 tracking-widest uppercase">
+						TODAY
+					</span>
 				</div>
 
-				<div className="chat-thread-list">
-					{trimmedMessages.map((message, index) => (
-						<Message
-							key={message.id}
-							message={message}
-							index={index}
-							onReaction={(messageId, emoji) => onReactMessage(activeChannel, messageId, emoji)}
-						/>
-					))}
-				</div>
+				{trimmedMessages.map((message, index) => (
+					<Message
+						key={message.id}
+						message={message}
+						index={index}
+						onReaction={(messageId, emoji) => onReactMessage(activeChannel, messageId, emoji)}
+					/>
+				))}
 
 				{showNudge ? (
-					<div className="chat-coach-card">
-						<div className="chat-coach-icon">
-							<Icon name="info" size={14} />
+					<div className="bg-[#E1F0FF] px-4 py-3 flex items-start gap-4 rounded-[8px] w-full max-w-[85%] self-start border-l-4 border-l-[#0A84FF]">
+						<span className="material-symbols-outlined text-[#0A84FF] text-[20px] mt-0.5" data-icon="info">
+							info
+						</span>
+						<div className="flex flex-1 justify-between items-center pr-2">
+							<p className="text-[13px] text-[#003B73] font-medium leading-relaxed">
+								Try rephrasing for better clarity. Your last message has a formal tone that might be perceived as rigid in this context.
+							</p>
+							<button
+								className="text-[12px] font-bold uppercase tracking-widest text-[#007AFF] hover:underline"
+								onClick={() => setShowNudge(false)}
+							>
+								DISMISS
+							</button>
 						</div>
-						<p>Try rephrasing for better clarity. Your last message has a formal tone that might be perceived as rigid in this context.</p>
-						<button className="chat-coach-dismiss" onClick={() => setShowNudge(false)} aria-label="Dismiss tip" type="button">
-							Dismiss
-						</button>
 					</div>
 				) : null}
 
-				<div className="chat-typing-note" aria-live="polite">
-					<span className="typing-dots" aria-hidden="true">
-						<span />
-						<span />
-						<span />
-					</span>
-					<span>Alex is typing...</span>
+				<div className="flex items-center gap-2 px-14 opacity-50 mb-2">
+					<div className="flex gap-1" aria-hidden="true">
+						<span className="w-1 h-1 rounded-full bg-[#1D1D1F] animate-pulse" />
+						<span className="w-1 h-1 rounded-full bg-[#1D1D1F] animate-pulse delay-75" />
+						<span className="w-1 h-1 rounded-full bg-[#1D1D1F] animate-pulse delay-150" />
+					</div>
+					<span className="text-[12px] italic text-[#1D1D1F]">Alex is typing...</span>
 				</div>
 			</div>
 
-			<footer className="chat-composer-dock">
-				<div className="chat-sentiment-row">
-					<span>Tone Sentiment</span>
-					<div className="chat-sentiment-track">
-						<div className="chat-sentiment-fill" style={{ width: `${sentimentScore}%` }} />
+			{/* Message Input Area */}
+			<footer className="px-10 pb-8 bg-white mt-auto">
+				<div className="w-full space-y-3">
+					{/* Sentiment Bar */}
+					<div className="flex items-center gap-4 px-2 w-full max-w-full">
+						<span className="text-[10px] font-bold text-[#1D1D1F] opacity-70 uppercase tracking-widest whitespace-nowrap">
+							TONE SENTIMENT
+						</span>
+						<div className="flex-1 h-[6px] bg-[#E5E5EA] rounded-full overflow-hidden flex">
+							<div
+								className="h-full bg-[#0A84FF] transition-all duration-500 rounded-full"
+								style={{ width: `70%` }}
+							/>
+						</div>
+						<span className="text-[12px] font-bold text-[#0A84FF]">Collaborative</span>
 					</div>
-					<span>{sentimentLabel}</span>
-				</div>
 
-				<div className="chat-composer-box">
-					<textarea
-						value={inputValue}
-						onChange={(event) => setInputValue(event.target.value)}
-						className="chat-composer-input"
-						placeholder={`Type a message to #${String(activeChannel || "general").replace(/^#/, "")}`}
-						rows={1}
-						onKeyDown={(event) => {
-							if (event.key === "Enter" && !event.shiftKey) {
-								event.preventDefault();
-								sendMessage();
-							}
-						}}
-					/>
-
-					<div className="chat-composer-tools">
-						<div className="chat-tool-group">
-							<button className="chat-tool-btn" type="button" aria-label="Add">
-								<Icon name="plusCircle" size={16} />
-							</button>
-							<button className="chat-tool-btn" type="button" aria-label="Add emoji">
-								<Icon name="emoji" size={15} />
-							</button>
-							<button className="chat-tool-btn" type="button" aria-label="Mention">
-								<Icon name="mention" size={16} />
-							</button>
-							<div className="chat-tools-divider" aria-hidden="true" />
+					{/* Input Box */}
+					<div className="bg-white rounded-[12px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-[#E5E5EA] p-3 focus-within:ring-2 focus-within:ring-[#0A84FF]/20 transition-all flex flex-col">
+						<textarea
+							value={inputValue}
+							onChange={(event) => setInputValue(event.target.value)}
+							className="w-full border-none focus:outline-none focus:ring-0 text-[14px] text-[#1D1D1F] px-1 bg-transparent resize-none placeholder:text-[#1D1D1F] placeholder:opacity-50"
+							placeholder={`Type a message to #${String(activeChannel || "product-strategy").replace(/^#/, "")}`}
+							rows={1}
+							onKeyDown={(event) => {
+								if (event.key === "Enter" && !event.shiftKey) {
+									event.preventDefault();
+									sendMessage();
+								}
+							}}
+						/>
+						<div className="flex items-center justify-between mt-6">
+							<div className="flex items-center gap-3 pl-1">
+								<span className="material-symbols-outlined text-[24px] text-[#1D1D1F] opacity-70 hover:opacity-100 cursor-pointer" data-icon="add_circle">add_circle</span>
+								<span className="material-symbols-outlined text-[24px] text-[#1D1D1F] opacity-70 hover:opacity-100 cursor-pointer" data-icon="sentiment_satisfied">sentiment_satisfied</span>
+								<span className="material-symbols-outlined text-[24px] text-[#1D1D1F] opacity-70 hover:opacity-100 cursor-pointer" data-icon="alternate_email">alternate_email</span>
+								
+								<div className="flex items-center gap-3 ml-2 border-l border-black/10 pl-5">
+									<span className="material-symbols-outlined text-[20px] text-[#1D1D1F] opacity-70" data-icon="translate">translate</span>
+									<span className="text-[12px] font-semibold text-[#1D1D1F] opacity-80 uppercase tracking-widest tracking-tighter">TRANSLATE</span>
+									
+									<button
+										type="button"
+										className={`w-[32px] h-[18px] rounded-full relative cursor-pointer border ${translateEnabled ? 'bg-[#34C759] border-[#34C759]' : 'bg-[#E5E5EA] border-[#D1D1D6]'}`}
+										onClick={() => setTranslateEnabled((current) => !current)}
+										aria-pressed={translateEnabled}
+									>
+										<div className={`absolute top-[1px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all duration-200 ${translateEnabled ? "right-[1px]" : "left-[1px]"}`} />
+									</button>
+								</div>
+							</div>
 
 							<button
+								className="bg-[#0A84FF] text-white pl-4 pr-3 py-[6px] rounded-[16px] text-[14px] font-semibold flex items-center justify-center gap-1.5 hover:bg-[#007AFF] transition-all cursor-pointer shadow-sm active:scale-95"
+								onClick={sendMessage}
+								aria-label="Send message"
 								type="button"
-								className="chat-tool-translate"
-								onClick={() => setTranslateEnabled((current) => !current)}
-								aria-pressed={translateEnabled}
 							>
-								<Icon name="translate" size={13} />
-								<span>Translate</span>
-								<span className={`translate-switch ${translateEnabled ? "on" : "off"}`} aria-hidden="true">
-									<span />
-								</span>
+								<span>Send</span>
+								<span className="material-symbols-outlined text-[16px]" data-icon="send">send</span>
 							</button>
 						</div>
-
-						<button className="chat-send-btn" onClick={sendMessage} aria-label="Send message" type="button">
-							Send
-							<Icon name="send" size={14} />
-						</button>
 					</div>
 				</div>
 			</footer>

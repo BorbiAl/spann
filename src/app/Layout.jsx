@@ -529,6 +529,10 @@ function MainPanel({
 		return <TranslatorView />;
 	}
 
+	if (activeView === "chat") {
+		return renderView();
+	}
+
 	return (
 		<main className="main-panel">
 			<section className="main-surface">
@@ -1095,41 +1099,189 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	return (
-		<div className={`app-shell ${activeView === "chat" ? "chat-workspace" : ""}`}>
-			<div className="workspace-stack">
+		<div className={`app-shell ${activeView === "chat" ? "chat-workspace bg-background text-on-background h-screen flex overflow-hidden w-full" : ""}`}>
+			<div className="workspace-stack h-full w-full flex">
 				{activeView !== "chat" ? <WorkspaceHeaderBar activeView={activeView} onToggleContext={handleContextAction} onLogout={onLogout} /> : null}
-				<div className={`workspace-body ${contextOpen ? "context-open" : "context-closed"} ${activeView === "chat" ? "chat-layout" : ""}`}>
+				<div className={activeView === "chat" ? "chat-layout flex h-screen w-full" : `workspace-body ${contextOpen ? "context-open" : "context-closed"}`}>
 					{activeView === "chat" ? (
 						<>
-							<ChatNavRail activeView={activeView} onChange={setActiveView} items={navItems} />
-							<Sidebar
-								activeView={activeView}
-								activeChannelId={activeChannelId}
-								channels={channels}
-								onChannelChange={handleChannelChange}
-								channelUnread={channelUnread}
-								navItems={navItems}
-								onViewChange={setActiveView}
-								isChatLayout={true}
-							/>
-							<MainPanel
-								activeView={activeView}
-								activeChannel={activeChannel}
-								channelMood={activeMood}
-								messages={currentMessages}
-								onSendMessage={(channelLabel, text, translated) => {
-									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-									handleSendMessage(channel?.id || activeChannelId, text, translated);
-								}}
-								onReactMessage={(channelLabel, messageId, emoji) => {
-									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-									handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
-								}}
-								translateEnabled={translateEnabled}
-								setTranslateEnabled={setTranslateEnabled}
-								showNudge={showNudge}
-								setShowNudge={setShowNudge}
-								pulseChannels={pulseChannels}
+							<aside className="w-[240px] flex-shrink-0 fixed left-0 h-screen bg-[#F5F5F7] border-r border-black/10 flex flex-col pt-6 pb-4 px-4 gap-2 font-[Inter,sans-serif] text-[14px] leading-relaxed z-50">
+								<div className="flex items-center gap-3 px-2 mb-6">
+									<div className="w-9 h-9 rounded-[8px] bg-[#0A84FF] flex items-center justify-center text-white font-bold text-[16px]">S</div>
+									<div className="flex flex-col">
+										<span className="font-bold text-[#1D1D1F] leading-tight">Workspace</span>
+										<span className="text-[12px] text-[#1D1D1F] opacity-50 font-medium">Premium Connectivity</span>
+									</div>
+								</div>
+								<nav className="flex-1 flex flex-col gap-[2px]">
+									<div
+										onClick={() => setActiveView("chat")}
+										className={
+											activeView === "chat"
+												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+										}
+									>
+										<span className="material-symbols-outlined text-[20px]">chat</span>
+										<span>Chat</span>
+									</div>
+									<div
+										onClick={() => setActiveView("mesh")}
+										className={
+											activeView === "mesh"
+												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+										}
+									>
+										<span className="material-symbols-outlined text-[20px]">wifi_tethering</span>
+										<span className="flex items-center gap-[6px]">
+											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "mesh" ? "opacity-90" : "opacity-50"} mt-[2px]`}>TOWER</span>
+											<span>Mesh</span>
+										</span>
+									</div>
+									<div
+										onClick={() => setActiveView("carbon")}
+										className={
+											activeView === "carbon"
+												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+										}
+									>
+										<span className="material-symbols-outlined text-[20px]">energy_savings_leaf</span>
+										<span className="flex items-center gap-[6px]">
+											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "carbon" ? "opacity-90" : "opacity-50"} mt-[2px]`}>LEAF</span>
+											<span>Carbon</span>
+										</span>
+									</div>
+									<div
+										onClick={() => setActiveView("pulse")}
+										className={
+											activeView === "pulse"
+												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+										}
+									>
+										<span className="material-symbols-outlined text-[20px]">monitor_heart</span>
+										<span className="flex items-center gap-[6px]">
+											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "pulse" ? "opacity-90" : "opacity-50"} mt-[2px]`}>WAVE</span>
+											<span>Pulse</span>
+										</span>
+									</div>
+									<div
+										onClick={() => setActiveView("accessibility")}
+										className={
+											activeView === "accessibility"
+												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+										}
+									>
+										<span className="material-symbols-outlined text-[20px]">visibility</span>
+										<span className="flex items-center gap-[6px]">
+											<span className={`font-bold tracking-[0.1em] text-[10px] ${activeView === "accessibility" ? "opacity-90" : "opacity-50"} mt-[2px]`}>EYE</span>
+											<span>Access</span>
+										</span>
+									</div>
+									<div
+										onClick={() => setActiveView("translator")}
+										className={
+											activeView === "translator"
+												? "bg-[#0A84FF] text-white font-semibold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
+										}
+									>
+										<span className="material-symbols-outlined text-[20px]">translate</span>
+										<span>Translate</span>
+									</div>
+								</nav>
+								<div className="mt-auto border-t border-black/5 pt-4 flex flex-col gap-1">
+									<div className="text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200">
+										<span className="material-symbols-outlined text-[20px]">settings</span>
+										<span>Settings</span>
+									</div>
+									<div className="text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200">
+										<span className="material-symbols-outlined text-[20px]">help_outline</span>
+										<span>Support</span>
+									</div>
+									<div className="flex items-center gap-3 px-3 py-3 mt-4">
+										<img alt="User Profile" className="w-8 h-8 rounded-full border border-black/5 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBB87Yxv06GHwMcjD11mHkEaMwMQt3vaTkpqpUWgZvcNvPE0eOoc4OVF6PQIfl-gj8UPDfdg1VtV2ZEjlZJCJmRw7vDzxFmy1HNAPVkT5ZWXDb4WpZOZOB3zCKpx7wIOvGNx7TMVCCVO1hJO0Sfl9l1jZP7eGDHAQZ1SsX2IQST7lmvJ69IF3Afq0BSXSchgYdwirZ46jJyX3sNw0uVgrcWHFMu_K0KKjn3GLSDByFh7e149m_C-Wme1UacI-3uZXNuYyP3Nm0Egofr" />
+										<div className="flex flex-col truncate">
+											<span className="font-semibold text-[#1D1D1F] text-[13px]">Alex River</span>
+											<span className="text-[11px] text-[#34C759] font-medium leading-none mt-[2px]">Online</span>
+										</div>
+									</div>
+								</div>
+							</aside>
+							
+							<main className="ml-[240px] flex-1 flex h-screen bg-white">
+								<section className="w-[260px] bg-[#F5F5F7] flex flex-col border-r border-black/10 flex-shrink-0">
+									<div className="px-6 pt-8 pb-4">
+										<h1 className="text-[22px] font-bold tracking-tight text-[#1D1D1F] mb-5">Teams</h1>
+										<div className="relative group shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+											<span className="material-symbols-outlined absolute left-3 top-[7px] text-[#1D1D1F] opacity-40 text-[18px]">search</span>
+											<input className="w-full bg-white border border-[#E5E5EA] rounded-[8px] pl-9 py-1.5 text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-[#0A84FF]/20 transition-all text-[#1D1D1F] placeholder:text-[#1D1D1F] placeholder:font-medium placeholder:opacity-40" placeholder="Jump to..." type="text" />
+										</div>
+									</div>
+									<div className="flex-1 overflow-y-auto px-4 mt-2">
+										<div className="mb-8">
+											<div className="px-3 mb-3 flex justify-between items-center group">
+												<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#1D1D1F] opacity-50">Favorites</span>
+											</div>
+											<div className="space-y-[2px]">
+												{channels.map((ch) => (
+													<div
+														key={ch.id}
+														onClick={() => onChannelChange(ch.id)}
+														className={
+															activeChannelId === ch.id
+																? "flex items-center px-3 py-[6px] rounded-[8px] bg-[#EAEAEF] transition-all cursor-pointer relative"
+																: "flex items-center px-3 py-[6px] rounded-[8px] hover:bg-black/5 transition-all cursor-pointer relative"
+														}
+													>
+														<span className={`text-[14px] flex items-center ${activeChannelId === ch.id ? "font-bold text-[#1D1D1F]" : "font-medium text-[#1D1D1F] opacity-70"}`}>
+															<span className="opacity-40 mr-3 font-medium">#</span>
+															{ch.name.replace(/^#/, "")}
+														</span>
+														{activeChannelId === ch.id && <span className="absolute right-3 w-2 h-2 rounded-full bg-[#0A84FF]"></span>}
+													</div>
+												))}
+											</div>
+										</div>
+										<div className="mb-8">
+											<div className="px-3 mb-3 flex justify-between items-center">
+												<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#1D1D1F] opacity-50">Direct Messages</span>
+											</div>
+											<div className="space-y-[2px]">
+<div className="flex items-center gap-3 px-3 py-2 rounded-[8px] hover:bg-black/5 transition-all cursor-pointer">
+<img className="w-6 h-6 rounded-[6px] object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMmwKvAIFVC1YNqsjNngqLpJf50pSHL5jjdG0Mxz_WzwwDgVrMp7kaL4l0sIbzP5WmFxt-itTBGGbDECAoe30sAskyf0GOnG6GKtCT7TIRPaNzaQANRVmyUfyZ9UxtQ87INP2ffSNnmRnmEvtwjMGZMdIUZbZ22K80jIdbIJXFiaLk2Xe9tZ8wDTbRudfMVtwi2iYr4aIaPNuWE6--h17Y48ORHwgH9kIix2D8-fRH0V-23dv3ezmDxOGw_KPWKHTaTUrRYk3de3MC" />
+<span className="text-[14px] font-medium text-[#1D1D1F] opacity-70 border-b border-transparent">Sarah Chen</span>
+</div>
+<div className="flex items-center gap-3 px-3 py-2 rounded-[8px] hover:bg-black/5 transition-all cursor-pointer">
+<div className="w-6 h-6 rounded-[6px] bg-[#5AC8FA] flex items-center justify-center text-[10px] text-white font-bold tracking-wide">MK</div>
+<span className="text-[14px] font-medium text-[#1D1D1F] opacity-70 border-b border-transparent">Marcus Kane</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+								<MainPanel
+									activeView={activeView}
+									activeChannel={activeChannel}
+									channelMood={activeMood}
+									messages={currentMessages}
+									onSendMessage={(channelLabel, text, translated) => {
+										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+										handleSendMessage(channel?.id || activeChannelId, text, translated);
+									}}
+									onReactMessage={(channelLabel, messageId, emoji) => {
+										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
+										handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
+									}}
+									translateEnabled={translateEnabled}
+									setTranslateEnabled={setTranslateEnabled}
+									showNudge={showNudge}
+									setShowNudge={setShowNudge}
+									pulseChannels={pulseChannels}
 								onRefreshPulse={handleRefreshPulseAction}
 								pulseLoading={pulseLoading}
 								pulseError={pulseError}
@@ -1152,7 +1304,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								authState={liveAuth}
 								onLogout={onLogout}
 							/>
-							<ChatUtilityRail />
+						</main>
 						</>
 					) : (
 						<>
@@ -1213,7 +1365,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 					)}
 				</div>
 			</div>
-			<BottomTabBar activeView={activeView} onChange={setActiveView} items={navItems} />
+			{activeView !== "chat" && <BottomTabBar activeView={activeView} onChange={setActiveView} items={navItems} />}
 			<MobileSheet
 				open={mobileSheetOpen}
 				onClose={() => setMobileSheetOpen(false)}
@@ -1223,3 +1375,4 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		</div>
 	);
 }
+
