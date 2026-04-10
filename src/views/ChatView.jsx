@@ -28,10 +28,12 @@ export default function ChatView({
 	setTranslateEnabled,
 	showNudge,
 	setShowNudge,
-	onStartCall
+	onStartCall,
+	currentUserName,
 }) {
 	const [inputValue, setInputValue] = useState("");
 	const [isSending, setIsSending] = useState(false);
+	const textareaRef = useRef(null);
 	const [liveFeedEnabled, setLiveFeedEnabled] = useState(true);
 	const [activeTypist, setActiveTypist] = useState("Alex");
 	const [localMessagesByChannel, setLocalMessagesByChannel] = useState({});
@@ -191,6 +193,62 @@ export default function ChatView({
 		window.speechSynthesis.speak(utterance);
 		lastSpokenIdRef.current = latestId;
 	}, [displayMessages, ttsEnabled]);
+
+	function wrapSelection(marker) {
+		const el = textareaRef.current;
+		if (!el) return;
+		const { selectionStart: start, selectionEnd: end, value } = el;
+		const selected = value.slice(start, end);
+		const wrapped = selected ? `${marker}${selected}${marker}` : `${marker}${marker}`;
+		const next = value.slice(0, start) + wrapped + value.slice(end);
+		setInputValue(next);
+		// Restore cursor: after closing marker when text was selected, between markers when empty
+		requestAnimationFrame(() => {
+			const cursor = selected ? start + wrapped.length : start + marker.length;
+			el.setSelectionRange(cursor, cursor);
+			el.focus();
+		});
+	}
+
+	function handleInputKeyDown(e) {
+		const ctrl = e.ctrlKey || e.metaKey;
+
+		// Send on Enter (no shift)
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault();
+			sendMessage();
+			return;
+		}
+
+		// Escape → clear input
+		if (e.key === "Escape") {
+			setInputValue("");
+			return;
+		}
+
+		// ↑ on empty input → restore last message from current user
+		if (e.key === "ArrowUp" && !e.shiftKey && !ctrl && !inputValue) {
+			const mine = [...displayMessages].reverse().find(
+				(m) => m.user === currentUserName || m.user === "You"
+			);
+			if (mine) {
+				e.preventDefault();
+				setInputValue(mine.text);
+				requestAnimationFrame(() => {
+					const el = textareaRef.current;
+					if (el) el.setSelectionRange(mine.text.length, mine.text.length);
+				});
+			}
+			return;
+		}
+
+		// Ctrl+B → **bold**
+		if (ctrl && e.key === "b") { e.preventDefault(); wrapSelection("**"); return; }
+		// Ctrl+I → *italic*
+		if (ctrl && e.key === "i") { e.preventDefault(); wrapSelection("*"); return; }
+		// Ctrl+Shift+X → ~~strikethrough~~
+		if (ctrl && e.shiftKey && e.key === "X") { e.preventDefault(); wrapSelection("~~"); return; }
+	}
 
 	async function sendMessage() {
 		const text = inputValue.trim();
@@ -439,17 +497,13 @@ export default function ChatView({
 					{/* Input Box */}
 					<div className="bg-white rounded-[12px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-[#E5E5EA] p-3 focus-within:ring-2 focus-within:ring-[#0f67b7]/20 transition-all flex flex-col">
 						<textarea
+							ref={textareaRef}
 							value={inputValue}
 							onChange={(event) => setInputValue(event.target.value)}
 							className="w-full border-none focus:outline-none focus:ring-0 text-[14px] text-[#1D1D1F] px-1 bg-transparent resize-none placeholder:text-[#1D1D1F] placeholder:opacity-50"
 							placeholder={inputPlaceholder}
 							rows={1}
-							onKeyDown={(event) => {
-								if (event.key === "Enter" && !event.shiftKey) {
-									event.preventDefault();
-									sendMessage();
-								}
-							}}
+							onKeyDown={handleInputKeyDown}
 						/>
 						<div className="flex items-center justify-between mt-6">
 							<div className="flex items-center gap-3 pl-1">

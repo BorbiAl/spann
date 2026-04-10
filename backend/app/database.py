@@ -1437,6 +1437,58 @@ class DatabaseClient:
         data = self._extract_data(response) or []
         return data[0] if data else payload
 
+    async def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
+        """Fetch the current user's full profile."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            return local_store.get_user_profile(safe_user_id)
+
+        client = await self.client()
+        response = await self._execute(
+            "get_user_profile",
+            client.table("users")
+            .select("id,email,username,display_name,bio,timezone,locale,role,avatar_url")
+            .eq("id", safe_user_id)
+            .limit(1),
+        )
+        rows = self._extract_data(response) or []
+        return cast(dict[str, Any], rows[0]) if rows else None
+
+    async def update_user_profile(
+        self,
+        user_id: str,
+        *,
+        display_name: str | None,
+        bio: str | None,
+        timezone: str | None,
+    ) -> dict[str, Any] | None:
+        """Patch mutable user profile fields and return the updated row."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            return local_store.update_user_profile(
+                safe_user_id,
+                display_name=display_name,
+                bio=bio,
+                timezone=timezone,
+            )
+
+        client = await self.client()
+        payload: dict[str, Any] = {"updated_at": datetime.now(UTC).isoformat()}
+        if display_name is not None:
+            payload["display_name"] = self._sanitize_text(display_name, max_len=64)
+        if bio is not None:
+            payload["bio"] = self._sanitize_optional_text(bio, max_len=500)
+        if timezone is not None:
+            payload["timezone"] = self._sanitize_text(timezone, max_len=64) if timezone else None
+
+        await self._execute(
+            "update_user_profile",
+            client.table("users").update(payload).eq("id", safe_user_id),
+        )
+        return await self.get_user_profile(user_id)
+
     async def get_user_preferences(self, user_id: str) -> dict[str, Any]:
         """Fetch user preferences by user id."""
 

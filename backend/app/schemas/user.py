@@ -24,6 +24,16 @@ class MagicLinkRequest(BaseModel):
     email: EmailStr
 
 
+class UserProfilePatchRequest(BaseModel):
+    """Patch payload for mutable user profile fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=64)
+    bio: str | None = Field(default=None, max_length=500)
+    timezone: str | None = Field(default=None, max_length=64)
+
+
 class UserPreferencesPatchRequest(BaseModel):
     """Patch payload for user preferences and accessibility settings."""
 

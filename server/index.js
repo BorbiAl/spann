@@ -2,6 +2,10 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
+const { fileURLToPath } = require("url");
+
+const __filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath(import.meta.url);
+const __dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);

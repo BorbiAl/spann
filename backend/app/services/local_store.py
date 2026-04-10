@@ -38,6 +38,8 @@ class LocalUser:
     locale: str = "en-US"
     coaching_enabled: bool = True
     accessibility_settings: dict[str, Any] | None = None
+    bio: str | None = None
+    timezone: str | None = None
 
 
 class LocalStore:
@@ -216,6 +218,43 @@ class LocalStore:
             "coaching_enabled": user.coaching_enabled,
             "accessibility_settings": user.accessibility_settings or {},
         }
+
+    def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
+        user = self.users_by_id.get(user_id)
+        if user is None:
+            return None
+        username = user.email.split("@", 1)[0]
+        return {
+            "id": user.id,
+            "email": user.email,
+            "username": username,
+            "display_name": user.display_name,
+            "bio": user.bio,
+            "timezone": user.timezone,
+            "locale": user.locale,
+            "coaching_enabled": user.coaching_enabled,
+            "role": "member",
+            "avatar_url": None,
+        }
+
+    def update_user_profile(
+        self,
+        user_id: str,
+        *,
+        display_name: str | None,
+        bio: str | None,
+        timezone: str | None,
+    ) -> dict[str, Any] | None:
+        user = self.users_by_id.get(user_id)
+        if user is None:
+            return None
+        if display_name is not None:
+            user.display_name = display_name.strip()
+        if bio is not None:
+            user.bio = bio.strip() or None
+        if timezone is not None:
+            user.timezone = timezone or None
+        return self.get_user_profile(user_id)
 
     def create_refresh_token(
         self,

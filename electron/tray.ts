@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, MenuItem, Tray, nativeImage } from 'electron'
 import path from 'path'
+import { resolveElectronPath } from './path-utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -16,7 +17,7 @@ let currentUnreadCount = 0
 function getTrayIcon(): Electron.NativeImage {
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, 'tray-icon.png')
-    : path.join(__dirname, '../public/tray-icon.png')
+    : resolveElectronPath('../public/tray-icon.png')
 
   try {
     const img = nativeImage.createFromPath(iconPath)

@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from "react";
-import { NODES } from "../data/constants";
 
 export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, onRevokeNode, isBusy, errorText }) {
 	const [mode, setMode] = useState("Mesh");
+	const [showAllNodes, setShowAllNodes] = useState(false);
 	const meshActive = mode === "Mesh";
 
 	const connectedCount = useMemo(
@@ -37,9 +37,16 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 		if (node.ping) {
 			return `${node.ping} data`;
 		}
-
-		const fallback = ["1.2 GB", "850 MB", "1.1 GB", "45 MB", "620 MB", "390 MB"];
-		return fallback[index % fallback.length];
+		// Show last_seen instead of made-up data
+		if (node.last_seen) {
+			const lastSeen = new Date(node.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+			return `Last seen ${lastSeen}`;
+		}
+		if (node.last_ping_at) {
+			const lastSeen = new Date(node.last_ping_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+			return `Last seen ${lastSeen}`;
+		}
+		return "No data";
 	}
 
 	function toShortName(rawName, fallback) {
@@ -52,25 +59,7 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 		return stripped || fallback;
 	}
 
-	const preparedNodes = (Array.isArray(meshNodes) && meshNodes.length ? meshNodes : NODES).map((node, index) => {
-		if (node.id && node.name) {
-			const status = node.status === "weak" ? "weak" : "active";
-			const bars = toSignalBars(node.signal, status);
-			const progress = status === "weak" ? 15 : bars === 3 ? 85 : bars === 2 ? 62 : 35;
-			return {
-				id: node.id,
-				nodeId: node.nodeId || node.id,
-				name: node.name,
-				shortName: toShortName(node.name, `Node ${index + 1}`),
-				status,
-				statusLabel: status === "active" ? "Active" : "Standby",
-				signal: bars,
-				progress,
-				dataText: toDataLabel(node, index),
-				revoked: Boolean(node.revoked)
-			};
-		}
-
+	const preparedNodes = (Array.isArray(meshNodes) && meshNodes.length ? meshNodes : []).map((node, index) => {
 		const nodeId = String(node.node_id || node.id || `node-${index + 1}`);
 		const lastSeen = node.last_seen || node.last_ping_at
 			? new Date(node.last_seen || node.last_ping_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -154,7 +143,7 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 				<div className="bg-error-container text-on-error-container px-6 py-3 rounded-xl flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 border border-error/10">
 					<div className="flex items-center gap-3">
 						<span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>wifi_off</span>
-						<span className="text-sm font-medium">Internet disconnected. Mesh network active with {Math.max(connectedCount, 12)} local peers.</span>
+						<span className="text-sm font-medium">Internet disconnected. Mesh network active with {connectedCount} local peer{connectedCount !== 1 ? 's' : ''}.</span>
 					</div>
 					<button
 						onClick={onRefreshNodes}
@@ -172,16 +161,16 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 				<div className="flex-1 bg-white rounded-3xl relative overflow-hidden shadow-sm flex items-center justify-center border border-outline-variant/10">
 					<div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: "radial-gradient(#005faa 0.5px, transparent 0.5px)", backgroundSize: "24px 24px" }} />
 					<svg className="w-full h-full max-w-4xl p-12" viewBox="0 0 800 600">
-						{/* Lines (Network Connections) */}
+						{/* Dynamic Lines (Network Connections) */}
 						<g className="stroke-primary/20" strokeWidth="1.5">
-							<line x1="400" x2="200" y1="300" y2="150" />
-							<line x1="400" x2="600" y1="300" y2="150" />
-							<line x1="400" x2="200" y1="300" y2="450" />
-							<line x1="400" x2="600" y1="300" y2="450" />
-							<line x1="200" x2="600" y1="150" y2="150" />
-							<line x1="200" x2="200" y1="150" y2="450" />
-							<line x1="600" x2="600" y1="150" y2="450" />
+							{preparedNodes.slice(0, 8).map((node, i) => {
+								const angle = (i / Math.max(preparedNodes.length, 1)) * Math.PI * 2;
+								const x = 400 + 180 * Math.cos(angle);
+								const y = 300 + 180 * Math.sin(angle);
+								return <line key={`line-${i}`} x1="400" x2={x} y1="300" y2={y} />;
+							})}
 						</g>
+						
 						{/* Central Hub Node */}
 						<g transform="translate(400,300)">
 							<circle className="fill-primary/10 stroke-primary stroke-2" r="30" />
@@ -189,18 +178,20 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 							<text className="fill-primary font-bold text-xs" textAnchor="middle" y="50">Spann Core</text>
 						</g>
 
-						{/* Peripheral Nodes dynamically placed from preparedNodes or static HTML fallback */}
-						{[
-							{ x: 200, y: 150, def: preparedNodes[0] || { shortName: "Pixel 7 Pro" } },
-							{ x: 600, y: 150, def: preparedNodes[1] || { shortName: "Surface Book" } },
-							{ x: 200, y: 450, def: preparedNodes[2] || { shortName: "iPad Air" } },
-							{ x: 600, y: 450, def: preparedNodes[3] || { shortName: "ThinkPad X1" } },
-						].map((pos, i) => (
-							<g key={i} transform={`translate(${pos.x},${pos.y})`}>
-								<circle className="fill-tertiary-container stroke-white stroke-2" r="12" />
-								<text className="fill-on-surface-variant text-[10px]" textAnchor="middle" y="30">{pos.def.shortName}</text>
-							</g>
-						))}
+						{/* Dynamic Peripheral Nodes */}
+						{preparedNodes.slice(0, 8).map((node, i) => {
+							const angle = (i / Math.max(preparedNodes.length, 1)) * Math.PI * 2;
+							const x = 400 + 180 * Math.cos(angle);
+							const y = 300 + 180 * Math.sin(angle);
+							const isRevoked = node.revoked;
+							const circleColor = isRevoked ? "fill-outline-variant" : "fill-tertiary-container";
+							return (
+								<g key={node.id} transform={`translate(${x},${y})`}>
+									<circle className={`${circleColor} stroke-white stroke-2`} r="12" />
+									<text className="fill-on-surface-variant text-[10px]" textAnchor="middle" y="30">{node.shortName.slice(0, 15)}</text>
+								</g>
+							);
+						})}
 					</svg>
 
 					{/* Status Overlay (Bento Style) */}
@@ -217,7 +208,7 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 					<div className="absolute bottom-6 right-6 flex items-end gap-3">
 						<div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-outline-variant/10">
 							<p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold mb-2">Total Peers</p>
-							<p className="text-3xl font-bold text-primary">{Math.max(connectedCount, 12)}</p>
+							<p className="text-3xl font-bold text-primary">{connectedCount}</p>
 						</div>
 						<button onClick={onRegisterNode} disabled={isBusy} className="bg-primary text-white p-4 rounded-2xl shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity">
 							<span className="material-symbols-outlined">add</span>
@@ -228,10 +219,11 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 				{/* Side Device List */}
 				<div className="w-80 flex flex-col gap-4">
 					<div className="mica-surface rounded-3xl p-6 flex-1 flex flex-col border border-outline-variant/10 shadow-sm overflow-hidden">
-						<h3 className="font-bold text-lg mb-4">Connected Devices</h3>
+						<h3 className="font-bold text-lg mb-2">Connected Devices</h3>
+						<p className="text-xs text-on-surface-variant mb-4">{connectedCount} node{connectedCount !== 1 ? 's' : ''} active</p>
 						<div className="flex-1 overflow-y-auto space-y-4 pr-2">
-							{preparedNodes.slice(0, 4).map((node, i) => {
-								const icons = ["smartphone", "laptop", "tablet", "desktop_windows"];
+							{(showAllNodes ? preparedNodes : preparedNodes.slice(0, 4)).map((node, i) => {
+								const icons = ["smartphone", "laptop", "tablet", "desktop_windows", "router", "smartphone", "laptop", "tablet"];
 								const icon = icons[i % icons.length];
 								let progressColor = "bg-primary";
 								if (node.progress > 85) progressColor = "bg-tertiary";
@@ -258,9 +250,11 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 								);
 							})}
 						</div>
-						<button onClick={onRefreshNodes} disabled={isBusy} className="w-full mt-4 py-3 rounded-2xl bg-surface-container-high text-on-surface font-semibold text-sm hover:brightness-95 transition-all">
-							View All Nodes
-						</button>
+						{preparedNodes.length > 4 && (
+							<button onClick={() => setShowAllNodes(!showAllNodes)} disabled={isBusy} className="w-full mt-4 py-3 rounded-2xl bg-surface-container-high text-on-surface font-semibold text-sm hover:brightness-95 transition-all">
+								{showAllNodes ? "Show Less" : `View All ${preparedNodes.length} Nodes`}
+							</button>
+						)}
 					</div>
 
 					<div className="bg-primary-container p-6 rounded-3xl text-white relative overflow-hidden group shadow-lg">

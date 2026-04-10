@@ -10,7 +10,9 @@ import AccessibilityView from "../views/AccessibilityView";
 import TranslatorView from "../views/TranslatorView";
 import SettingsView from "../views/SettingsView";
 import CallView from "../views/CallView";
+import SupportView from "../views/SupportView";
 import { useTheme } from "./ThemeProvider";
+import { meshApi } from "../api/mesh";
 import {
 	CHANNELS,
 	DEFAULT_MESSAGES_BY_CHANNEL,
@@ -54,6 +56,19 @@ function toFallbackUnread() {
 		unread[channelName] = Number(DEFAULT_UNREAD_BY_CHANNEL[channelName] || 0);
 	});
 	return unread;
+}
+
+function sanitizeUnreadMap(unreadMap, channelRows) {
+	const next = {};
+	(channelRows || []).forEach((channel) => {
+		const channelId = String(channel?.id || "");
+		if (!channelId) {
+			return;
+		}
+		const value = Number(unreadMap?.[channelId] || 0);
+		next[channelId] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+	});
+	return next;
 }
 
 function toFallbackMoodByChannel() {
@@ -180,22 +195,45 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, jumpRef, collapsed }) {
+	const [jumpSearch, setJumpSearch] = useState("");
+
 	if (isChatLayout) {
+		if (collapsed) return null;
+
+		const filteredChannels = jumpSearch.trim()
+			? channels.filter((c) => String(c.name).toLowerCase().includes(jumpSearch.toLowerCase()))
+			: channels;
+
 		return (
 			<aside className="sidebar chat-sidebar">
 				<div className="chat-sidebar-head">
 					<p className="chat-sidebar-title">Teams</p>
 					<label className="chat-jump">
 						<Icon name="search" size={14} />
-						<input type="text" value="" placeholder="Jump to..." readOnly aria-label="Jump to" />
+						<input
+							ref={jumpRef}
+							type="text"
+							value={jumpSearch}
+							onChange={(e) => setJumpSearch(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Escape") { setJumpSearch(""); e.target.blur(); }
+								if (e.key === "Enter" && filteredChannels.length > 0) {
+									onChannelChange(filteredChannels[0].id);
+									setJumpSearch("");
+									e.target.blur();
+								}
+							}}
+							placeholder="Jump to..."
+							aria-label="Jump to channel"
+						/>
 					</label>
 				</div>
 
 				<ChannelList
-					channels={channels}
+					channels={filteredChannels}
 					activeChannelId={activeChannelId}
-					onChannelChange={onChannelChange}
+					onChannelChange={(id) => { onChannelChange(id); setJumpSearch(""); }}
 					channelUnread={channelUnread}
 					onCreateChannel={onCreateChannel}
 					onStartDirectMessage={onStartDirectMessage}
@@ -398,7 +436,8 @@ function WorkspaceHeaderBar({ activeView, onToggleContext, onLogout }) {
 		pulse: "Crowd Pulse",
 		accessibility: "Accessibility Panel",
 		translator: "Cultural Translator",
-		settings: "Settings"
+		settings: "Settings",
+		support: "Support"
 	};
 
 	return (
@@ -460,7 +499,8 @@ function MainPanel({
 	onChangeAccessibility,
 	accessibilitySaveState,
 	authState,
-	onLogout
+	onLogout,
+	currentUserName,
 }) {
 	function renderView() {
 		if (activeView === "call") {
@@ -478,6 +518,7 @@ function MainPanel({
 					translateEnabled={translateEnabled}
 					setTranslateEnabled={setTranslateEnabled}
 					showNudge={showNudge}
+					currentUserName={currentUserName}
 					setShowNudge={setShowNudge}
 					onStartCall={() => onViewChange("call")}
 				/>
@@ -532,8 +573,13 @@ function MainPanel({
 				<SettingsView
 					authState={authState}
 					onLogout={onLogout}
+					accessibilityPrefs={accessibilityPrefs}
+					onChangeAccessibility={onChangeAccessibility}
 				/>
 			);
+		}
+		if (activeView === "support") {
+			return <SupportView />;
 		}
 		return <TranslatorView />;
 	}
@@ -595,11 +641,46 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		})
 	);
 	const [backendConnected, setBackendConnected] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const prefsLoadedRef = useRef(false);
+	const jumpInputRef = useRef(null);
+
+	// Refs so the stable keydown effect can read current values without stale closures
+	const activeViewRef = useRef(activeView);
+	const activeChannelIdRef = useRef(activeChannelId);
+	const channelsRef = useRef(channels);
+	useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
+	useEffect(() => { activeChannelIdRef.current = activeChannelId; }, [activeChannelId]);
+	useEffect(() => { channelsRef.current = channels; }, [channels]);
 
 	const liveAuth = authState || getAuthState();
 	const workspaceId = String(liveAuth?.workspaceId || "").trim();
 	const currentUserId = String(liveAuth?.userId || liveAuth?.user?.id || "").trim();
+	const workspaceName = String(
+		liveAuth?.workspaceName ||
+		liveAuth?.workspace?.name ||
+		liveAuth?.user?.workspace_name ||
+		""
+	).trim() || (workspaceId ? `Workspace ${workspaceId.slice(0, 8)}` : "Spann Workspace");
+	const workspaceSubtitle = workspaceId
+		? `ID ${workspaceId.slice(0, 8)}...`
+		: "Premium Connectivity";
+	const userName = String(
+		liveAuth?.user?.display_name ||
+		liveAuth?.user?.name ||
+		liveAuth?.user?.email ||
+		liveAuth?.email ||
+		"Member"
+	).trim();
+	const userRole = String(liveAuth?.user?.role || "Member").trim() || "Member";
+	const userAvatar = String(liveAuth?.user?.avatar_url || liveAuth?.user?.avatar || "").trim();
+	const userInitials = userName
+		.split(/\s+/)
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((word) => word[0])
+		.join("")
+		.toUpperCase() || "ME";
 
 	const activeChannel = useMemo(() => {
 		const found = channels.find((channel) => String(channel.id) === String(activeChannelId));
@@ -611,14 +692,98 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const micActive = Boolean(accessibilityPrefs.micJoined);
 
 	const navItems = useMemo(() => {
-		const totalChatUnread = Object.values(channelUnread).reduce((sum, count) => sum + (Number(count) || 0), 0);
+		const totalChatUnread = channels.reduce((sum, channel) => sum + (Number(channelUnread?.[channel.id]) || 0), 0);
 		return NAV_ITEMS.map((item) => {
 			if (item.key === "chat") {
 				return { ...item, badge: totalChatUnread };
 			}
 			return item;
 		});
-	}, [channelUnread]);
+	}, [channelUnread, channels]);
+
+	const sidebarItems = useMemo(() => navItems.filter((item) => item.key !== "settings"), [navItems]);
+	const sidebarIconByKey = {
+		chat: "chat",
+		mesh: "lan",
+		carbon: "eco",
+		pulse: "insert_chart",
+		accessibility: "accessibility_new",
+		translator: "translate",
+		settings: "settings"
+	};
+	const sidebarLabelByKey = {
+		mesh: "Network",
+		pulse: "Analytics",
+		translator: "Translate"
+	};
+
+	// ── Global keyboard shortcuts ─────────────────────────────────────────────
+	useEffect(() => {
+		function onKeyDown(e) {
+			const ctrl = e.ctrlKey || e.metaKey;
+			const shift = e.shiftKey;
+			const view = activeViewRef.current;
+			const chanId = activeChannelIdRef.current;
+			const chans = channelsRef.current;
+
+			// Ctrl+, → open settings (profile)
+			if (ctrl && !shift && e.key === ",") {
+				e.preventDefault();
+				document.dispatchEvent(new CustomEvent("spann:goto-settings", { detail: { section: "profile" } }));
+				setActiveView("settings");
+				return;
+			}
+
+			// Ctrl+/ → open settings (shortcuts section)
+			if (ctrl && !shift && e.key === "/") {
+				e.preventDefault();
+				document.dispatchEvent(new CustomEvent("spann:goto-settings", { detail: { section: "shortcuts" } }));
+				setActiveView("settings");
+				return;
+			}
+
+			// F11 → fullscreen toggle
+			if (e.key === "F11") {
+				e.preventDefault();
+				if (!document.fullscreenElement) {
+					document.documentElement.requestFullscreen?.().catch(() => {});
+				} else {
+					document.exitFullscreen?.().catch(() => {});
+				}
+				return;
+			}
+
+			// Ctrl+Shift+\ → collapse/expand chat sidebar
+			if (ctrl && shift && (e.key === "\\" || e.key === "|")) {
+				e.preventDefault();
+				setSidebarCollapsed((c) => !c);
+				return;
+			}
+
+			// Ctrl+K → focus channel jump input (chat only)
+			if (ctrl && !shift && e.key === "k" && view === "chat") {
+				e.preventDefault();
+				jumpInputRef.current?.focus();
+				return;
+			}
+
+			// Alt+↑/↓ → previous / next channel (chat only)
+			if (e.altKey && !ctrl && !shift && (e.key === "ArrowUp" || e.key === "ArrowDown") && view === "chat") {
+				e.preventDefault();
+				const idx = chans.findIndex((c) => String(c.id) === String(chanId));
+				if (idx < 0) return;
+				const next = e.key === "ArrowUp"
+					? Math.max(0, idx - 1)
+					: Math.min(chans.length - 1, idx + 1);
+				if (String(chans[next]?.id) !== String(chanId)) {
+					setActiveChannelId(chans[next].id);
+				}
+			}
+		}
+
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, []); // intentionally stable — reads live values via refs
 
 	useEffect(() => {
 		localStorage.setItem("spann-active-view", JSON.stringify(activeView));
@@ -787,8 +952,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMeshBusy(true);
 		setMeshError("");
 		try {
-			const payload = await apiRequest("/mesh/nodes");
-			setMeshNodes(Array.isArray(payload?.data) ? payload.data : []);
+			const nodes = await meshApi.listNodes();
+			setMeshNodes(Array.isArray(nodes) ? nodes : []);
 			return true;
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Unable to load mesh nodes");
@@ -915,7 +1080,29 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMobileSheetOpen(false);
 	}, [activeView]);
 
+	useEffect(() => {
+		setChannelUnread((current) => {
+			const sanitized = sanitizeUnreadMap(current, channels);
+			const currentKeys = Object.keys(current || {}).sort();
+			const sanitizedKeys = Object.keys(sanitized).sort();
+			if (currentKeys.length !== sanitizedKeys.length) {
+				return sanitized;
+			}
+			for (let i = 0; i < sanitizedKeys.length; i += 1) {
+				const key = sanitizedKeys[i];
+				if (currentKeys[i] !== key || Number(current[key] || 0) !== Number(sanitized[key] || 0)) {
+					return sanitized;
+				}
+			}
+			return current;
+		});
+	}, [channels]);
+
 	function handleChannelChange(channelId) {
+		setChannelUnread((current) => ({
+			...current,
+			[channelId]: 0
+		}));
 		setActiveChannelId(channelId);
 		if (activeView !== "chat") {
 			setActiveView("chat");
@@ -1111,10 +1298,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMeshError("");
 		try {
 			const suffix = String(Date.now()).slice(-4);
-			await apiRequest("/mesh/register", {
-				method: "POST",
-				body: JSON.stringify({ node_name: `web-${suffix}` })
-			});
+			await meshApi.register(`web-${suffix}`);
 			await refreshMeshNodes();
 			pushAppNotice("Mesh node registered.", "success");
 		} catch (error) {
@@ -1133,9 +1317,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMeshBusy(true);
 		setMeshError("");
 		try {
-			await apiRequest(`/mesh/nodes/${encodeURIComponent(nodeId)}/revoke`, {
-				method: "POST"
-			});
+			await meshApi.revokeNode(nodeId);
 			await refreshMeshNodes();
 			pushAppNotice("Mesh node revoked.", "success");
 		} catch (error) {
@@ -1189,77 +1371,26 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								<span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
 							</div>
 							<div>
-								<p className="font-bold text-on-surface leading-tight">Workspace</p>
-								<p className="text-[11px] text-on-surface-variant">Premium Connectivity</p>
+								<p className="font-bold text-on-surface leading-tight truncate max-w-[180px]">{workspaceName}</p>
+								<p className="text-[11px] text-on-surface-variant truncate max-w-[180px]">{workspaceSubtitle}</p>
 							</div>
 						</div>
 						<nav className="flex-1 flex flex-col gap-1">
-							<div
-								onClick={() => setActiveView("chat")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "chat"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">chat</span>
-								<span>Chat</span>
-							</div>
-							<div
-								onClick={() => setActiveView("mesh")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "mesh"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">lan</span>
-								<span>Network</span>
-							</div>
-							<div
-								onClick={() => setActiveView("carbon")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "carbon"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">eco</span>
-								<span>Carbon</span>
-							</div>
-							<div
-								onClick={() => setActiveView("pulse")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "pulse"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">insert_chart</span>
-								<span>Analytics</span>
-							</div>
-							<div
-								onClick={() => setActiveView("accessibility")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "accessibility"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">accessibility_new</span>
-								<span>Accessibility</span>
-							</div>
-							<div
-								onClick={() => setActiveView("translator")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "translator"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">translate</span>
-								<span>Translate</span>
-							</div>
+							{sidebarItems.map((item) => (
+								<div
+									key={item.key}
+									onClick={() => setActiveView(item.key)}
+									className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+										activeView === item.key
+											? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+											: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+									}`}
+								>
+									<span className="material-symbols-outlined">{sidebarIconByKey[item.key] || "circle"}</span>
+									<span>{sidebarLabelByKey[item.key] || item.label}</span>
+									{item.badge > 0 ? <span className="channel-unread">{item.badge}</span> : null}
+								</div>
+							))}
 						</nav>
 						<div className="border-t border-slate-200/30 pt-4 flex flex-col gap-1">
 							<div
@@ -1273,19 +1404,32 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								<span className="material-symbols-outlined">settings</span>
 								<span>Settings</span>
 							</div>
-							<div className="cursor-pointer active:opacity-80 flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg transition-all duration-200">
+							<div
+								onClick={() => setActiveView("support")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "support"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
 								<span className="material-symbols-outlined">contact_support</span>
 								<span>Support</span>
 							</div>
 							<div className="mt-4 flex items-center gap-3 px-2">
-								<img
-									className="w-8 h-8 rounded-full border border-white shadow-sm object-cover"
-									alt="Alex Chen"
-									src="https://lh3.googleusercontent.com/aida-public/AB6AXuByeBOsbOjKS8RHwUEWODHJbrABE-piL6bpQ692y7lREwJ5PtZYvz77K9X1U0xpn8Ok82nPk6-_eyyxtjTvNAgEZv4xb0BQmUYX6t68ZTC9zbkmZYBbPV_-3s9YV9M2vNkt8zYCYqhnB4NhAfArkSG0_VJDV-rECN5q_63TamGXCQ1wB4bhtRU0SbeCYLnQySTtcUuq3Bq3RsBVzj_ARwMZdfKnzLYCbLSglJJjr18Ng_EtXlRjgitlqqqk8nd_E_hwUGgULlNVRJsg"
-								/>
+								{userAvatar ? (
+									<img
+										className="w-8 h-8 rounded-full border border-white shadow-sm object-cover"
+										alt={`${userName} avatar`}
+										src={userAvatar}
+									/>
+								) : (
+									<div className="w-8 h-8 rounded-full border border-white shadow-sm bg-primary-container text-on-primary-container flex items-center justify-center text-[11px] font-bold">
+										{userInitials}
+									</div>
+								)}
 								<div className="overflow-hidden">
-									<p className="font-semibold text-on-surface truncate">Alex Chen</p>
-									<p className="text-[10px] text-on-surface-variant opacity-70">Admin Access</p>
+									<p className="font-semibold text-on-surface truncate">{userName}</p>
+									<p className="text-[10px] text-on-surface-variant opacity-70">{userRole}</p>
 								</div>
 							</div>
 						</div>
@@ -1303,6 +1447,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								onViewChange={setActiveView}
 								onCreateChannel={handleCreateChannel}
 								onStartDirectMessage={handleStartDirectMessage}
+								jumpRef={jumpInputRef}
+								collapsed={sidebarCollapsed}
 								isChatLayout
 							/>
 						) : null}
@@ -1348,6 +1494,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								accessibilitySaveState={accessibilitySaveState}
 									authState={liveAuth}
 									onLogout={onLogout}
+									currentUserName={liveAuth?.user?.display_name || liveAuth?.user?.name || ""}
 						/>
 						</div>
 
