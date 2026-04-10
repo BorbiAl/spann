@@ -176,7 +176,7 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 					</div>
 
 					{/* Focus Insight Bar */}
-					<div className="bg-secondary-container/10 rounded-xl p-4 flex items-center gap-4 border border-secondary-container/20">
+					<div className="bg-secondary-container/10 rounded-xl p-4 flex items-center gap-4 border border-secondary-container/20 mr-20">
 						<div className="p-2 bg-secondary-container rounded-lg shadow-sm">
 							<span className="material-symbols-outlined text-white text-[20px]">lightbulb</span>
 						</div>
