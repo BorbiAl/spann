@@ -1,3 +1,4 @@
+import './Message.css';
 import React from "react";
 import { parseReactionValue } from "../data/constants";
 

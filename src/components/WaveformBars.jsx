@@ -1,3 +1,4 @@
+import './WaveformBars.css';
 import React from "react";
 
 export default function WaveformBars({ level }) {

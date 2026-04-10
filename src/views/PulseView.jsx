@@ -1,3 +1,4 @@
+import './PulseView.css';
 import React, { useMemo } from "react";
 import Icon from "../components/Icon";
 import WaveformBars from "../components/WaveformBars";

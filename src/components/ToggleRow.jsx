@@ -1,3 +1,4 @@
+import './ToggleRow.css';
 import React from "react";
 import Toggle from "./Toggle";
 

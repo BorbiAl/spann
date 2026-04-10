@@ -1,3 +1,4 @@
+import './SegmentedControl.css';
 import React from "react";
 
 export default function SegmentedControl({ options, value, onChange }) {

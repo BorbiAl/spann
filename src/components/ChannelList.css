@@ -1,0 +1,319 @@
+
+
+    .channel-item,
+    .section-item,
+    .member-item {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      color: var(--text-secondary);
+      transition: background-color var(--motion), color var(--motion), border-color var(--motion);
+      position: relative;
+    }
+
+
+
+    .channel-item:hover,
+    .section-item:hover,
+    .member-item:hover {
+      background: var(--accent-soft);
+      color: var(--text);
+      transform: none;
+    }
+
+
+
+    .channel-item:active,
+    .section-item:active,
+    .member-item:active {
+      transform: none;
+    }
+
+
+
+    .channel-item.active,
+    .section-item.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.3);
+    }
+
+
+
+    .channel-item.active .channel-dot {
+      color: var(--accent);
+    }
+
+
+
+    .channel-name,
+    .section-label,
+    .member-meta {
+      flex: 1;
+      text-align: left;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+
+
+    .teams-channel-list {
+      flex: 1;
+      border: none;
+      background: transparent;
+      border-radius: 0;
+      padding: 0 2px;
+      overflow: auto;
+    }
+
+
+
+    :root[data-theme="dark"] .teams-channel-list {
+      border-color: rgba(148, 163, 184, 0.24);
+      background: #0f172a;
+    }
+
+
+
+    .teams-channel-list .section-title {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6f7f95;
+      padding: 0;
+      margin: 0;
+    }
+
+
+
+    .chat-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      padding: 0 4px;
+    }
+
+
+
+    .chat-section-title {
+      opacity: 0.74;
+    }
+
+
+
+    .chat-section-action {
+      width: 18px;
+      height: 18px;
+      border-radius: 6px;
+      color: #71829a;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      opacity: 0;
+      transition: opacity var(--motion), color var(--motion), background-color var(--motion);
+    }
+
+
+
+    .chat-section-header:hover .chat-section-action {
+      opacity: 1;
+    }
+
+
+
+    .chat-section-action:hover {
+      color: #0f67b7;
+      background: rgba(226, 232, 240, 0.6);
+    }
+
+
+
+    :root[data-theme="dark"] .chat-section-action {
+      color: #94a3b8;
+    }
+
+
+
+    :root[data-theme="dark"] .chat-section-action:hover {
+      color: #93c5fd;
+      background: rgba(30, 41, 59, 0.85);
+    }
+
+
+
+    .section-spacer {
+      margin-top: 14px;
+    }
+
+
+
+    .team-channel-item {
+      min-height: 36px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      padding: 0 8px;
+      font-size: 13px;
+      color: #1a1c1c;
+      gap: 8px;
+    }
+
+
+
+    .team-channel-item .channel-dot {
+      width: 14px;
+      color: #6b7b90;
+      font-size: 12px;
+      line-height: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+
+
+    .team-channel-item .channel-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      overflow-wrap: normal;
+      word-break: normal;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+
+
+
+    .team-channel-item-muted .channel-name {
+      color: #5b6472;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+
+
+    .team-channel-item:hover {
+      background: rgba(226, 232, 240, 0.56);
+      color: #0f67b7;
+      border-color: rgba(203, 213, 225, 0.7);
+    }
+
+
+
+    .team-channel-item.active {
+      background: rgba(226, 232, 240, 0.8);
+      color: #111827;
+      box-shadow: none;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+
+
+    :root[data-theme="dark"] .team-channel-item {
+      color: #cbd5e1;
+    }
+
+
+
+    :root[data-theme="dark"] .team-channel-item:hover,
+    :root[data-theme="dark"] .team-channel-item.active {
+      background: #1e293b;
+      color: #93c5fd;
+      border-color: rgba(147, 197, 253, 0.24);
+    }
+
+
+
+    .team-presence-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #0f67b7;
+      box-shadow: none;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+
+
+    :root[data-theme="dark"] .team-presence-dot {
+      box-shadow: 0 0 0 2px #064e3b;
+    }
+
+
+
+    .dm-item {
+      min-height: 36px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      padding: 0 8px;
+      color: #4b5563;
+      background: transparent;
+    }
+
+
+
+    .dm-item:hover {
+      background: #f2f6fd;
+      border-color: #dce9fb;
+      color: #0f67b7;
+    }
+
+
+
+    .dm-item .member-avatar {
+      width: 24px;
+      height: 24px;
+      font-size: 10px;
+      border-radius: 6px;
+    }
+
+
+
+    .dm-avatar-image {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+
+
+    .dm-item .member-meta {
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+
+
+    :root[data-theme="dark"] .dm-item {
+      color: #cbd5e1;
+    }
+
+
+
+    :root[data-theme="dark"] .dm-item:hover {
+      background: #1e293b;
+      color: #93c5fd;
+      border-color: rgba(147, 197, 253, 0.24);
+    }
+
+
+
+      .channel-item,
+      .section-item,
+      .member-item {
+        justify-content: center;
+        padding: 0;
+      }

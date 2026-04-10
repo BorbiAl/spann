@@ -1,0 +1,60 @@
+
+
+    .settings-group {
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+      overflow: hidden;
+    }
+
+
+
+    .group-head {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--panel-border);
+      font-size: 12px;
+      text-transform: none;
+      letter-spacing: 0.25px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: color-mix(in srgb, var(--bg2) 82%, transparent);
+    }
+
+
+
+    .slider-row {
+      margin-top: 14px;
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+      padding: 14px;
+    }
+
+
+
+    .slider-row label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+
+
+    .preview-card {
+      margin-top: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--panel-border);
+      padding: 14px;
+      background: color-mix(in srgb, var(--bg2) 86%, transparent);
+      transition: all var(--motion);
+    }
+
+
+
+    .preview-title {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }

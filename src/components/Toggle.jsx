@@ -1,3 +1,4 @@
+import './Toggle.css';
 import React from "react";
 
 export default function Toggle({ value, onChange }) {

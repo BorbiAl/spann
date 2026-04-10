@@ -9,7 +9,7 @@ import logging
 
 from app.database import db
 from app.services.redis_client import redis_client
-from app.tasks.worker import celery_app
+from app.tasks.worker import celery_app, run_async
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 def recalculate_carbon_leaderboard(workspace_id: str | None = None) -> dict[str, int]:
     """Recalculate carbon leaderboard aggregates and cache via Redis."""
 
-    refreshed = asyncio.run(db.recalculate_carbon_leaderboard(workspace_id))
+    refreshed = run_async(db.recalculate_carbon_leaderboard(workspace_id))
 
     for ws_id, entries in refreshed.items():
-        asyncio.run(redis_client.set_json(f"carbon:leaderboard:{ws_id}", json.dumps(entries), ex_seconds=300))
+        run_async(redis_client.set_json(f"carbon:leaderboard:{ws_id}", json.dumps(entries), ex_seconds=300))
 
     total_entries = sum(len(rows) for rows in refreshed.values())
     logger.info("carbon_leaderboard_recalculated", extra={"workspaces": len(refreshed), "entries": total_entries})

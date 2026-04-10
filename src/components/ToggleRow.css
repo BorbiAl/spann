@@ -1,0 +1,39 @@
+
+
+    .toggle-row {
+      min-height: 52px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--panel-border);
+    }
+
+
+
+    .toggle-row:last-child {
+      border-bottom: none;
+    }
+
+
+
+    .toggle-text {
+      min-width: 0;
+      flex: 1;
+    }
+
+
+
+    .toggle-label {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+
+
+    .toggle-note {
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }

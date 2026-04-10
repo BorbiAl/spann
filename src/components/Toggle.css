@@ -1,0 +1,24 @@
+
+
+    .ios-toggle {
+      width: 51px;
+      height: 31px;
+      border-radius: 50px;
+      position: relative;
+      cursor: pointer;
+      transition: background-color 300ms ease;
+      flex-shrink: 0;
+    }
+
+
+
+    .ios-thumb {
+      width: 27px;
+      height: 27px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 2px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      transition: left var(--motion);
+    }

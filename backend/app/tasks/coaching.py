@@ -13,7 +13,7 @@ from app.database import db
 from app.services.coaching import generate_coaching_nudge
 from app.services.groq_client import GroqAPIError, GroqTimeoutError
 from app.services.redis_client import redis_client
-from app.tasks.worker import celery_app
+from app.tasks.worker import celery_app, run_async
 
 logger = logging.getLogger(__name__)
 
@@ -58,24 +58,24 @@ def run_coaching(
     channel_tone = channel_tone or str(legacy_kwargs.get("tone") or "neutral")
     user_locale = user_locale or str(legacy_kwargs.get("locale") or "en-US")
     cache_key = f"coaching:{hashlib.sha256(text.encode()).hexdigest()}"
-    channel_id = str(legacy_kwargs.get("channel_id") or "") or asyncio.run(_resolve_channel_id(message_id))
+    channel_id = str(legacy_kwargs.get("channel_id") or "") or run_async(_resolve_channel_id(message_id))
     if not channel_id:
         return None
 
-    cached_payload = asyncio.run(redis_client.get_json(cache_key))
+    cached_payload = run_async(redis_client.get_json(cache_key))
     if cached_payload:
         parsed = json.loads(cached_payload)
         if not isinstance(parsed, dict):
             return None
         parsed_dict = {"nudge": str(parsed.get("nudge", "")), "severity": str(parsed.get("severity", ""))}
         try:
-            asyncio.run(_publish_nudge(channel_id, message_id, parsed_dict["nudge"], parsed_dict["severity"]))
+            run_async(_publish_nudge(channel_id, message_id, parsed_dict["nudge"], parsed_dict["severity"]))
         except Exception as exc:  # noqa: BLE001
             logger.warning("coaching_publish_failed", extra={"message_id": message_id, "error": str(exc)})
         return parsed_dict
 
     try:
-        nudge_payload = asyncio.run(
+        nudge_payload = run_async(
             generate_coaching_nudge(
                 text=text,
                 tone=channel_tone,
@@ -84,7 +84,7 @@ def run_coaching(
         )
     except (GroqAPIError, GroqTimeoutError) as exc:
         if self.request.retries >= self.max_retries:
-            asyncio.run(
+            run_async(
                 redis_client.push_list(
                     "dead_letter:coaching",
                     json.dumps(
@@ -103,9 +103,9 @@ def run_coaching(
     if nudge_payload is None:
         return None
 
-    asyncio.run(redis_client.set_json(cache_key, json.dumps(nudge_payload), ex_seconds=300))
+    run_async(redis_client.set_json(cache_key, json.dumps(nudge_payload), ex_seconds=300))
     try:
-        asyncio.run(
+        run_async(
             _publish_nudge(
                 channel_id,
                 message_id,

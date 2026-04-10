@@ -1,3 +1,4 @@
+import './App.css';
 import React, { useEffect, useRef, useState } from "react";
 import Layout from "./Layout";
 import ThemeProvider from "./ThemeProvider";

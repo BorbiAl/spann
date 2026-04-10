@@ -1,3 +1,4 @@
+import './Layout.css';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ChannelList from "../components/ChannelList";
 import Icon from "../components/Icon";

@@ -1,0 +1,20 @@
+
+
+    .wave-bars {
+      height: 136px;
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+
+
+    .wave-bar {
+      width: calc((100% - 76px) / 20);
+      min-width: 7px;
+      border-radius: 8px 8px 3px 3px;
+      background: var(--accent);
+      animation: waveBounce 1400ms ease-in-out infinite;
+      transform-origin: bottom;
+      opacity: 0.9;
+    }

@@ -1,0 +1,85 @@
+
+
+    .node-card {
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      animation: fadeUp var(--motion);
+    }
+
+
+
+    .node-main {
+      min-width: 0;
+      flex: 1;
+    }
+
+
+
+    .node-name {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+
+
+    .node-meta {
+      margin-top: 3px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+
+
+    .signal-stack {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 3px;
+      margin-right: 8px;
+    }
+
+
+
+    .signal-stack span {
+      width: 7px;
+      border-radius: 4px;
+      background: var(--bg3);
+    }
+
+
+
+    .signal-stack span:nth-child(1) {
+      height: 10px;
+    }
+
+
+
+    .signal-stack span:nth-child(2) {
+      height: 14px;
+    }
+
+
+
+    .signal-stack span:nth-child(3) {
+      height: 18px;
+    }
+
+
+
+    .signal-stack span.on {
+      background: var(--accent);
+    }
+
+
+
+    .signal-stack span.weak {
+      background: color-mix(in srgb, var(--bg3) 85%, var(--accent) 15%);
+    }

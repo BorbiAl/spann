@@ -1,0 +1,110 @@
+
+
+    .wave-holder {
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: color-mix(in srgb, var(--bg2) 82%, transparent);
+      padding: 14px;
+    }
+
+
+
+    .energy-list {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+
+
+    .energy-row {
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+      background: color-mix(in srgb, var(--card-bg) 90%, transparent);
+      padding: 10px 12px;
+    }
+
+
+
+    .energy-top {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+
+
+    .energy-track {
+      height: 8px;
+      border-radius: 50px;
+      background: var(--bg3);
+      overflow: hidden;
+    }
+
+
+
+    .energy-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width 500ms ease;
+    }
+
+
+
+    .mic-btn {
+      margin-top: 14px;
+      min-height: 54px;
+      border-radius: 10px;
+      padding: 0 18px;
+      border: 1px solid var(--panel-border);
+      background: color-mix(in srgb, var(--bg2) 84%, transparent);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      transition: transform var(--motion), background-color var(--motion), color var(--motion);
+    }
+
+
+
+    .mic-btn.active {
+      background: color-mix(in srgb, var(--accent-soft) 90%, transparent);
+      color: var(--accent);
+      animation: micPulse 2s ease-in-out infinite;
+    }
+
+
+
+    .pulse-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      align-items: stretch;
+    }
+
+
+
+    .pulse-actions .mic-btn {
+      margin-top: 0;
+    }
+
+
+
+    .pulse-refresh-btn {
+      min-height: 54px;
+      padding: 0 18px;
+      justify-content: center;
+      border-radius: 50px;
+    }
+
+
+
+      .wave-holder {
+        padding: 10px;
+      }
