@@ -12,7 +12,7 @@ const DIRECT_MESSAGES = [
 	{ id: "MK", name: "Marcus Kane", color: "#6bb4ff" }
 ];
 
-export default function ChannelList({ channels, activeChannelId, onChannelChange, channelUnread, onCreateChannel, variant = "default" }) {
+export default function ChannelList({ channels, activeChannelId, onChannelChange, channelUnread, onCreateChannel, onStartDirectMessage, variant = "default" }) {
 	if (!channels || !channels.length) {
 		return (
 			<div className="sidebar-section">
@@ -34,8 +34,8 @@ export default function ChannelList({ channels, activeChannelId, onChannelChange
 		}
 
 		function handleStartDirectMessage() {
-			if (typeof window !== "undefined") {
-				window.alert("Direct call started with Sarah Chen.");
+			if (typeof onStartDirectMessage === "function") {
+				onStartDirectMessage(DIRECT_MESSAGES[0]);
 			}
 		}
 

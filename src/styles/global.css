@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,6 +9,7 @@
       --title-size: clamp(19px, 2.5vw, 25px);
       --body-size: clamp(14px, 1.1vw, 15px);
       --caption-size: 12px;
+  --a11y-text-scale: 1;
   --radius-card: 12px;
   --radius-panel: 14px;
       --radius-modal: 14px;
@@ -122,12 +123,149 @@
 
     body {
       font-family: var(--font-sans);
-      font-size: var(--body-size);
+      font-size: calc(var(--body-size) * var(--a11y-text-scale));
       letter-spacing: 0;
       line-height: 1.5;
       background: linear-gradient(145deg, var(--bg), color-mix(in srgb, var(--bg) 90%, var(--bg2)));
       color: var(--text);
-      transition: background-color var(--motion), color var(--motion);
+      filter: var(--a11y-color-filter, none);
+      transition: background-color var(--motion), color var(--motion), filter var(--motion);
+    }
+
+
+
+    #root {
+      transition: filter var(--motion);
+    }
+
+
+
+    body.a11y-dyslexia {
+      --font-sans: "OpenDyslexic", "Atkinson Hyperlegible", "Courier New", "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0.01em;
+      word-spacing: 0.02em;
+    }
+
+
+
+    body.a11y-dyslexia :where(*) {
+      font-family: var(--font-sans) !important;
+    }
+
+
+
+    body.a11y-dyslexia :where(.material-symbols-outlined, .material-icons, .material-icons-round, .material-icons-two-tone, .material-icons-sharp) {
+      font-family: inherit;
+    }
+
+
+
+    body.a11y-high-contrast {
+      --bg: #ffffff;
+      --bg2: #ffffff;
+      --bg3: #ececec;
+      --panel: #ffffff;
+      --panel-border: rgba(0, 0, 0, 0.5);
+      --accent: #004aa8;
+      --accent-soft: rgba(0, 74, 168, 0.16);
+      --text: #0a0a0a;
+      --text-muted: rgba(0, 0, 0, 0.72);
+      --text-secondary: rgba(0, 0, 0, 0.86);
+      --card-bg: #ffffff;
+      --input-bg: #f1f1f1;
+      --sidebar-bg: #f3f3f3;
+      --scrollbar-track: #e5e7eb;
+      --scrollbar-thumb: #111827;
+      --scrollbar-thumb-hover: #000000;
+    }
+
+
+
+    :root[data-theme="dark"] body.a11y-high-contrast {
+      --bg: #000000;
+      --bg2: #000000;
+      --bg3: #111111;
+      --panel: #000000;
+      --panel-border: rgba(255, 255, 255, 0.86);
+      --accent: #7dd3fc;
+      --accent-soft: rgba(125, 211, 252, 0.24);
+      --text: #ffffff;
+      --text-muted: rgba(255, 255, 255, 0.78);
+      --text-secondary: rgba(255, 255, 255, 0.9);
+      --card-bg: #000000;
+      --input-bg: #0a0a0a;
+      --sidebar-bg: #050505;
+      --scrollbar-track: #111827;
+      --scrollbar-thumb: #ffffff;
+      --scrollbar-thumb-hover: #e5e7eb;
+    }
+
+
+
+    body.a11y-high-contrast * {
+      text-shadow: none !important;
+      box-shadow: none !important;
+    }
+
+
+
+    body.a11y-high-contrast :is(
+      .card,
+      .auth-card,
+      .entry-surface,
+      .sidebar,
+      .sidebar-section,
+      .workspace-topnav,
+      .chat-room-header,
+      .chat-composer-box,
+      .chat-composer-dock,
+      .chat-thread-scroll,
+      .result-box,
+      .main-surface,
+      .context-panel,
+      .node-card,
+      .settings-group,
+      .preview-card,
+      .auth-input,
+      input,
+      textarea,
+      select,
+      button
+    ) {
+      border-color: var(--panel-border) !important;
+      color: var(--text) !important;
+    }
+
+
+
+    body.a11y-cognitive-reading,
+    body.a11y-simplified {
+      letter-spacing: 0.01em;
+      word-spacing: 0.04em;
+      line-height: 1.65;
+    }
+
+
+
+    body.a11y-cognitive-reading :is(p, li, .message-text, .result-text),
+    body.a11y-simplified :is(p, li, .message-text, .result-text) {
+      max-width: 72ch;
+      line-height: 1.72;
+    }
+
+
+
+    body.a11y-cognitive-reading :is(.translation-label, .status-subtext, .caption),
+    body.a11y-simplified :is(.translation-label, .status-subtext, .caption) {
+      letter-spacing: 0.015em;
+      font-weight: 600;
+    }
+
+
+
+    body.a11y-cognitive-reading :is(.entry-subtitle, .auth-head p, .auth-inline-note),
+    body.a11y-simplified :is(.entry-subtitle, .auth-head p, .auth-inline-note) {
+      font-size: 1.02em;
     }
 
 
@@ -1232,6 +1370,7 @@
     }
 
 
+    @keyframes pulseDot {
       0%,
       100% {
         opacity: 0.4;
@@ -1241,6 +1380,7 @@
       50% {
         opacity: 1;
       }
+    }
 
 
 
@@ -3239,6 +3379,8 @@
     }
 
 
+
+    @keyframes fadeUp {
       from {
         opacity: 0;
         transform: translateY(6px);
@@ -3249,8 +3391,10 @@
         opacity: 1;
         transform: translateY(0);
       }
+    }
 
 
+    @keyframes messageIn {
       from {
         opacity: 0;
         transform: translateY(8px);
@@ -3261,8 +3405,10 @@
         opacity: 1;
         transform: translateY(0);
       }
+    }
 
 
+    @keyframes badgePop {
       from {
         transform: scale(0.78);
         opacity: 0;
@@ -3273,8 +3419,10 @@
         transform: scale(1);
         opacity: 1;
       }
+    }
 
 
+    @keyframes pulseRing {
       0% {
         box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.45);
       }
@@ -3288,8 +3436,10 @@
       100% {
         box-shadow: 0 0 0 0 rgba(48, 209, 88, 0);
       }
+    }
 
 
+    @keyframes lineDash {
       from {
         stroke-dashoffset: 0;
       }
@@ -3298,8 +3448,10 @@
       to {
         stroke-dashoffset: -120;
       }
+    }
 
 
+    @keyframes nodeWave {
       0% {
         opacity: 0.7;
         transform: scale(0.6);
@@ -3310,8 +3462,10 @@
         opacity: 0;
         transform: scale(1.6);
       }
+    }
 
 
+    @keyframes meterBounce {
       0%,
       100% {
         transform: scaleY(0.45);
@@ -3321,8 +3475,10 @@
       50% {
         transform: scaleY(1);
       }
+    }
 
 
+    @keyframes focusPulse {
       0%,
       100% {
         box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.25);
@@ -3332,8 +3488,10 @@
       70% {
         box-shadow: 0 0 0 12px rgba(10, 132, 255, 0);
       }
+    }
 
 
+    @keyframes floatDrift {
       0% {
         transform: translate3d(0, 0, 0) rotate(0deg);
       }
@@ -3347,11 +3505,14 @@
       100% {
         transform: translate3d(0, 0, 0) rotate(0deg);
       }
+    }
 
 
+    @keyframes spin {
       to {
         transform: rotate(360deg);
       }
+    }
 
 
 

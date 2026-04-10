@@ -2303,6 +2303,246 @@
       box-shadow: 0 0 0 2px rgba(15, 103, 183, 0.2);
     }
 
+    .org-onboarding-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: clamp(18px, 3.5vw, 32px);
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-card {
+      width: min(980px, 100%);
+      max-width: 980px;
+      border-radius: 18px;
+      overflow: hidden;
+      display: block;
+      grid-template-columns: none;
+      min-height: 0;
+      border: 1px solid #d8dee8;
+      background: #f8fafc;
+      box-shadow: 0 20px 52px rgba(15, 23, 42, 0.14);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
+      width: 100%;
+      min-width: 0;
+      padding: clamp(20px, 3vw, 34px);
+      display: grid;
+      gap: 14px;
+      background:
+        radial-gradient(110% 120% at 0% 0%, rgba(15, 103, 183, 0.12) 0%, rgba(15, 103, 183, 0) 56%),
+        radial-gradient(120% 120% at 100% 0%, rgba(14, 165, 164, 0.1) 0%, rgba(14, 165, 164, 0) 52%),
+        #f8fafc;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .auth-head h2 {
+      font-size: clamp(34px, 4.8vw, 52px);
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+      color: #111827;
+      margin-bottom: 6px;
+      max-width: 14ch;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .auth-head p {
+      font-size: 16px;
+      line-height: 1.45;
+      color: #334155;
+      max-width: 52ch;
+    }
+
+    .org-mode-switch {
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 999px;
+      background: #e8edf5;
+      border: 1px solid #d6deea;
+      width: fit-content;
+    }
+
+    .org-mode-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 9px 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #475569;
+      background: transparent;
+      cursor: pointer;
+      transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+    }
+
+    .org-mode-btn:hover {
+      color: #0f172a;
+      background: #f8fbff;
+    }
+
+    .org-mode-btn.active {
+      color: #ffffff;
+      background: linear-gradient(135deg, #0f67b7 0%, #0b5aa0 100%);
+      box-shadow: 0 8px 20px rgba(15, 103, 183, 0.34);
+    }
+
+    .org-loading {
+      margin: 0;
+      color: #475569;
+      font-size: 0.94rem;
+    }
+
+    .org-panel {
+      border: 1px solid #d7e0ec;
+      border-radius: 16px;
+      padding: 14px;
+      background: #eef3f9;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .org-panel .auth-input {
+      border: 1px solid #cfd9e6;
+      background: #ffffff;
+      color: #0f172a;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .org-panel .auth-input::placeholder {
+      color: #94a3b8;
+    }
+
+    .org-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .org-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid #cfd9e6;
+      border-radius: 14px;
+      padding: 11px 12px;
+      background: #ffffff;
+    }
+
+    .org-name {
+      display: block;
+      font-size: 0.96rem;
+      color: #111827;
+    }
+
+    .org-meta {
+      margin-top: 2px;
+      font-size: 0.8rem;
+    }
+
+    .org-empty {
+      margin: 0;
+      color: #475569;
+      font-size: 0.9rem;
+    }
+
+    .org-section {
+      margin-top: 8px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .org-section-title {
+      margin: 0;
+      font-size: 0.95rem;
+      letter-spacing: 0.01em;
+      color: #111827;
+    }
+
+    .org-item-actions {
+      gap: 12px;
+    }
+
+    .org-role-pill {
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: capitalize;
+      color: #0f67b7;
+      background: rgba(15, 103, 183, 0.12);
+      border: 1px solid rgba(15, 103, 183, 0.24);
+      white-space: nowrap;
+    }
+
+    .org-footer-actions {
+      margin-top: 8px;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .org-continue-hint {
+      margin: 0;
+      font-size: 0.87rem;
+      color: #475569;
+    }
+
+    :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-card {
+      border-color: #253145;
+      background: #101827;
+      box-shadow: 0 18px 48px rgba(2, 6, 23, 0.55);
+    }
+
+    :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
+      background:
+        radial-gradient(110% 120% at 0% 0%, rgba(14, 165, 233, 0.2) 0%, rgba(14, 165, 233, 0) 56%),
+        radial-gradient(120% 120% at 100% 0%, rgba(20, 184, 166, 0.16) 0%, rgba(20, 184, 166, 0) 52%),
+        #101827;
+    }
+
+    :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .auth-head h2 {
+      color: #f8fafc;
+    }
+
+    :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .auth-head p,
+    :root[data-theme="dark"] .org-loading,
+    :root[data-theme="dark"] .org-empty,
+    :root[data-theme="dark"] .org-continue-hint,
+    :root[data-theme="dark"] .org-meta {
+      color: #b8c5d9;
+    }
+
+    :root[data-theme="dark"] .org-mode-switch {
+      background: #182335;
+      border-color: #2a3a54;
+    }
+
+    :root[data-theme="dark"] .org-mode-btn {
+      color: #c5d3e9;
+    }
+
+    :root[data-theme="dark"] .org-mode-btn:hover {
+      color: #ffffff;
+      background: #24344f;
+    }
+
+    :root[data-theme="dark"] .org-panel {
+      border-color: #2a3a54;
+      background: #162237;
+    }
+
+    :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-panel .auth-input {
+      border-color: #30425f;
+      background: #0f1729;
+      color: #eff6ff;
+    }
+
+    :root[data-theme="dark"] .org-list-item {
+      border-color: #30425f;
+      background: #0f1729;
+    }
+
+    :root[data-theme="dark"] .org-name,
+    :root[data-theme="dark"] .org-section-title {
+      color: #f8fafc;
+    }
+
     @media (max-width: 900px) {
       .auth-shell.auth-mode-register .auth-card.register {
         grid-template-columns: 1fr;
@@ -2334,6 +2574,32 @@
         position: static;
         margin-top: 12px;
         width: min(360px, 100%);
+      }
+
+      .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-card {
+        width: min(860px, calc(100% - 20px));
+      }
+
+      .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
+        padding: 22px;
+      }
+
+      .auth-shell.auth-mode-register.org-onboarding-shell .auth-head h2 {
+        font-size: clamp(30px, 8vw, 44px);
+      }
+
+      .org-list-item {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .org-item-actions {
+        width: 100%;
+      }
+
+      .org-footer-actions {
+        flex-wrap: wrap;
+        gap: 10px;
       }
     }
 

@@ -21,6 +21,7 @@ export default function ChatView({
 	activeChannel,
 	channelMood,
 	messages,
+	accessibilityPrefs,
 	onSendMessage,
 	onReactMessage,
 	translateEnabled,
@@ -43,7 +44,10 @@ export default function ChatView({
 	const recognitionRef = useRef(null);
 	const typingTimeoutRef = useRef(null);
 	const lastMessageCountRef = useRef(0);
+	const lastSpokenIdRef = useRef("");
 	const channelKey = String(activeChannel || "#general");
+	const ttsEnabled = Boolean(accessibilityPrefs?.tts);
+	const simplifiedMode = Boolean(accessibilityPrefs?.simplified);
 	const hasSpeechRecognition =
 		typeof window !== "undefined" &&
 		Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -153,6 +157,9 @@ export default function ChatView({
 
 	useEffect(() => {
 		return () => {
+			if (typeof window !== "undefined" && window.speechSynthesis) {
+				window.speechSynthesis.cancel();
+			}
 			if (recognitionRef.current) {
 				recognitionRef.current.onresult = null;
 				recognitionRef.current.onerror = null;
@@ -161,6 +168,31 @@ export default function ChatView({
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!ttsEnabled || typeof window === "undefined" || !window.speechSynthesis || displayMessages.length === 0) {
+			return;
+		}
+
+		const latestMessage = displayMessages[displayMessages.length - 1];
+		const latestId = String(latestMessage?.id || "");
+		if (!latestId || latestId === lastSpokenIdRef.current) {
+			return;
+		}
+
+		if (String(latestMessage?.user || "").trim().toLowerCase() === "you") {
+			lastSpokenIdRef.current = latestId;
+			return;
+		}
+
+		const speechText = `${latestMessage.user} says ${latestMessage.text}`;
+		const utterance = new SpeechSynthesisUtterance(speechText);
+		utterance.rate = 1;
+		utterance.pitch = 1;
+		window.speechSynthesis.cancel();
+		window.speechSynthesis.speak(utterance);
+		lastSpokenIdRef.current = latestId;
+	}, [displayMessages, ttsEnabled]);
 
 	async function sendMessage() {
 		const text = inputValue.trim();
@@ -271,6 +303,14 @@ export default function ChatView({
 		recognition.start();
 	}
 
+	const nudgeText = simplifiedMode
+		? "Tip: Keep the message short and clear for your team."
+		: "Try rephrasing for better clarity. Your last message has a formal tone that might be perceived as rigid in this context.";
+
+	const inputPlaceholder = simplifiedMode
+		? `Type a clear message in ${String(activeChannel || "#product-strategy").replace(/^#/, "")}`
+		: `Type a message to #${String(activeChannel || "product-strategy").replace(/^#/, "")}`;
+
 	return (
 		<div className="flex-1 min-h-0 h-full flex flex-col min-w-0 bg-white">
 			{/* Top App Bar */}
@@ -360,7 +400,7 @@ export default function ChatView({
 						</span>
 						<div className="flex flex-1 justify-between items-center pr-2">
 							<p className="text-[13px] text-[#003B73] font-medium leading-relaxed">
-								Try rephrasing for better clarity. Your last message has a formal tone that might be perceived as rigid in this context.
+								{nudgeText}
 							</p>
 							<button
 								className="text-[12px] font-bold uppercase tracking-widest text-[#0b4b8a] hover:underline"
@@ -440,7 +480,7 @@ export default function ChatView({
 							value={inputValue}
 							onChange={(event) => setInputValue(event.target.value)}
 							className="w-full border-none focus:outline-none focus:ring-0 text-[14px] text-[#1D1D1F] px-1 bg-transparent resize-none placeholder:text-[#1D1D1F] placeholder:opacity-50"
-							placeholder={`Type a message to #${String(activeChannel || "product-strategy").replace(/^#/, "")}`}
+							placeholder={inputPlaceholder}
 							rows={1}
 							onKeyDown={(event) => {
 								if (event.key === "Enter" && !event.shiftKey) {

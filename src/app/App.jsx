@@ -24,7 +24,53 @@ import {
 const ENTRY_STAGE_KEY = "spann-entry-stage";
 const APP_DOWNLOAD_URL = "https://github.com/BorbiAl/spann/releases";
 const SAVED_CREDENTIALS_KEY = "spann-saved-credentials";
+const ACCESSIBILITY_PREFS_KEY = "spann-accessibility-preferences";
+const ACCESSIBILITY_PREFS_EVENT = "spann-accessibility-updated";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function applyAccessibilityPreferencesGlobal(rawPreferences) {
+	if (typeof document === "undefined") {
+		return;
+	}
+
+	const preferences = rawPreferences && typeof rawPreferences === "object" ? rawPreferences : {};
+	const root = document.documentElement;
+	const body = document.body;
+	const fontSize = Math.max(13, Math.min(22, Number(preferences?.fontSize || 15)));
+	const colorBlind = String(preferences?.colorBlind || "Normal");
+
+	const colorBlindFilters = {
+		Normal: "none",
+		Deuter: "saturate(0.92) hue-rotate(-12deg)",
+		Protan: "saturate(0.86) hue-rotate(16deg)",
+		Tritan: "saturate(0.86) hue-rotate(52deg)"
+	};
+
+	const textScale = Math.max(0.88, Math.min(1.5, fontSize / 15));
+	root.style.setProperty("--body-size", `${fontSize}px`);
+	root.style.setProperty("--a11y-text-scale", String(textScale));
+	root.style.setProperty("--a11y-color-filter", colorBlindFilters[colorBlind] || "none");
+	root.style.fontSize = `${Math.round(textScale * 100)}%`;
+
+	body.classList.toggle("a11y-dyslexia", Boolean(preferences?.dyslexia));
+	body.classList.toggle("a11y-high-contrast", Boolean(preferences?.highContrast));
+	body.classList.toggle("a11y-simplified", Boolean(preferences?.simplified));
+	body.classList.toggle("a11y-cognitive-reading", Boolean(preferences?.simplified));
+	body.classList.toggle("a11y-tts", Boolean(preferences?.tts));
+}
+
+function loadAccessibilityPreferencesGlobal() {
+	try {
+		const raw = localStorage.getItem(ACCESSIBILITY_PREFS_KEY);
+		if (!raw) {
+			return {};
+		}
+		const parsed = JSON.parse(raw);
+		return parsed && typeof parsed === "object" ? parsed : {};
+	} catch {
+		return {};
+	}
+}
 
 function EntryThemeToggle() {
 	const { theme, toggleTheme } = useTheme();
@@ -681,6 +727,28 @@ function AppFlow() {
 	const [notice, setNotice] = useState(null);
 
 	useEffect(() => {
+		function applyFromStorage() {
+			applyAccessibilityPreferencesGlobal(loadAccessibilityPreferencesGlobal());
+		}
+
+		function handleStorage(event) {
+			if (event?.key && event.key !== ACCESSIBILITY_PREFS_KEY) {
+				return;
+			}
+			applyFromStorage();
+		}
+
+		applyFromStorage();
+		window.addEventListener("storage", handleStorage);
+		window.addEventListener(ACCESSIBILITY_PREFS_EVENT, applyFromStorage);
+
+		return () => {
+			window.removeEventListener("storage", handleStorage);
+			window.removeEventListener(ACCESSIBILITY_PREFS_EVENT, applyFromStorage);
+		};
+	}, []);
+
+	useEffect(() => {
 		localStorage.setItem(ENTRY_STAGE_KEY, entryStage);
 	}, [entryStage]);
 
@@ -960,19 +1028,57 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 	const pendingInvitations = Array.isArray(state?.pending_invitations) ? state.pending_invitations : [];
 	const pendingJoinRequests = Array.isArray(state?.pending_join_requests) ? state.pending_join_requests : [];
 	const hasOrganization = myOrganizations.length > 0;
+	const canContinueToWorkspace = hasOrganization;
+
+	function handleContinueToWorkspace() {
+		if (!canContinueToWorkspace) {
+			return;
+		}
+
+		const fallbackWorkspaceId = String(
+			authState?.workspaceId ||
+			state?.current_workspace_id ||
+			myOrganizations[0]?.id ||
+			myOrganizations[0]?.workspace_id ||
+			""
+		);
+
+		if (fallbackWorkspaceId && fallbackWorkspaceId !== authState?.workspaceId) {
+			persistWorkspaceId(fallbackWorkspaceId);
+			return;
+		}
+
+		onWorkspaceReady(authState);
+	}
 
 	return (
-		<div className="auth-shell auth-mode-register">
-			<section className="auth-card register">
-				<div className="auth-main" style={{ width: "100%" }}>
+		<div className="auth-shell auth-mode-register org-onboarding-shell">
+			<section className="auth-card register org-onboarding-card">
+				<div className="auth-main org-onboarding-main">
 					<div className="auth-head">
 						<h2>Create an organization or join one</h2>
-						<p>Choose how you want to start collaborating in Spann.</p>
+						<p>Set up your team space before entering the workspace.</p>
 					</div>
 
-					<div className="auth-inline-row" style={{ marginBottom: 12 }}>
-						<button type="button" className="auth-text-link inline" onClick={() => setMode("create")}>Create organization</button>
-						<button type="button" className="auth-text-link inline" onClick={() => setMode("join")}>Join organization</button>
+					<div className="org-mode-switch" role="tablist" aria-label="Organization setup mode">
+						<button
+							type="button"
+							className={`org-mode-btn ${mode === "create" ? "active" : ""}`}
+							onClick={() => setMode("create")}
+							role="tab"
+							aria-selected={mode === "create"}
+						>
+							Create organization
+						</button>
+						<button
+							type="button"
+							className={`org-mode-btn ${mode === "join" ? "active" : ""}`}
+							onClick={() => setMode("join")}
+							role="tab"
+							aria-selected={mode === "join"}
+						>
+							Join organization
+						</button>
 					</div>
 
 					{errorText ? (
@@ -992,10 +1098,10 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 						</div>
 					) : null}
 
-					{loading ? <p>Loading organization options...</p> : null}
+					{loading ? <p className="org-loading">Loading organization options...</p> : null}
 
 					{!loading && mode === "create" ? (
-						<form className="auth-form" onSubmit={handleCreateOrganization}>
+						<form className="auth-form org-panel" onSubmit={handleCreateOrganization}>
 							<label className="auth-field">
 								<span>Organization name</span>
 								<input
@@ -1024,7 +1130,7 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 					) : null}
 
 					{!loading && mode === "join" ? (
-						<div className="auth-form">
+						<div className="auth-form org-panel">
 							<label className="auth-field">
 								<span>Optional message to owner</span>
 								<textarea
@@ -1035,13 +1141,13 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 									rows={3}
 								/>
 							</label>
-							<div className="auth-form-grid" style={{ display: "grid", gap: 10 }}>
-								{discoverableOrganizations.length === 0 ? <p>No public organizations available right now.</p> : null}
+							<div className="org-list">
+								{discoverableOrganizations.length === 0 ? <p className="org-empty">No public organizations available right now.</p> : null}
 								{discoverableOrganizations.map((organization) => (
-									<div key={organization.id} className="auth-inline-row" style={{ justifyContent: "space-between", border: "1px solid var(--line)", borderRadius: 14, padding: "10px 12px" }}>
+									<div key={organization.id} className="org-list-item">
 										<div>
-											<strong>{organization.name}</strong>
-											<div className="status-subtext">{organization.slug}</div>
+											<strong className="org-name">{organization.name}</strong>
+											<div className="status-subtext org-meta">{organization.slug}</div>
 										</div>
 										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
 											Request to join
@@ -1053,15 +1159,15 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 					) : null}
 
 					{pendingInvitations.length > 0 ? (
-						<div style={{ marginTop: 14 }}>
-							<h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Invitations</h3>
+						<div className="org-section">
+							<h3 className="org-section-title">Invitations</h3>
 							{pendingInvitations.map((invitation) => (
-								<div key={invitation.id} className="auth-inline-row" style={{ justifyContent: "space-between", border: "1px solid var(--line)", borderRadius: 14, padding: "10px 12px", marginBottom: 8 }}>
+								<div key={invitation.id} className="org-list-item">
 									<div>
-										<strong>{invitation.workspace_name || "Organization"}</strong>
-										<div className="status-subtext">{invitation.email}</div>
+										<strong className="org-name">{invitation.workspace_name || "Organization"}</strong>
+										<div className="status-subtext org-meta">{invitation.email}</div>
 									</div>
-									<div className="auth-inline-row">
+									<div className="auth-inline-row org-item-actions">
 										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "accept", invitation.workspace_id)}>Accept</button>
 										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "reject", invitation.workspace_id)}>Reject</button>
 									</div>
@@ -1071,15 +1177,15 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 					) : null}
 
 					{pendingJoinRequests.length > 0 ? (
-						<div style={{ marginTop: 14 }}>
-							<h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Pending join requests</h3>
+						<div className="org-section">
+							<h3 className="org-section-title">Pending join requests</h3>
 							{pendingJoinRequests.map((requestItem) => (
-								<div key={requestItem.id} className="auth-inline-row" style={{ justifyContent: "space-between", border: "1px solid var(--line)", borderRadius: 14, padding: "10px 12px", marginBottom: 8 }}>
+								<div key={requestItem.id} className="org-list-item">
 									<div>
-										<strong>{requestItem.requester_display_name || requestItem.requester_email || "User"}</strong>
-										<div className="status-subtext">{requestItem.workspace_name || "Organization"}</div>
+										<strong className="org-name">{requestItem.requester_display_name || requestItem.requester_email || "User"}</strong>
+										<div className="status-subtext org-meta">{requestItem.workspace_name || "Organization"}</div>
 									</div>
-									<div className="auth-inline-row">
+									<div className="auth-inline-row org-item-actions">
 										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "approve")}>Approve</button>
 										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "reject")}>Reject</button>
 									</div>
@@ -1089,24 +1195,35 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 					) : null}
 
 					{myOrganizations.length > 0 ? (
-						<div style={{ marginTop: 14 }}>
-							<h3 style={{ fontSize: "1rem", marginBottom: 8 }}>Your organizations</h3>
-							<div className="status-subtext">
-								{myOrganizations.map((item) => `${item.name || "Organization"} (${item.role})`).join(" • ")}
+						<div className="org-section">
+							<h3 className="org-section-title">Your organizations</h3>
+							<div className="org-list">
+								{myOrganizations.map((item) => (
+									<div key={item.id || item.workspace_id || item.slug || item.name} className="org-list-item">
+										<div>
+											<strong className="org-name">{item.name || "Organization"}</strong>
+											<div className="status-subtext org-meta">{item.slug || "private"}</div>
+										</div>
+										<span className="org-role-pill">{item.role || "member"}</span>
+									</div>
+								))}
 							</div>
 						</div>
 					) : null}
 
-					<div className="auth-inline-row" style={{ marginTop: 16, justifyContent: "space-between" }}>
+					<div className="auth-inline-row org-footer-actions">
 						<button type="button" className="auth-text-link inline" onClick={onLogout}>Sign out</button>
-						<button
-							type="button"
-							className="accent-btn auth-submit"
-							disabled={!hasOrganization && !authState?.workspaceId}
-							onClick={() => onWorkspaceReady(authState)}
-						>
-							Continue to workspace
-						</button>
+						{canContinueToWorkspace ? (
+							<button
+								type="button"
+								className="accent-btn auth-submit"
+								onClick={handleContinueToWorkspace}
+							>
+								Continue to workspace
+							</button>
+						) : (
+							<p className="org-continue-hint">Create or join an organization to continue.</p>
+						)}
 					</div>
 				</div>
 			</section>

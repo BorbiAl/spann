@@ -179,7 +179,7 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage }) {
 	if (isChatLayout) {
 		return (
 			<aside className="sidebar chat-sidebar">
@@ -197,6 +197,7 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					onChannelChange={onChannelChange}
 					channelUnread={channelUnread}
 					onCreateChannel={onCreateChannel}
+					onStartDirectMessage={onStartDirectMessage}
 					variant="teams"
 				/>
 			</aside>
@@ -466,6 +467,7 @@ function MainPanel({
 					activeChannel={activeChannel}
 					channelMood={channelMood}
 					messages={messages}
+					accessibilityPrefs={accessibilityPrefs}
 					onSendMessage={onSendMessage}
 					onReactMessage={onReactMessage}
 					translateEnabled={translateEnabled}
@@ -646,6 +648,39 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 
 	useEffect(() => {
 		localStorage.setItem("spann-accessibility-preferences", JSON.stringify(accessibilityPrefs));
+		if (typeof window !== "undefined") {
+			window.dispatchEvent(new CustomEvent("spann-accessibility-updated"));
+		}
+	}, [accessibilityPrefs]);
+
+	useEffect(() => {
+		if (typeof document === "undefined") {
+			return;
+		}
+
+		const root = document.documentElement;
+		const body = document.body;
+		const fontSize = Math.max(13, Math.min(22, Number(accessibilityPrefs?.fontSize || 15)));
+		const colorBlind = String(accessibilityPrefs?.colorBlind || "Normal");
+
+		const colorBlindFilters = {
+			Normal: "none",
+			Deuter: "saturate(0.92) hue-rotate(-12deg)",
+			Protan: "saturate(0.86) hue-rotate(16deg)",
+			Tritan: "saturate(0.86) hue-rotate(52deg)"
+		};
+		const textScale = Math.max(0.88, Math.min(1.5, fontSize / 15));
+
+		root.style.setProperty("--body-size", `${fontSize}px`);
+		root.style.setProperty("--a11y-text-scale", String(textScale));
+		root.style.setProperty("--a11y-color-filter", colorBlindFilters[colorBlind] || "none");
+		root.style.fontSize = `${Math.round(textScale * 100)}%`;
+
+		body.classList.toggle("a11y-dyslexia", Boolean(accessibilityPrefs?.dyslexia));
+		body.classList.toggle("a11y-high-contrast", Boolean(accessibilityPrefs?.highContrast));
+		body.classList.toggle("a11y-simplified", Boolean(accessibilityPrefs?.simplified));
+		body.classList.toggle("a11y-cognitive-reading", Boolean(accessibilityPrefs?.simplified));
+		body.classList.toggle("a11y-tts", Boolean(accessibilityPrefs?.tts));
 	}, [accessibilityPrefs]);
 
 	async function loadChannelMessages(channelId) {
@@ -913,6 +948,11 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 
 			return [...current, nextChannel];
 		});
+	}
+
+	function handleStartDirectMessage(person) {
+		const personName = String(person?.name || "teammate").trim();
+		pushAppNotice(`Started direct chat with ${personName}.`, "success");
 	}
 
 	async function handleSendMessage(channelId, text, translated) {
@@ -1250,6 +1290,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								navItems={navItems}
 								onViewChange={setActiveView}
 								onCreateChannel={handleCreateChannel}
+								onStartDirectMessage={handleStartDirectMessage}
 								isChatLayout
 							/>
 						) : null}
