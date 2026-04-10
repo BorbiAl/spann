@@ -150,7 +150,7 @@ export default function AccessibilityView({ preferences, onChangePreference, sav
 	}
 
 	return (
-		<div className="h-full overflow-y-auto bg-surface p-8 max-w-7xl mx-auto w-full view-transition">
+		<div className="h-full overflow-y-auto bg-surface p-8 w-full view-transition">
 			<div>
 				<header className="mb-10">
 					<h1 className="text-3xl font-bold tracking-tight text-on-surface mb-2">Accessibility Settings</h1>

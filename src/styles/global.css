@@ -154,8 +154,32 @@
 
 
 
-    body.a11y-dyslexia :where(.material-symbols-outlined, .material-icons, .material-icons-round, .material-icons-two-tone, .material-icons-sharp) {
-      font-family: inherit;
+    body.a11y-dyslexia :where(.material-symbols-outlined) {
+      font-family: "Material Symbols Outlined" !important;
+    }
+
+
+
+    body.a11y-dyslexia :where(.material-icons) {
+      font-family: "Material Icons" !important;
+    }
+
+
+
+    body.a11y-dyslexia :where(.material-icons-round) {
+      font-family: "Material Icons Round" !important;
+    }
+
+
+
+    body.a11y-dyslexia :where(.material-icons-two-tone) {
+      font-family: "Material Icons Two Tone" !important;
+    }
+
+
+
+    body.a11y-dyslexia :where(.material-icons-sharp) {
+      font-family: "Material Icons Sharp" !important;
     }
 
 
@@ -247,6 +271,21 @@
 
 
 
+    body.a11y-cognitive-reading :is(p, li, span, label, a, button, input, textarea, select),
+    body.a11y-simplified :is(p, li, span, label, a, button, input, textarea, select) {
+      line-height: 1.68;
+    }
+
+
+
+    body.a11y-cognitive-reading :is(h1, h2, h3, h4, h5, h6),
+    body.a11y-simplified :is(h1, h2, h3, h4, h5, h6) {
+      line-height: 1.35;
+      letter-spacing: 0.005em;
+    }
+
+
+
     body.a11y-cognitive-reading :is(p, li, .message-text, .result-text),
     body.a11y-simplified :is(p, li, .message-text, .result-text) {
       max-width: 72ch;
@@ -266,6 +305,12 @@
     body.a11y-cognitive-reading :is(.entry-subtitle, .auth-head p, .auth-inline-note),
     body.a11y-simplified :is(.entry-subtitle, .auth-head p, .auth-inline-note) {
       font-size: 1.02em;
+    }
+
+
+
+    body.a11y-simplified :is(.text-on-surface-variant, .caption, [class*="text-slate-"], [class*="text-gray-"]) {
+      opacity: 1 !important;
     }
 
 

@@ -669,17 +669,23 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			Protan: "saturate(0.86) hue-rotate(16deg)",
 			Tritan: "saturate(0.86) hue-rotate(52deg)"
 		};
+		const colorBlindFilter = colorBlindFilters[colorBlind] || "none";
+		const highContrastFilter = Boolean(accessibilityPrefs?.highContrast) ? "contrast(1.18) saturate(0.92)" : "";
+		const combinedFilter = [colorBlindFilter !== "none" ? colorBlindFilter : "", highContrastFilter]
+			.filter(Boolean)
+			.join(" ");
 		const textScale = Math.max(0.88, Math.min(1.5, fontSize / 15));
 
 		root.style.setProperty("--body-size", `${fontSize}px`);
 		root.style.setProperty("--a11y-text-scale", String(textScale));
-		root.style.setProperty("--a11y-color-filter", colorBlindFilters[colorBlind] || "none");
+		root.style.setProperty("--a11y-color-filter", combinedFilter || "none");
 		root.style.fontSize = `${Math.round(textScale * 100)}%`;
 
 		body.classList.toggle("a11y-dyslexia", Boolean(accessibilityPrefs?.dyslexia));
 		body.classList.toggle("a11y-high-contrast", Boolean(accessibilityPrefs?.highContrast));
 		body.classList.toggle("a11y-simplified", Boolean(accessibilityPrefs?.simplified));
 		body.classList.toggle("a11y-cognitive-reading", Boolean(accessibilityPrefs?.simplified));
+		body.classList.toggle("a11y-colorblind", colorBlind !== "Normal");
 		body.classList.toggle("a11y-tts", Boolean(accessibilityPrefs?.tts));
 	}, [accessibilityPrefs]);
 
@@ -1168,7 +1174,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	return (
-		<div className="bg-background font-body text-on-surface flex overflow-hidden h-screen w-full">
+		<div className="app-shell chat-workspace bg-background font-body text-on-surface flex overflow-hidden h-screen w-full">
 			<div className="workspace-stack h-full w-full flex">
 				<div className="chat-layout flex h-screen w-full relative">
 					<aside className="h-screen w-64 left-0 top-0 fixed bg-slate-100/60 dark:bg-slate-900/60 backdrop-blur-2xl border-r border-slate-200/30 dark:border-slate-800/30 flex flex-col p-4 gap-2 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed z-50">
@@ -1279,7 +1285,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						</div>
 					</aside>
 
-					<main className={`ml-64 flex-1 flex flex-col relative ${activeView === "chat" ? "chat-main-shell overflow-hidden" : "overflow-y-auto"}`}>
+					<main className={`ml-64 flex-1 min-h-0 flex relative ${activeView === "chat" ? "chat-main-shell overflow-hidden" : "overflow-y-auto"}`}>
 						{activeView === "chat" ? (
 							<Sidebar
 								activeView={activeView}

@@ -1431,7 +1431,7 @@
 }
 
 
-@media (max-width: 1023px) {
+@media (max-width: 768px) {
   .app-shell.chat-workspace .sidebar.chat-sidebar {
     display: none !important;
   }

@@ -95,7 +95,8 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 	});
 
 	return (
-		<div className="flex-1 flex flex-col relative overflow-hidden bg-background h-full font-body text-on-surface">
+		<div className="h-full overflow-y-auto bg-surface p-8 w-full view-transition">
+			<div className="flex flex-col relative overflow-hidden bg-background min-h-full font-body text-on-surface rounded-2xl border border-outline-variant/10">
 			<style>{`
         .mica-surface {
             background: rgba(249, 249, 249, 0.8);
@@ -273,6 +274,7 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 						</button>
 					</div>
 				</div>
+			</div>
 			</div>
 		</div>
 	);

@@ -77,6 +77,55 @@ function localeCode(cultureKey) {
 	return (region || locale || '--').toUpperCase();
 }
 
+function buildCultureFallback(targetCulture, originalText) {
+	const target = String(targetCulture || '');
+	const phrase = String(originalText || '').trim();
+	const normalized = phrase.toLowerCase().replace(/[!?.,]+$/g, '');
+	const isLuckWish = normalized === 'break a leg' || normalized === 'good luck';
+
+	const directByCulture = {
+		American: 'You got this!',
+		British: 'Best of luck.',
+		Bulgarian: 'Много успех!',
+		Japanese: '頑張ってください。',
+		German: 'Viel Erfolg!',
+		Brazilian: 'Boa sorte!',
+		Arabic: 'بالتوفيق!'
+	};
+
+	if (isLuckWish && directByCulture[target]) {
+		return directByCulture[target];
+	}
+
+	if (directByCulture[target]) {
+		return `${directByCulture[target]} (${phrase})`;
+	}
+
+	return `[${cultureLabel(targetCulture)}] ${phrase}`;
+}
+
+async function requestLegacyAdaptation(trimmed, sourceCulture, targetCulture) {
+	const payload = await apiRequest('/translator/adapt', {
+		method: 'POST',
+		body: JSON.stringify({
+			inputText: trimmed,
+			sourceCulture,
+			targetCulture
+		})
+	});
+
+	const data = payload?.result || payload?.data || {};
+	if (!data || typeof data !== 'object') {
+		return null;
+	}
+
+	return {
+		literal: String(data.literal || trimmed),
+		cultural: String(data.cultural || buildCultureFallback(targetCulture, trimmed)),
+		note: String(data.note || 'Cultural adaptation applied for target audience.')
+	};
+}
+
 function LanguageDropdown({ value, onChange, ariaLabel }) {
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef(null);
@@ -192,10 +241,30 @@ export default function TranslatorView() {
 			});
 
 			const data = payload?.data || payload?.result || {};
-			const nextLiteral = data.literal_translation || data.literal || trimmed;
+			let nextLiteral = data.literal_translation || data.literal || trimmed;
 			const rawCultural = data.cultural_adaptation || data.cultural || trimmed;
-			const nextCultural = isGarbledMultilingualText(rawCultural) ? `[${cultureLabel(targetCulture)}] ${trimmed}` : rawCultural;
-			const nextNote = data.explanation || data.note || 'Translation complete.';
+			let nextCultural = isGarbledMultilingualText(rawCultural) ? `[${cultureLabel(targetCulture)}] ${trimmed}` : rawCultural;
+			let nextNote = data.explanation || data.note || 'Translation complete.';
+
+			const sourceLocale = String(sourceOption?.locale || 'en-US');
+			const targetLocale = String(targetOption?.locale || 'en-US');
+			const looksLikeFailOpen =
+				sourceLocale !== targetLocale &&
+				(String(nextCultural).trim() === trimmed || String(nextNote).toLowerCase().includes('fallback'));
+
+			if (looksLikeFailOpen) {
+				try {
+					const legacyResult = await requestLegacyAdaptation(trimmed, sourceCulture, targetCulture);
+					if (legacyResult) {
+						nextLiteral = legacyResult.literal;
+						nextCultural = legacyResult.cultural;
+						nextNote = legacyResult.note;
+					}
+				} catch (legacyError) {
+					nextCultural = buildCultureFallback(targetCulture, trimmed);
+					nextNote = 'Translation fallback applied for selected language.';
+				}
+			}
 			const nextTags = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : INITIAL_RESULT.tags;
 			const nextSentiment = Number.isFinite(data.sentiment_score)
 				? Math.min(100, Math.max(0, Number(data.sentiment_score)))
@@ -212,22 +281,34 @@ export default function TranslatorView() {
 			});
 			setHistory((current) => [toHistoryEntry(sourceCulture, targetCulture, String(nextLiteral), String(nextCultural)), ...current].slice(0, 8));
 		} catch (error) {
-			const fallbackLiteral = trimmed;
-			const fallbackCultural = `[${cultureLabel(targetCulture)}] ${trimmed}`;
+			let fallbackLiteral = trimmed;
+			let fallbackCultural = `[${cultureLabel(targetCulture)}] ${trimmed}`;
+			let fallbackNote = 'Translation service is unavailable. Showing local fallback output.';
+
+			try {
+				const legacyResult = await requestLegacyAdaptation(trimmed, sourceCulture, targetCulture);
+				if (legacyResult) {
+					fallbackLiteral = legacyResult.literal;
+					fallbackCultural = legacyResult.cultural;
+					fallbackNote = 'Primary translator unavailable. Used compatibility translator output.';
+				}
+			} catch (legacyError) {
+				fallbackCultural = buildCultureFallback(targetCulture, trimmed);
+			}
 			setResult((current) => ({
 				...current,
 				literal: fallbackLiteral,
 				cultural: fallbackCultural
 			}));
 			setHistory((current) => [toHistoryEntry(sourceCulture, targetCulture, fallbackLiteral, fallbackCultural), ...current].slice(0, 8));
-			setStatusNote('Translation service is unavailable. Showing local fallback output.');
+			setStatusNote(fallbackNote);
 		} finally {
 			setIsTranslating(false);
 		}
 	}
 
 	return (
-		<main className="flex-grow p-8 max-w-7xl mx-auto w-full view-transition bg-surface">
+		<main className="h-full overflow-y-auto bg-surface p-8 w-full view-transition">
 			<header className="mb-10">
 				<h1 className="text-3xl font-bold tracking-tight text-on-surface mb-2">Cultural Translator</h1>
 				<p className="text-on-surface-variant max-w-2xl">

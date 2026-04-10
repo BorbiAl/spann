@@ -21,7 +21,7 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 	const label = average > 72 ? "High Energy 🔥" : average > 55 ? "Steady Flow ⚡" : "Low Energy 🧊";
 
 	return (
-		<div className="view-transition">
+		<div className="h-full overflow-y-auto bg-surface p-8 w-full view-transition space-y-6">
 			<section className="card">
 				<p className="display" style={{ marginBottom: 2 }}>
 					{label}

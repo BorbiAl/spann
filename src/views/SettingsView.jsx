@@ -58,7 +58,8 @@ export default function SettingsView({ authState, onLogout }) {
 	}
 
 	return (
-		<div className="view-transition flex h-full overflow-hidden">
+		<div className="h-full overflow-y-auto bg-surface p-8 w-full view-transition">
+			<div className="flex min-h-full overflow-hidden rounded-2xl border border-outline-variant/10 bg-surface-container-lowest">
 			<aside className="h-full w-64 border-r border-outline-variant/20 flex flex-col p-4 gap-2 bg-surface/70 backdrop-blur-xl">
 				<div className="px-3 py-4">
 					<h2 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60">System Settings</h2>
@@ -238,6 +239,7 @@ export default function SettingsView({ authState, onLogout }) {
 					</section>
 				</div>
 			</main>
+			</div>
 		</div>
 	);
 }

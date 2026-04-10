@@ -45,17 +45,23 @@ function applyAccessibilityPreferencesGlobal(rawPreferences) {
 		Protan: "saturate(0.86) hue-rotate(16deg)",
 		Tritan: "saturate(0.86) hue-rotate(52deg)"
 	};
+	const colorBlindFilter = colorBlindFilters[colorBlind] || "none";
+	const highContrastFilter = Boolean(preferences?.highContrast) ? "contrast(1.18) saturate(0.92)" : "";
+	const combinedFilter = [colorBlindFilter !== "none" ? colorBlindFilter : "", highContrastFilter]
+		.filter(Boolean)
+		.join(" ");
 
 	const textScale = Math.max(0.88, Math.min(1.5, fontSize / 15));
 	root.style.setProperty("--body-size", `${fontSize}px`);
 	root.style.setProperty("--a11y-text-scale", String(textScale));
-	root.style.setProperty("--a11y-color-filter", colorBlindFilters[colorBlind] || "none");
+	root.style.setProperty("--a11y-color-filter", combinedFilter || "none");
 	root.style.fontSize = `${Math.round(textScale * 100)}%`;
 
 	body.classList.toggle("a11y-dyslexia", Boolean(preferences?.dyslexia));
 	body.classList.toggle("a11y-high-contrast", Boolean(preferences?.highContrast));
 	body.classList.toggle("a11y-simplified", Boolean(preferences?.simplified));
 	body.classList.toggle("a11y-cognitive-reading", Boolean(preferences?.simplified));
+	body.classList.toggle("a11y-colorblind", colorBlind !== "Normal");
 	body.classList.toggle("a11y-tts", Boolean(preferences?.tts));
 }
 
