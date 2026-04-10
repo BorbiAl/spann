@@ -27,3 +27,4 @@ mesh-relay/target/
 # C++ / CMake
 mesh-daemon/build/
 cmake-build-*/
+dist-release/win-arm64-unpacked/resources/app.asar
