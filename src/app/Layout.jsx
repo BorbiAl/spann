@@ -96,7 +96,7 @@ function toUiMessage(apiMessage) {
 		text: String(apiMessage?.text_translated || apiMessage?.text || ""),
 		reactions,
 		translated: Boolean(apiMessage?.text_translated),
-		lang: apiMessage?.source_locale ? `🌐 ${apiMessage.source_locale}` : undefined
+		lang: apiMessage?.source_locale ? `=��� ${apiMessage.source_locale}` : undefined
 	};
 }
 
@@ -120,7 +120,7 @@ function SideSection({ activeView }) {
 			<p className="section-title">Sections</p>
 			{items.map((item, index) => (
 				<button key={item} className={`section-item ${index === 0 ? "active" : ""}`}>
-					<span className="channel-dot">•</span>
+					<span className="channel-dot">G��</span>
 					<span className="section-label">{item}</span>
 				</button>
 			))}
@@ -179,7 +179,7 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel }) {
 	if (isChatLayout) {
 		return (
 			<aside className="sidebar chat-sidebar">
@@ -196,6 +196,7 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					activeChannelId={activeChannelId}
 					onChannelChange={onChannelChange}
 					channelUnread={channelUnread}
+					onCreateChannel={onCreateChannel}
 					variant="teams"
 				/>
 			</aside>
@@ -529,19 +530,7 @@ function MainPanel({
 		return <TranslatorView />;
 	}
 
-	if (activeView === "chat") {
-		return renderView();
-	}
-
-	return (
-		<main className="main-panel">
-			<section className="main-surface">
-				<div className="main-stage">
-					<section className="view-scroll">{renderView()}</section>
-				</div>
-			</section>
-		</main>
-	);
+	return renderView();
 }
 
 function MobileSheet({ open, onClose, activeView, activeChannel }) {
@@ -648,7 +637,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}, [showNudge]);
 
 	useEffect(() => {
-		setForcedTheme(activeView === "chat" || activeView === "carbon" || activeView === "mesh" ? "light" : null);
+		setForcedTheme("light");
 
 		return () => {
 			setForcedTheme(null);
@@ -886,6 +875,46 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		}
 	}
 
+	function handleCreateChannel() {
+		const raw = typeof window !== "undefined" ? window.prompt("Create a channel name", "project-updates") : "";
+		const normalized = withHash(raw || "").toLowerCase();
+		if (!normalized || normalized === "#channel") {
+			return;
+		}
+
+		setChannels((current) => {
+			if (current.some((channel) => String(channel.name).toLowerCase() === normalized)) {
+				pushAppNotice("That channel already exists.", "info");
+				return current;
+			}
+
+			const nextChannel = {
+				id: normalized,
+				name: normalized,
+				mood: 60
+			};
+
+			setMessagesByChannel((messageState) => ({
+				...messageState,
+				[nextChannel.id]: []
+			}));
+			setChannelUnread((unreadState) => ({
+				...unreadState,
+				[nextChannel.id]: 0
+			}));
+			setChannelMoodById((moodState) => ({
+				...moodState,
+				[nextChannel.id]: 60
+			}));
+			setPulseChannels((pulseState) => [...pulseState, { id: nextChannel.id, name: nextChannel.name, energy: 60 }]);
+			setActiveView("chat");
+			setActiveChannelId(nextChannel.id);
+			pushAppNotice(`Channel ${nextChannel.name} created.`, "success");
+
+			return [...current, nextChannel];
+		});
+	}
+
 	async function handleSendMessage(channelId, text, translated) {
 		if (!channelId) {
 			return;
@@ -932,9 +961,9 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			color: "#0f67b7",
 			time: formatted,
 			text,
-			reactions: ["✅ 1"],
+			reactions: ["G�� 1"],
 			translated,
-			lang: translated ? "🌐 en-US" : undefined
+			lang: translated ? "=��� en-US" : undefined
 		};
 
 		setMessagesByChannel((current) => ({
@@ -1099,13 +1128,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	return (
-		<div className={`app-shell ${activeView === "chat" ? "chat-workspace bg-background text-on-background h-screen flex overflow-hidden w-full" : ""}`}>
+		<div className="app-shell chat-workspace bg-background text-on-background h-screen flex overflow-hidden w-full">
 			<div className="workspace-stack h-full w-full flex">
-				{activeView !== "chat" ? <WorkspaceHeaderBar activeView={activeView} onToggleContext={handleContextAction} onLogout={onLogout} /> : null}
-				<div className={activeView === "chat" ? "chat-layout flex h-screen w-full" : `workspace-body ${contextOpen ? "context-open" : "context-closed"}`}>
-					{activeView === "chat" ? (
-						<>
-							<aside className="w-[240px] flex-shrink-0 fixed left-0 h-screen bg-[#F5F5F7] border-r border-black/10 flex flex-col pt-6 pb-4 px-4 gap-2 font-[Inter,sans-serif] text-[14px] leading-relaxed z-50">
+				<div className="chat-layout flex h-screen w-full">
+					<aside className="w-[240px] flex-shrink-0 fixed left-0 h-screen bg-[#F5F5F7] border-r border-black/10 flex flex-col pt-6 pb-4 px-4 gap-2 font-[Inter,sans-serif] text-[14px] leading-relaxed z-50">
 								<div className="flex items-center gap-3 px-2 mb-6">
 									<div className="w-9 h-9 rounded-[8px] bg-[#0f67b7] flex items-center justify-center text-white font-bold text-[16px]">S</div>
 									<div className="flex flex-col">
@@ -1199,60 +1225,24 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 									</div>
 								</div>
 							</aside>
-							
-							<main className="ml-[240px] flex-1 flex h-screen bg-white">
-								<section className="w-[260px] bg-[#F5F5F7] flex flex-col border-r border-black/10 flex-shrink-0">
-									<div className="px-6 pt-8 pb-4">
-										<h1 className="text-[22px] font-bold tracking-tight text-[#1D1D1F] mb-5">Teams</h1>
-										<div className="relative group shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-											<span className="material-symbols-outlined absolute left-3 top-[7px] text-[#1D1D1F] opacity-40 text-[18px]">search</span>
-											<input className="w-full bg-white border border-[#E5E5EA] rounded-[8px] pl-9 py-1.5 text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-[#0f67b7]/20 transition-all text-[#1D1D1F] placeholder:text-[#1D1D1F] placeholder:font-medium placeholder:opacity-40" placeholder="Jump to..." type="text" />
-										</div>
-									</div>
-									<div className="flex-1 overflow-y-auto px-4 mt-2">
-										<div className="mb-8">
-											<div className="px-3 mb-3 flex justify-between items-center group">
-												<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#1D1D1F] opacity-50">Favorites</span>
-											</div>
-											<div className="space-y-[2px]">
-												{channels.map((ch) => (
-													<div
-														key={ch.id}
-														onClick={() => onChannelChange(ch.id)}
-														className={
-															activeChannelId === ch.id
-																? "flex items-center px-3 py-[6px] rounded-[8px] bg-[#EAEAEF] transition-all cursor-pointer relative"
-																: "flex items-center px-3 py-[6px] rounded-[8px] hover:bg-black/5 transition-all cursor-pointer relative"
-														}
-													>
-														<span className={`text-[14px] flex items-center ${activeChannelId === ch.id ? "font-bold text-[#1D1D1F]" : "font-medium text-[#1D1D1F] opacity-70"}`}>
-															<span className="opacity-40 mr-3 font-medium">#</span>
-															{ch.name.replace(/^#/, "")}
-														</span>
-														{activeChannelId === ch.id && <span className="absolute right-3 w-2 h-2 rounded-full bg-[#0f67b7]"></span>}
-													</div>
-												))}
-											</div>
-										</div>
-										<div className="mb-8">
-											<div className="px-3 mb-3 flex justify-between items-center">
-												<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#1D1D1F] opacity-50">Direct Messages</span>
-											</div>
-											<div className="space-y-[2px]">
-<div className="flex items-center gap-3 px-3 py-2 rounded-[8px] hover:bg-black/5 transition-all cursor-pointer">
-<img className="w-6 h-6 rounded-[6px] object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMmwKvAIFVC1YNqsjNngqLpJf50pSHL5jjdG0Mxz_WzwwDgVrMp7kaL4l0sIbzP5WmFxt-itTBGGbDECAoe30sAskyf0GOnG6GKtCT7TIRPaNzaQANRVmyUfyZ9UxtQ87INP2ffSNnmRnmEvtwjMGZMdIUZbZ22K80jIdbIJXFiaLk2Xe9tZ8wDTbRudfMVtwi2iYr4aIaPNuWE6--h17Y48ORHwgH9kIix2D8-fRH0V-23dv3ezmDxOGw_KPWKHTaTUrRYk3de3MC" />
-<span className="text-[14px] font-medium text-[#1D1D1F] opacity-70 border-b border-transparent">Sarah Chen</span>
-</div>
-<div className="flex items-center gap-3 px-3 py-2 rounded-[8px] hover:bg-black/5 transition-all cursor-pointer">
-<div className="w-6 h-6 rounded-[6px] bg-[#5AC8FA] flex items-center justify-center text-[10px] text-white font-bold tracking-wide">MK</div>
-<span className="text-[14px] font-medium text-[#1D1D1F] opacity-70 border-b border-transparent">Marcus Kane</span>
-</div>
-</div>
-</div>
-</div>
-</section>
 
-								<MainPanel
+					<main className={`ml-[240px] flex-1 flex h-screen min-h-0 bg-white ${activeView === "chat" ? "chat-main-shell overflow-hidden" : "overflow-y-auto"}`}>
+						{activeView === "chat" ? (
+							<Sidebar
+								activeView={activeView}
+								activeChannelId={activeChannelId}
+								channels={channels}
+								onChannelChange={handleChannelChange}
+								channelUnread={channelUnread}
+								navItems={navItems}
+								onViewChange={setActiveView}
+								onCreateChannel={handleCreateChannel}
+								isChatLayout
+							/>
+						) : null}
+
+						<div className={`flex-1 min-h-0 flex ${activeView === "chat" ? "chat-main-stage overflow-hidden" : "overflow-y-auto"}`}>
+						<MainPanel
 									activeView={activeView}
 									activeChannel={activeChannel}
 									channelMood={activeMood}
@@ -1289,77 +1279,15 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								accessibilityPrefs={accessibilityPrefs}
 								onChangeAccessibility={handleAccessibilityPreferenceChange}
 								accessibilitySaveState={accessibilitySaveState}
-								authState={liveAuth}
-								onLogout={onLogout}
-							/>
-						</main>
-						</>
-					) : (
-						<>
-							<Sidebar
-								activeView={activeView}
-								activeChannelId={activeChannelId}
-								channels={channels}
-								onChannelChange={handleChannelChange}
-								channelUnread={channelUnread}
-								navItems={navItems}
-								onViewChange={setActiveView}
-								isChatLayout={false}
-							/>
-							<MainPanel
-								activeView={activeView}
-								activeChannel={activeChannel}
-								channelMood={activeMood}
-								messages={currentMessages}
-								onSendMessage={(channelLabel, text, translated) => {
-									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-									return handleSendMessage(channel?.id || activeChannelId, text, translated);
-								}}
-								onReactMessage={(channelLabel, messageId, emoji) => {
-									const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-									handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
-								}}
-								translateEnabled={translateEnabled}
-								setTranslateEnabled={setTranslateEnabled}
-								showNudge={showNudge}
-								setShowNudge={setShowNudge}
-								pulseChannels={pulseChannels}
-								onRefreshPulse={handleRefreshPulseAction}
-								pulseLoading={pulseLoading}
-								pulseError={pulseError}
-								micActive={micActive}
-								onToggleMic={handleToggleMic}
-								carbonLeaderboard={carbonLeaderboard}
-								onLogCarbon={handleLogCarbon}
-								carbonSaving={carbonSaving}
-								carbonError={carbonError}
-								currentUserId={currentUserId}
-								meshNodes={meshNodes}
-								onRefreshMesh={handleRefreshMeshAction}
-								onRegisterMesh={handleRegisterMeshNode}
-								onRevokeMesh={handleRevokeMeshNode}
-								meshBusy={meshBusy}
-								meshError={meshError}
-								accessibilityPrefs={accessibilityPrefs}
-								onChangeAccessibility={handleAccessibilityPreferenceChange}
-								accessibilitySaveState={accessibilitySaveState}
-								authState={liveAuth}
-								onLogout={onLogout}
-							/>
-							<aside className={`context-panel workspace-context-rail ${contextOpen ? "" : "collapsed"}`}>
-								<ContextContent activeView={activeView} activeChannel={activeChannel} />
-							</aside>
-						</>
-					)}
+									authState={liveAuth}
+									onLogout={onLogout}
+						/>
+						</div>
+
+						{activeView === "chat" ? <ChatUtilityRail /> : null}
+					</main>
 				</div>
 			</div>
-			{activeView !== "chat" && <BottomTabBar activeView={activeView} onChange={setActiveView} items={navItems} />}
-			<MobileSheet
-				open={mobileSheetOpen}
-				onClose={() => setMobileSheetOpen(false)}
-				activeView={activeView}
-				activeChannel={activeChannel}
-			/>
 		</div>
 	);
 }

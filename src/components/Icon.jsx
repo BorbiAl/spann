@@ -459,6 +459,56 @@ export default function Icon({ name, size = 20 }) {
     );
   }
 
+  if (name === "attach_file") {
+    return (
+      <svg {...common}>
+        <path d="M8 12.5l5.2-5.2a3 3 0 0 1 4.2 4.2l-6.3 6.3a4.5 4.5 0 0 1-6.4-6.4l6-6" />
+      </svg>
+    );
+  }
+
+  if (name === "swap_horiz") {
+    return (
+      <svg {...common}>
+        <path d="M7 8h11" />
+        <path d="M15 5l3 3-3 3" />
+        <path d="M17 16H6" />
+        <path d="M9 13l-3 3 3 3" />
+      </svg>
+    );
+  }
+
+  if (name === "arrow_forward") {
+    return (
+      <svg {...common}>
+        <path d="M5 12h14" />
+        <path d="M13 7l6 5-6 5" />
+      </svg>
+    );
+  }
+
+  if (name === "lightbulb") {
+    return (
+      <svg {...common}>
+        <path d="M9.5 18h5" />
+        <path d="M10 21h4" />
+        <path d="M8 10a4 4 0 1 1 8 0c0 1.7-.8 2.6-1.8 3.7-.8.8-1.2 1.5-1.2 2.3h-2c0-.8-.4-1.5-1.2-2.3C8.8 12.6 8 11.7 8 10z" />
+      </svg>
+    );
+  }
+
+  if (name === "auto_awesome") {
+    return (
+      <svg {...common}>
+        <path d="M12 4.5l1.6 3.3 3.6.5-2.6 2.5.6 3.7-3.2-1.7-3.2 1.7.6-3.7-2.6-2.5 3.6-.5z" />
+        <path d="M18.5 4.5v2" />
+        <path d="M17.5 5.5h2" />
+        <path d="M19.5 12.5v1.5" />
+        <path d="M18.75 13.25h1.5" />
+      </svg>
+    );
+  }
+
   if (name === "send") {
     return (
       <svg {...common}>

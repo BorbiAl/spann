@@ -12,7 +12,7 @@ const DIRECT_MESSAGES = [
 	{ id: "MK", name: "Marcus Kane", color: "#6bb4ff" }
 ];
 
-export default function ChannelList({ channels, activeChannelId, onChannelChange, channelUnread, variant = "default" }) {
+export default function ChannelList({ channels, activeChannelId, onChannelChange, channelUnread, onCreateChannel, variant = "default" }) {
 	if (!channels || !channels.length) {
 		return (
 			<div className="sidebar-section">
@@ -27,11 +27,23 @@ export default function ChannelList({ channels, activeChannelId, onChannelChange
 	if (variant === "teams") {
 		const favoriteChannels = channels.slice(0, 2);
 
+		function handleCreateChannel() {
+			if (typeof onCreateChannel === "function") {
+				onCreateChannel();
+			}
+		}
+
+		function handleStartDirectMessage() {
+			if (typeof window !== "undefined") {
+				window.alert("Direct call started with Sarah Chen.");
+			}
+		}
+
 		return (
 			<div className="sidebar-section teams-channel-list">
 				<div className="chat-section-header">
 					<p className="section-title chat-section-title">Favorites</p>
-					<button className="chat-section-action" type="button" aria-label="Add favorite">
+					<button className="chat-section-action" type="button" aria-label="Add channel" onClick={handleCreateChannel}>
 						<Icon name="add" size={12} />
 					</button>
 				</div>
@@ -60,7 +72,7 @@ export default function ChannelList({ channels, activeChannelId, onChannelChange
 
 				<div className="chat-section-header section-spacer">
 					<p className="section-title chat-section-title">Direct Messages</p>
-					<button className="chat-section-action" type="button" aria-label="Start direct message">
+					<button className="chat-section-action" type="button" aria-label="Start direct message" onClick={handleStartDirectMessage}>
 						<Icon name="add" size={12} />
 					</button>
 				</div>

@@ -1,327 +1,383 @@
-﻿import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CULTURES, apiRequest } from '../data/constants';
-import Icon from '../components/Icon'; 
 
 const CULTURE_BY_KEY = CULTURES.reduce((accumulator, culture) => {
-accumulator[culture.key] = culture;
-return accumulator;
+	accumulator[culture.key] = culture;
+	return accumulator;
 }, {});
 
 const CULTURE_EMOJI = {
-American: '🇺🇸',
-British: '🇬🇧',
-Bulgarian: '🇧🇬',
-Japanese: '🇯🇵',
-German: '🇩🇪',
-Brazilian: '🇧🇷',
-Arabic: '🇸🇦'
+	American: '\uD83C\uDDFA\uD83C\uDDF8',
+	British: '\uD83C\uDDEC\uD83C\uDDE7',
+	Bulgarian: '\uD83C\uDDE7\uD83C\uDDEC',
+	Japanese: '\uD83C\uDDEF\uD83C\uDDF5',
+	German: '\uD83C\uDDE9\uD83C\uDDEA',
+	Brazilian: '\uD83C\uDDE7\uD83C\uDDF7',
+	Arabic: '\uD83C\uDDF8\uD83C\uDDE6'
 };
+
+const INITIAL_RESULT = {
+	literal: 'Could you possibly do this for me?',
+	cultural: '\u304A\u624B\u6570\u3067\u3059\u304C\u3001\u3053\u3061\u3089\u3092\u304A\u9858\u3044\u3067\u304D\u307E\u3059\u3067\u3057\u3087\u3046\u304B\uFF1F',
+	note:
+		"In Japanese business culture, direct requests can seem aggressive. The phrase 'Otesuu desuga' (I'm sorry to trouble you) is used as a buffer. It acknowledges the recipient's effort before the request is even made, which is essential for maintaining Wa (harmony).",
+	tags: ['Business Etiquette', 'Polite Form (Keigo)', 'High Context'],
+	sentiment: 85,
+	sentimentLabel: 'Highly Formal'
+};
+
+const INITIAL_HISTORY = [
+	{
+		id: 1,
+		sourceCulture: 'American',
+		targetCulture: 'French',
+		sourceEmoji: '🇺🇸',
+		targetEmoji: '🇫🇷',
+		literal: "Let's grab a coffee sometime soon.",
+		cultural: '"On se fait un café ?" (Casual/Implicit)',
+		time: '2 hours ago'
+	},
+	{
+		id: 2,
+		sourceCulture: 'American',
+		targetCulture: 'German',
+		sourceEmoji: '🇺🇸',
+		targetEmoji: '🇩🇪',
+		literal: "I don't think that's the best idea.",
+		cultural: '"Das sehe ich anders." (Direct/Constructive)',
+		time: 'Yesterday'
+	}
+];
+
+function isGarbledMultilingualText(value) {
+	const text = String(value || '');
+	return /\uFFFD/.test(text) || /^\s*[?？]{4,}\s*$/.test(text);
+}
+
+function toHistoryEntry(sourceCulture, targetCulture, literal, cultural) {
+	return {
+		id: Date.now(),
+		sourceCulture,
+		targetCulture,
+		sourceEmoji: CULTURE_EMOJI[sourceCulture] || '🌐',
+		targetEmoji: CULTURE_EMOJI[targetCulture] || '🌐',
+		literal,
+		cultural,
+		time: 'Just now'
+	};
+}
+
+function cultureLabel(cultureKey) {
+	return CULTURE_BY_KEY[cultureKey]?.label || cultureKey;
+}
+
+function localeCode(cultureKey) {
+	const locale = CULTURE_BY_KEY[cultureKey]?.locale || '';
+	const [, region] = String(locale).split('-');
+	return (region || locale || '--').toUpperCase();
+}
+
+function LanguageDropdown({ value, onChange, ariaLabel }) {
+	const [open, setOpen] = useState(false);
+	const rootRef = useRef(null);
+
+	useEffect(() => {
+		if (!open) {
+			return undefined;
+		}
+
+		function onPointerDown(event) {
+			if (!rootRef.current || rootRef.current.contains(event.target)) {
+				return;
+			}
+			setOpen(false);
+		}
+
+		function onEscape(event) {
+			if (event.key === 'Escape') {
+				setOpen(false);
+			}
+		}
+
+		document.addEventListener('mousedown', onPointerDown);
+		document.addEventListener('keydown', onEscape);
+
+		return () => {
+			document.removeEventListener('mousedown', onPointerDown);
+			document.removeEventListener('keydown', onEscape);
+		};
+	}, [open]);
+
+	return (
+		<div ref={rootRef} className="relative">
+			<button
+				type="button"
+				onClick={() => setOpen((current) => !current)}
+				className="flex items-center gap-2 px-3 py-2 hover:bg-surface-container-high rounded-md transition-colors text-sm font-medium cursor-pointer min-h-[44px] text-on-surface"
+				aria-label={ariaLabel}
+				aria-haspopup="listbox"
+				aria-expanded={open}
+			>
+				<span className="inline-flex min-w-[32px] justify-center px-1.5 py-0.5 rounded bg-surface-container-high text-[11px] font-semibold text-on-surface-variant">
+					{localeCode(value)}
+				</span>
+				<span className="min-w-[138px] text-left">{cultureLabel(value)}</span>
+				<span className="material-symbols-outlined text-xs text-on-surface-variant">expand_more</span>
+			</button>
+
+			{open ? (
+				<div className="absolute left-0 top-full mt-2 min-w-full w-max max-h-64 overflow-y-auto rounded-xl border border-outline-variant/30 bg-surface-container-lowest shadow-xl z-40 p-1">
+					{CULTURES.map((culture) => (
+						<button
+							key={culture.key}
+							type="button"
+							onClick={() => {
+								onChange(culture.key);
+								setOpen(false);
+							}}
+							className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors ${
+								value === culture.key ? 'bg-primary text-white' : 'text-on-surface hover:bg-surface-container-high'
+							}`}
+							role="option"
+							aria-selected={value === culture.key}
+						>
+							<span
+								className={`inline-flex min-w-[32px] justify-center px-1.5 py-0.5 rounded text-[11px] font-semibold ${
+									value === culture.key ? 'bg-white/20 text-white' : 'bg-surface-container-high text-on-surface-variant'
+								}`}
+							>
+								{localeCode(culture.key)}
+							</span>
+							<span>{culture.label}</span>
+						</button>
+					))}
+				</div>
+			) : null}
+		</div>
+	);
+}
 
 export default function TranslatorView() {
-const [sourceCulture, setSourceCulture] = useState('American');
-const [targetCulture, setTargetCulture] = useState('Japanese');
-const [inputText, setInputText] = useState('');
-const [isTranslating, setIsTranslating] = useState(false);
-const [statusNote, setStatusNote] = useState('');
+	const [sourceCulture, setSourceCulture] = useState('American');
+	const [targetCulture, setTargetCulture] = useState('Japanese');
+	const [inputText, setInputText] = useState('');
+	const [isTranslating, setIsTranslating] = useState(false);
+	const [statusNote, setStatusNote] = useState('');
+	const [result, setResult] = useState(INITIAL_RESULT);
+	const [history, setHistory] = useState(INITIAL_HISTORY);
 
-const [result, setResult] = useState({
-literal: 'Could you possibly do this for me?',
-cultural: 'お手数ですが、こちらをお願いできますでしょうか？',
-note: "In Japanese business culture, direct requests can seem aggressive. The phrase 'Otesuu desuga' (I'm sorry to trouble you) is used as a buffer. It acknowledges the recipient's effort before the request is even made, which is essential for maintaining 'Wa' (harmony).",
-tags: ['Business Etiquette', 'Polite Form (Keigo)', 'High Context'],
-sentiment: 85,
-        sentimentLabel: 'Highly Formal'
-});
+	async function translate() {
+		const trimmed = inputText.trim();
+		if (!trimmed || isTranslating) {
+			return;
+		}
 
-const [history, setHistory] = useState([
-{
-id: 1,
-sourceCulture: 'American',
-targetCulture: 'French',
-sourceEmoji: '🇺🇸',
-targetEmoji: '🇫🇷',
-literal: "Let's grab a coffee sometime soon.",
-cultural: '"On se fait un café ?" (Casual/Implicit)',
-time: '2 hours ago'
-},
-{
-id: 2,
-sourceCulture: 'American',
-targetCulture: 'German',
-sourceEmoji: '🇺🇸',
-targetEmoji: '🇩🇪',
-literal: "I don't think that's the best idea.",
-cultural: '"Das sehe ich anders." (Direct/Constructive)',
-time: 'Yesterday'
-}
-]);
+		setIsTranslating(true);
+		setStatusNote('');
 
-async function translate() {
-const trimmed = inputText.trim();
-if (!trimmed) {
-return;
-}
+		const sourceOption = CULTURE_BY_KEY[sourceCulture];
+		const targetOption = CULTURE_BY_KEY[targetCulture];
 
-setIsTranslating(true);
-setStatusNote('');
-const sourceOption = CULTURE_BY_KEY[sourceCulture];
-const targetOption = CULTURE_BY_KEY[targetCulture];
+		try {
+			const payload = await apiRequest('/translate', {
+				method: 'POST',
+				body: JSON.stringify({
+					phrase: trimmed,
+					source_locale: sourceOption?.locale || 'en-US',
+					target_locale: targetOption?.locale || 'en-US',
+					source_culture: sourceCulture,
+					target_culture: targetCulture,
+					workplace_tone: 'neutral'
+				})
+			});
 
-try {
-const payload = await apiRequest('/translate', {
-method: 'POST',
-body: JSON.stringify({
-phrase: trimmed,
-source_locale: sourceOption?.locale || 'en-US',
-target_locale: targetOption?.locale || 'en-US',
-source_culture: sourceCulture,
-target_culture: targetCulture,
-workplace_tone: 'neutral'
-})
-});
+			const data = payload?.data || payload?.result || {};
+			const nextLiteral = data.literal_translation || data.literal || trimmed;
+			const rawCultural = data.cultural_adaptation || data.cultural || trimmed;
+			const nextCultural = isGarbledMultilingualText(rawCultural) ? `[${cultureLabel(targetCulture)}] ${trimmed}` : rawCultural;
+			const nextNote = data.explanation || data.note || 'Translation complete.';
+			const nextTags = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : INITIAL_RESULT.tags;
+			const nextSentiment = Number.isFinite(data.sentiment_score)
+				? Math.min(100, Math.max(0, Number(data.sentiment_score)))
+				: INITIAL_RESULT.sentiment;
+			const nextLabel = data.sentiment_label || INITIAL_RESULT.sentimentLabel;
 
-const apiResult = payload?.data || payload?.result;
-if (apiResult && apiResult.literal && apiResult.cultural) {
-const explanation =
-apiResult.explanation ||
-apiResult.note ||
-`Adjusted for ${targetOption?.label || targetCulture} communication norms and tone.`;
+			setResult({
+				literal: String(nextLiteral),
+				cultural: String(nextCultural),
+				note: String(nextNote),
+				tags: nextTags.map((tag) => String(tag)),
+				sentiment: nextSentiment,
+				sentimentLabel: String(nextLabel)
+			});
+			setHistory((current) => [toHistoryEntry(sourceCulture, targetCulture, String(nextLiteral), String(nextCultural)), ...current].slice(0, 8));
+		} catch (error) {
+			const fallbackLiteral = trimmed;
+			const fallbackCultural = `[${cultureLabel(targetCulture)}] ${trimmed}`;
+			setResult((current) => ({
+				...current,
+				literal: fallbackLiteral,
+				cultural: fallbackCultural
+			}));
+			setHistory((current) => [toHistoryEntry(sourceCulture, targetCulture, fallbackLiteral, fallbackCultural), ...current].slice(0, 8));
+			setStatusNote('Translation service is unavailable. Showing local fallback output.');
+		} finally {
+			setIsTranslating(false);
+		}
+	}
 
-setResult({
-literal: apiResult.literal,
-cultural: apiResult.cultural,
-note: explanation,
-tags: ['Auto Detected'],
-sentiment: 50,
-sentimentLabel: 'Neutral'
-});
+	return (
+		<main className="flex-grow p-8 max-w-7xl mx-auto w-full view-transition bg-surface">
+			<header className="mb-10">
+				<h1 className="text-3xl font-bold tracking-tight text-on-surface mb-2">Cultural Translator</h1>
+				<p className="text-on-surface-variant max-w-2xl">
+					Bridge the gap between languages and cultural contexts. Understand not just the words, but the intent and etiquette behind them.
+				</p>
+				{statusNote ? <p className="mt-3 text-sm text-on-surface-variant">{statusNote}</p> : null}
+			</header>
 
-if (String(explanation).toLowerCase().includes('fallback')) {
-setStatusNote('Live translator is unavailable right now. Showing fallback output.');
-}
+			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+				<section className="bg-surface-container-low rounded-xl p-6 shadow-sm border border-outline-variant/10">
+					<div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+						<div className="flex items-center gap-3 bg-surface-container-lowest p-1.5 rounded-lg shadow-sm border border-outline-variant/20 flex-wrap">
+							<LanguageDropdown
+								value={sourceCulture}
+								onChange={setSourceCulture}
+								ariaLabel="Choose source language"
+							/>
+							<span className="material-symbols-outlined text-on-surface-variant text-sm" aria-hidden="true">
+								swap_horiz
+							</span>
+							<LanguageDropdown
+								value={targetCulture}
+								onChange={setTargetCulture}
+								ariaLabel="Choose target language"
+							/>
+						</div>
+						<span className="text-xs text-on-surface-variant uppercase tracking-widest font-bold">Input Text</span>
+					</div>
 
-setHistory(prev => [
-{
-id: Date.now(),
-sourceCulture,
-targetCulture,
-sourceEmoji: CULTURE_EMOJI[sourceCulture] || '🌐',
-targetEmoji: CULTURE_EMOJI[targetCulture] || '🌐',
-literal: trimmed,
-cultural: `"${apiResult.cultural}"`,
-time: 'Just now'
-},
-...prev
-]);
+					<textarea
+						className="w-full h-64 bg-transparent border-none focus:ring-0 text-xl font-medium placeholder:text-on-surface-variant/40 resize-none leading-relaxed"
+						placeholder="Type a message or phrase to translate culturally..."
+						value={inputText}
+						onChange={(event) => setInputText(event.target.value)}
+					/>
 
-return;
-}
-throw new Error('Missing translation result');
-} catch (error) {
-const status = Number(error?.status || 0);
-if (status === 401) {
-setStatusNote('Your session expired. Sign in again to use translation.');
-} else {
-setStatusNote('Translation service is currently unavailable. Showing fallback output.');
-}
+					<div className="mt-4 flex justify-between items-center">
+						<div className="flex gap-2">
+							<button type="button" className="p-2 text-on-surface-variant hover:text-primary transition-colors" aria-label="Use microphone">
+								<span className="material-symbols-outlined">mic</span>
+							</button>
+							<button type="button" className="p-2 text-on-surface-variant hover:text-primary transition-colors" aria-label="Attach file">
+								<span className="material-symbols-outlined">attach_file</span>
+							</button>
+						</div>
+						<button
+							type="button"
+							onClick={translate}
+							disabled={isTranslating}
+							className="bg-gradient-to-br from-primary to-primary-container text-white px-8 py-3 rounded-lg font-semibold shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-60"
+						>
+							{isTranslating ? 'Translating...' : 'Translate Context'}
+						</button>
+					</div>
+				</section>
 
-const adaptationMap = {
-British: 'Best of luck.',
-Japanese: '頑張ってください。',
-German: 'Viel Erfolg!',
-Brazilian: 'Boa sorte!',
-Arabic: 'بالتوفيق!',
-Bulgarian: 'Много успех!',
-American: 'You got this!'
-};
+				<div className="space-y-6">
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div className="bg-surface-container-lowest p-5 rounded-xl border border-outline-variant/20 shadow-sm">
+							<div className="flex items-center gap-2 mb-3 text-on-surface-variant">
+								<span className="material-symbols-outlined text-sm">translate</span>
+								<span className="text-[10px] font-bold uppercase tracking-widest">Literal Translation</span>
+							</div>
+							<p className="text-on-surface font-medium italic">{result.literal}</p>
+						</div>
 
-const resolvedTargetLabel = targetOption?.label || targetCulture;
-const fallbackLiteral = `${trimmed} (${resolvedTargetLabel} literal)`;
-const fallbackCultural = adaptationMap[targetCulture] || trimmed;
-const fallbackNote = `Adjusted for ${resolvedTargetLabel} communication norms and tone.`;
+						<div className="bg-surface-container-lowest p-5 rounded-xl border border-primary/20 shadow-sm relative overflow-hidden group">
+							<div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+								<span className="material-symbols-outlined text-4xl text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
+									auto_awesome
+								</span>
+							</div>
+							<div className="flex items-center gap-2 mb-3 text-primary">
+								<span className="material-symbols-outlined text-sm">auto_awesome</span>
+								<span className="text-[10px] font-bold uppercase tracking-widest">Cultural Context</span>
+							</div>
+							<p className="text-on-surface font-semibold">{result.cultural}</p>
+						</div>
+					</div>
 
-setResult({ 
-                literal: fallbackLiteral, 
-                cultural: fallbackCultural, 
-                note: fallbackNote,
-                tags: ['Fallback'],
-                sentiment: 50,
-                sentimentLabel: 'Neutral'
-            });
-            
-            setHistory(prev => [
-{
-id: Date.now(),
-sourceCulture,
-targetCulture,
-sourceEmoji: CULTURE_EMOJI[sourceCulture] || '🌐',
-targetEmoji: CULTURE_EMOJI[targetCulture] || '🌐',
-literal: trimmed,
-cultural: `"${fallbackCultural}"`,
-time: 'Just now'
-},
-...prev
-]);
-} finally {
-setIsTranslating(false);
-}
-}
+					<section className="bg-tertiary-container rounded-xl p-6 text-on-tertiary-container shadow-md border border-on-tertiary-fixed-variant/10">
+						<div className="flex items-start gap-4">
+							<div className="bg-white/20 p-2 rounded-lg">
+								<span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
+									lightbulb
+								</span>
+							</div>
+							<div>
+								<h3 className="text-lg font-bold mb-2">Nuance Explanation</h3>
+								<p className="text-sm leading-relaxed opacity-90">{result.note}</p>
+								<div className="mt-4 flex flex-wrap gap-2">
+									{result.tags.map((tag) => (
+										<span key={tag} className="bg-white/10 text-[10px] px-2 py-1 rounded border border-white/20 uppercase font-bold tracking-tighter">
+											{tag}
+										</span>
+									))}
+								</div>
+							</div>
+						</div>
+					</section>
 
-return (
-<div className="view-transition" style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", color: "var(--text)" }}>
-<div style={{ flex: 1, padding: "32px", overflowY: "auto", margin: "0 auto", width: "100%", maxWidth: "1280px" }}>
-<header style={{ marginBottom: "40px" }}>
-<h1 style={{ fontSize: "30px", fontWeight: "bold", letterSpacing: "-0.02em", color: "var(--text)", marginBottom: "8px" }}>Cultural Translator</h1>
-<p style={{ color: "var(--text-muted)", maxWidth: "800px", fontSize: "15px", lineHeight: "1.6" }}>
-Bridge the gap between languages and cultural contexts. Understand not just the words, but the intent and etiquette behind them.
-</p>
-</header>
+					<div className="bg-surface-container-low p-4 rounded-xl">
+						<div className="flex justify-between items-center mb-2">
+							<span className="text-[10px] font-bold uppercase text-on-surface-variant">Sentiment &amp; Politeness Spectrum</span>
+						</div>
+						<div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden flex">
+							<div className="h-full bg-primary" style={{ width: `${result.sentiment}%` }} />
+						</div>
+						<div className="flex justify-between mt-2 text-[10px] text-on-surface-variant font-medium">
+							<span>Casual</span>
+							<span className="text-primary font-bold">{result.sentimentLabel}</span>
+						</div>
+					</div>
+				</div>
+			</div>
 
-<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "24px", alignItems: "flex-start" }}>
-
-{/* Input Section */}
-<section className="card" style={{ display: "flex", flexDirection: "column", minHeight: "380px" }}>
-<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
-<div style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--bg3)", padding: "6px", borderRadius: "8px", border: "1px solid var(--panel-border)" }}>
-<select
-value={sourceCulture}
-onChange={(e) => setSourceCulture(e.target.value)}
-style={{ background: "transparent", border: "none", color: "var(--text)", outline: "none", fontSize: "14px", fontWeight: "500", cursor: "pointer", padding: "4px 8px" }}
->
-{CULTURES.map((culture) => (
-<option key={culture.key} value={culture.key}>
-{CULTURE_EMOJI[culture.key] || '🌐'} {culture.label}
-</option>
-))}
-</select>
-<Icon name="swap_horiz" size={16} />
-<select
-value={targetCulture}
-onChange={(e) => setTargetCulture(e.target.value)}
-style={{ background: "transparent", border: "none", color: "var(--text)", outline: "none", fontSize: "14px", fontWeight: "500", cursor: "pointer", padding: "4px 8px" }}
->
-{CULTURES.map((culture) => (
-<option key={culture.key} value={culture.key}>
-{CULTURE_EMOJI[culture.key] || '🌐'} {culture.label}
-</option>
-))}
-</select>
-</div>
-<span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", color: "var(--text-muted)", letterSpacing: "0.05em" }}>Input Text</span>
-</div>
-
-<textarea 
-placeholder="Type a message or phrase to translate culturally..."
-style={{ flex: 1, height: "180px", background: "transparent", border: "none", resize: "none", outline: "none", fontSize: "20px", color: "var(--text)", padding: "0" }}
-value={inputText}
-onChange={(e) => setInputText(e.target.value)}
-/>
-
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px" }}>
-<div style={{ display: "flex", gap: "12px", color: "var(--text-muted)" }}>
-<button style={{ background: "transparent", border: "none", cursor: "pointer", color: "inherit", padding: "4px" }}><Icon name="mic" size={22} /></button>
-<button style={{ background: "transparent", border: "none", cursor: "pointer", color: "inherit", padding: "4px" }}><Icon name="attach_file" size={22} /></button>
-</div>
-<button 
-onClick={translate}
-disabled={isTranslating}
-style={{ 
-background: "var(--accent)", color: "#fff", border: "none", 
-padding: "12px 32px", borderRadius: "10px", fontWeight: "600", fontSize: "15px",
-cursor: "pointer", opacity: isTranslating ? 0.7 : 1, transition: "background 0.2s" 
-}}>
-{isTranslating ? 'Translating...' : 'Translate Context'}
-</button>
-</div>
-</section>
-
-{/* Output Section */}
-<div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-{/* Dual Boxes */}
-<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-<div className="card" style={{ background: "var(--card-bg)", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-<div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--text-muted)", marginBottom: "12px" }}>
-<Icon name="translate" size={16} />
-<span style={{ fontSize: "10px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>Literal Translation</span>
-</div>
-<p style={{ fontStyle: "italic", fontSize: "16px", color: "var(--text)" }}>{result.literal}</p>
-</div>
-
-<div className="card" style={{ border: "1px solid var(--accent-soft)", background: "var(--accent-soft)", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-<div style={{ position: "absolute", top: "-10px", right: "-10px", opacity: 0.1, color: "var(--accent)" }}>
-                                    <Icon name="auto_awesome" size={64} />
-                                </div>
-<div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--accent)", marginBottom: "12px" }}>
-<Icon name="auto_awesome" size={16} />
-<span style={{ fontSize: "10px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>Cultural Context</span>
-</div>
-<p style={{ fontWeight: "700", fontSize: "18px", color: "var(--text)" }}>{result.cultural}</p>
-</div>
-</div>
-
-{/* Explanation Card */}
-<div className="card" style={{ background: "var(--accent)", color: "#fff", border: "none" }}>
-<div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-<div style={{ background: "rgba(255,255,255,0.2)", padding: "10px", borderRadius: "10px" }}>
-<Icon name="lightbulb" size={24} />
-</div>
-<div style={{ flex: 1 }}>
-<h3 style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "8px" }}>Nuance Explanation</h3>
-<p style={{ fontSize: "14px", lineHeight: "1.6", opacity: 0.9 }}>{result.note}</p>
-<div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "16px" }}>
-{result.tags.map(tag => (
-<span key={tag} style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", fontSize: "10px", padding: "4px 10px", borderRadius: "6px", textTransform: "uppercase", fontWeight: "bold", letterSpacing: "0.5px" }}>{tag}</span>
-))}
-</div>
-</div>
-</div>
-</div>
-
-{/* Tone Sentiment Bar */}
-<div className="card">
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-<span style={{ fontSize: "10px", fontWeight: "bold", textTransform: "uppercase", color: "var(--text-muted)", letterSpacing: "1px" }}>Sentiment & Politeness Spectrum</span>
-</div>
-<div style={{ height: "8px", width: "100%", background: "var(--bg3)", borderRadius: "4px", overflow: "hidden", display: "flex" }}>
-<div style={{ height: "100%", background: "var(--accent)", width: `${result.sentiment}%`, borderRadius: "4px" }} />
-</div>
-<div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px", fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
-<span>Casual</span>
-<span style={{ color: "var(--accent)", fontWeight: "bold" }}>{result.sentimentLabel}</span>
-</div>
-</div>
-</div>
-</div>
-
-{/* History List */}
-<section style={{ marginTop: "56px", paddingBottom: "40px" }}>
-<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-<h2 style={{ fontSize: "20px", fontWeight: "bold", color: "var(--text)" }}>Recent Translations</h2>
-<button style={{ background: "none", border: "none", color: "var(--accent)", fontWeight: "600", fontSize: "14px", cursor: "pointer" }}>View All History</button>
-</div>
-<div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-{history.map(item => (
-<div key={item.id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
-<div style={{ display: "flex", alignItems: "center", gap: "28px" }}>
-<div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "20px" }}>
-<span>{item.sourceEmoji}</span>
-<Icon name="arrow_forward" size={16} />
-<span>{item.targetEmoji}</span>
-</div>
-<div>
-<p style={{ fontSize: "15px", fontWeight: "600", color: "var(--text)", marginBottom: "4px" }}>{item.literal}</p>
-<p style={{ fontSize: "13px", color: "var(--text-muted)", fontStyle: "italic" }}>{item.cultural}</p>
-</div>
-</div>
-<div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-<span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{item.time}</span>
-<Icon name="chevron_right" size={20} />
-</div>
-</div>
-))}
-</div>
-</section>
-</div>
-</div>
-);
+			<section className="mt-12">
+				<div className="flex items-center justify-between mb-6">
+					<h2 className="text-xl font-bold">Recent Translations</h2>
+					<button type="button" className="text-primary text-sm font-semibold hover:underline">
+						View All History
+					</button>
+				</div>
+				<div className="space-y-3">
+					{history.map((item) => (
+						<div
+							key={item.id}
+							className="flex items-center justify-between p-4 bg-surface-container-low hover:bg-surface-container-high transition-colors rounded-xl cursor-pointer group"
+						>
+							<div className="flex items-center gap-6 min-w-0">
+								<div className="flex items-center gap-2 text-lg">
+									<span>{item.sourceEmoji}</span>
+									<span className="material-symbols-outlined text-sm text-on-surface-variant">arrow_forward</span>
+									<span>{item.targetEmoji}</span>
+								</div>
+								<div className="min-w-0">
+									<p className="text-sm font-semibold truncate max-w-xs">{item.literal}</p>
+									<p className="text-xs text-on-surface-variant italic truncate max-w-xs">{item.cultural}</p>
+								</div>
+							</div>
+							<div className="flex items-center gap-4">
+								<span className="text-[11px] text-on-surface-variant">{item.time}</span>
+								<span className="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">
+									chevron_right
+								</span>
+							</div>
+						</div>
+					))}
+				</div>
+			</section>
+		</main>
+	);
 }
