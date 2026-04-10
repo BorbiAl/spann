@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#004881",
+                    "on-tertiary-fixed": "#001c38",
+                    "error-container": "#ffdad6",
+                    "on-error-container": "#93000a",
+                    "surface-container-highest": "#e2e2e2",
+                    "surface-dim": "#dadada",
+                    "outline-variant": "#c0c7d4",
+                    "outline": "#717783",
+                    "primary-fixed-dim": "#a3c9ff",
+                    "tertiary-fixed": "#d3e4ff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-primary-fixed-variant": "#004883",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed-dim": "#9ecaff",
+                    "surface-bright": "#f9f9f9",
+                    "primary": "#005faa",
+                    "error": "#ba1a1a",
+                    "surface-container-low": "#f3f3f3",
+                    "on-primary-fixed": "#001c39",
+                    "on-secondary-fixed": "#001d36",
+                    "on-secondary-fixed-variant": "#00497d",
+                    "primary-container": "#0078d4",
+                    "tertiary-container": "#3779bf",
+                    "surface-container-high": "#e8e8e8",
+                    "on-surface": "#1a1c1c",
+                    "on-secondary-container": "#003f6d",
+                    "background": "#f9f9f9",
+                    "inverse-on-surface": "#f1f1f1",
+                    "secondary-container": "#5badff",
+                    "surface-tint": "#0060ab",
+                    "on-primary": "#ffffff",
+                    "primary-fixed": "#d3e3ff",
+                    "secondary": "#0061a3",
+                    "surface-container": "#eeeeee",
+                    "on-background": "#1a1c1c",
+                    "surface": "#f9f9f9",
+                    "inverse-primary": "#a3c9ff",
+                    "on-primary-container": "#ffffff",
+                    "tertiary-fixed-dim": "#a2c9ff",
+                    "inverse-surface": "#2f3131",
+                    "on-error": "#ffffff",
+                    "on-surface-variant": "#404752",
+                    "surface-variant": "#e2e2e2",
+                    "tertiary": "#1160a4",
+                    "on-tertiary-container": "#ffffff",
+                    "on-secondary": "#ffffff",
+                    "secondary-fixed": "#d1e4ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .mica-effect {
+            backdrop-filter: blur(40px) saturate(150%);
+            background-color: rgba(249, 249, 249, 0.7);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(192, 199, 212, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface antialiased selection:bg-primary-fixed overflow-hidden">
+<div class="flex h-screen w-full">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 left-0 top-0 fixed bg-slate-100/60 dark:bg-slate-900/60 backdrop-blur-2xl border-r border-slate-200/30 dark:border-slate-800/30 flex flex-col p-4 gap-2 z-50">
+<div class="mb-8 px-2 flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-container flex items-center justify-center text-white shadow-lg">
+<span class="material-symbols-outlined" data-icon="eco">eco</span>
+</div>
+<div>
+<h1 class="font-headline font-bold text-slate-900 tracking-tight leading-none">Workspace</h1>
+<p class="text-[11px] text-on-surface-variant font-medium">Premium Connectivity</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="chat">chat</span>
+<span>Chat</span>
+</div>
+<div class="flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="lan">lan</span>
+<span>Network</span>
+</div>
+<div class="flex items-center gap-3 p-3 bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="eco">eco</span>
+<span>Carbon</span>
+</div>
+<div class="flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="insert_chart">insert_chart</span>
+<span>Analytics</span>
+</div>
+<div class="flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="accessibility_new">accessibility_new</span>
+<span>Accessibility</span>
+</div>
+<div class="flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="translate">translate</span>
+<span>Translate</span>
+</div>
+</nav>
+<div class="mt-auto space-y-1">
+<div class="flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</div>
+<div class="flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg cursor-pointer active:opacity-80 transition-all duration-200 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">
+<span class="material-symbols-outlined" data-icon="contact_support">contact_support</span>
+<span>Support</span>
+</div>
+<div class="mt-4 p-3 bg-surface-container-low rounded-xl flex items-center gap-3">
+<img alt="User Profile" class="w-8 h-8 rounded-full object-cover" data-alt="professional headshot of a smiling young woman with dark hair against a soft blurred office background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYcqLwhNVmXX6PXluR0vdrfX-Y22eXuzvJ7tlS_z3h8LGHbS9uTDg9649E0t_D56RKw7Qwy4q4p2DkYg5u5bs-jx1m5yFxzsGm-ZX8OKU9GWIqRejonqGwh36B-crDN3HXW_TaO34blqD4eDJLVmagJyISBtOHENjg4YRDGXSu9XT8uoTJLA9XigBh16IrNkdHpIkImjVhlKYIZ_Im7q2GKpGyKO3v0KXe64H_DsiytxU4ip7YdGN1gilSMqFUCScC9RUwSt3qgFls"/>
+<div class="overflow-hidden">
+<p class="text-[12px] font-bold truncate">Alex Rivera</p>
+<p class="text-[10px] text-on-surface-variant truncate">Sustainability Lead</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="ml-64 flex-1 flex flex-col h-screen overflow-y-auto">
+<!-- TopNavBar -->
+<header class="w-full top-0 sticky bg-slate-50/70 dark:bg-slate-950/70 backdrop-blur-xl shadow-sm z-40 flex justify-between items-center px-6 h-12 w-full font-['Segoe_UI_Variable',sans-serif] text-sm antialiased">
+<div class="flex items-center gap-8">
+<span class="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">Spann</span>
+<div class="flex items-center bg-slate-200/30 px-3 py-1 rounded-full gap-2">
+<span class="material-symbols-outlined text-xs" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-48" placeholder="Search workspace..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-6 px-4">
+<span class="text-blue-600 dark:text-blue-400 font-medium border-b-2 border-blue-600 cursor-pointer h-12 flex items-center">Insights</span>
+<span class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer h-12 flex items-center">Community</span>
+<span class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer h-12 flex items-center">Market</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<button class="p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button class="p-1.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</div>
+</header>
+<div class="p-8 max-w-7xl mx-auto w-full grid grid-cols-12 gap-8">
+<!-- Bento Grid Layout -->
+<!-- Main Impact Ring Section -->
+<div class="col-span-12 lg:col-span-8 space-y-8">
+<section class="glass-card rounded-3xl p-8 flex flex-col md:flex-row items-center gap-12 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-tertiary/10 to-transparent -mr-32 -mt-32 rounded-full blur-3xl"></div>
+<!-- Animated Progress Ring Container -->
+<div class="relative w-64 h-64 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-container-high" cx="128" cy="128" fill="transparent" r="110" stroke="currentColor" stroke-width="12"></circle>
+<circle class="text-tertiary transition-all duration-1000 ease-out" cx="128" cy="128" fill="transparent" r="110" stroke="currentColor" stroke-dasharray="691" stroke-dashoffset="150" stroke-linecap="round" stroke-width="12"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+<span class="text-4xl font-extrabold text-on-surface tracking-tight">1.2<span class="text-lg font-medium text-on-surface-variant">kg</span></span>
+<span class="text-sm font-semibold uppercase tracking-widest text-tertiary mt-1">Low Impact</span>
+<div class="mt-4 flex items-center gap-1 bg-tertiary/10 text-tertiary px-3 py-1 rounded-full text-[10px] font-bold">
+<span class="material-symbols-outlined text-xs" data-icon="trending_down">trending_down</span>
+                                    12% vs Yesterday
+                                </div>
+</div>
+</div>
+<div class="flex-1 space-y-6">
+<div>
+<h2 class="text-3xl font-bold tracking-tight text-on-surface">Daily Carbon Score</h2>
+<p class="text-on-surface-variant mt-2 max-w-md leading-relaxed">Your footprint today is equivalent to powering a laptop for 24 hours. Great job maintaining a low impact profile!</p>
+</div>
+<!-- Sentiment Bar -->
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-bold text-on-surface-variant uppercase tracking-wider">
+<span>Eco Focus</span>
+<span>Neutral</span>
+<span>Heavy Output</span>
+</div>
+<div class="h-3 w-full bg-surface-container-high rounded-full overflow-hidden relative">
+<div class="absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-tertiary to-primary rounded-full shadow-lg shadow-tertiary/20"></div>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary px-6 py-3 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 flex items-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome">auto_awesome</span>
+                                    Analyze Details
+                                </button>
+<button class="bg-surface-container-highest text-on-surface px-6 py-3 rounded-xl font-bold text-sm hover:bg-surface-container-high transition-colors">
+                                    History
+                                </button>
+</div>
+</div>
+</section>
+<!-- Badges Shelf -->
+<section class="space-y-4">
+<div class="flex justify-between items-center px-2">
+<h3 class="text-lg font-bold text-on-surface">Environmental Achievements</h3>
+<button class="text-primary text-xs font-bold flex items-center gap-1 hover:underline">View All <span class="material-symbols-outlined text-xs" data-icon="chevron_right">chevron_right</span></button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="glass-card p-6 rounded-3xl flex flex-col items-center text-center group hover:scale-[1.02] transition-transform">
+<div class="w-16 h-16 rounded-2xl bg-tertiary/10 flex items-center justify-center text-tertiary mb-4 group-hover:bg-tertiary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-3xl" data-icon="pedal_bike" style="font-variation-settings: 'FILL' 1;">pedal_bike</span>
+</div>
+<p class="text-sm font-bold">Biker 100km</p>
+<p class="text-[10px] text-on-surface-variant font-medium mt-1">Unlocked May 12</p>
+</div>
+<div class="glass-card p-6 rounded-3xl flex flex-col items-center text-center group hover:scale-[1.02] transition-transform">
+<div class="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-3xl" data-icon="forest" style="font-variation-settings: 'FILL' 1;">forest</span>
+</div>
+<p class="text-sm font-bold">Forest Guardian</p>
+<p class="text-[10px] text-on-surface-variant font-medium mt-1">Tier 3 Contributor</p>
+</div>
+<div class="glass-card p-6 rounded-3xl flex flex-col items-center text-center group hover:scale-[1.02] transition-transform">
+<div class="w-16 h-16 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-3xl" data-icon="commute" style="font-variation-settings: 'FILL' 1;">commute</span>
+</div>
+<p class="text-sm font-bold">Transit Pro</p>
+<p class="text-[10px] text-on-surface-variant font-medium mt-1">30 Day Streak</p>
+</div>
+<div class="bg-surface-container-low border border-dashed border-outline-variant rounded-3xl flex flex-col items-center justify-center text-center p-6 opacity-60">
+<div class="w-16 h-16 rounded-2xl bg-surface-variant flex items-center justify-center text-on-surface-variant mb-4">
+<span class="material-symbols-outlined text-3xl" data-icon="lock">lock</span>
+</div>
+<p class="text-sm font-bold">???</p>
+<p class="text-[10px] text-on-surface-variant font-medium mt-1">5 Challenges Left</p>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Leaderboard -->
+<aside class="col-span-12 lg:col-span-4 space-y-6">
+<div class="glass-card rounded-3xl p-6 flex flex-col h-full">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-lg font-bold text-on-surface">Team Leaderboard</h3>
+<span class="bg-primary/10 text-primary text-[10px] font-bold px-2 py-1 rounded">Weekly</span>
+</div>
+<div class="space-y-4 flex-1">
+<div class="flex items-center gap-4 p-3 hover:bg-surface-container-low rounded-2xl transition-colors cursor-pointer">
+<span class="text-sm font-black text-on-surface-variant w-4">1</span>
+<div class="relative">
+<img alt="User" class="w-10 h-10 rounded-xl object-cover" data-alt="portrait of a confident man with short beard in a bright modern office environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDbToWXTJtpLAu6OLo0gisg1VaLHAUN7GmHCRxb5HD9d_2Wkbo_5TubIliJIL6KlckguOalSFV3RMhcrFMbmPggGIZ8pgT7Rnyfupr24h6XXJVwDTgHXWEmO94QVGkAmkpmWZkxZsipH4M1BhtSTPj_Ng0jdXA_Lj7fqCJvPMaxqrPMGshMqmBxCTaz2Hn9FohXrvO6rphJWCMop3T8ripQR01MWL-eC2cNRDyqhAFumZsmdjkIjgJDYp-fEPvvBYCYl0TyZY_mcbnN"/>
+<div class="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full border-2 border-white flex items-center justify-center">
+<span class="material-symbols-outlined text-[8px] text-white" data-icon="workspace_premium" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+</div>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold">Marcus Chen</p>
+<p class="text-[10px] text-on-surface-variant">0.8kg CO2 avg</p>
+</div>
+<div class="text-right">
+<p class="text-xs font-black text-tertiary">980 pts</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-3 bg-primary/5 border border-primary/10 rounded-2xl">
+<span class="text-sm font-black text-primary w-4">2</span>
+<div class="relative">
+<img alt="User" class="w-10 h-10 rounded-xl object-cover" data-alt="professional headshot of a smiling young woman with dark hair against a soft blurred office background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjWDvIzVLkqHgTAdsOQaXIY1-WRuPFbLy3EHGzYGK4xJa8LvaH4qQY8ui7wGlU8Kw0NJox87YskH_-NrfkOvTxs3NzrE8OSqJBFtEFEqTwmgZw62DkB3lf6qWViIoZM3DAS-A0U2LCA3p3ynn1rDjB2dA4g8xL2iVESaY0MNGVkwCueiRYqGXnBYC6jg1uuD3w3q93GoCEFj2qKZTsvdrQZw2Bz5sabL9S9IyZiGgEdXmq6BDIYwkZA4jX22b1DwxFp-7bY_RErFcs"/>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold">Alex Rivera (You)</p>
+<p class="text-[10px] text-on-surface-variant">1.2kg CO2 avg</p>
+</div>
+<div class="text-right">
+<p class="text-xs font-black text-primary">845 pts</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-3 hover:bg-surface-container-low rounded-2xl transition-colors cursor-pointer">
+<span class="text-sm font-black text-on-surface-variant w-4">3</span>
+<div class="relative">
+<img alt="User" class="w-10 h-10 rounded-xl object-cover" data-alt="close-up of a diverse young man with short hair looking thoughtfully into the camera" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDywbLAw_cvjxu2AsAQBMqu2LkM71uMpZYDw_98tytHx1rZRMGLa5xXcBwhP8jwEpDlIk66ORU2JXLmdqbcfG2K7UKltsnVKbn4WCMDHoBgr84RPtmw1aHPcUfkpJ-GyaXk1Jf0AyZZw-D1zPpyYbv7NzR809y2dE8ba2K5hZsUre1rwskG-EEqQmLVUMvisSnrnOjtqBpXNR_RQYl2YUqZAymppCC0RS9l-R1MJ5qR5D7QooYXqDywhfMW04Mpidq62fNpSICLlCFB"/>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold">Jordan Smith</p>
+<p class="text-[10px] text-on-surface-variant">1.5kg CO2 avg</p>
+</div>
+<div class="text-right">
+<p class="text-xs font-black text-on-surface">720 pts</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-3 hover:bg-surface-container-low rounded-2xl transition-colors cursor-pointer">
+<span class="text-sm font-black text-on-surface-variant w-4">4</span>
+<div class="relative">
+<img alt="User" class="w-10 h-10 rounded-xl object-cover" data-alt="vibrant portrait of a woman with curly hair laughing in natural sunlight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmYjLYVz1qoKczOARWyQPrD2DJsfWkGHQ9wKF1PvleEsFqyFE3HUx7_H6Skd5_Uxwc7L3Tgy_VUow_r8t_aWZRdzwCFd2yT2eWE805F0d0bJQSUUO41_aPavrWtpN0t9Tl9RR7BNEGecdYP0pYDxtgfMBBGdhTxrgu_QRXImlHJgFqMmpxy4nOe7KlPUhqHOEJsZ0O44ZiKwy_xEGAroNW0Lz4rIBLg_UeaRoQq72J2yspX_PvRBEIk3lF1--H3OhrTxUIRnX3QHo3"/>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold">Elena Gomez</p>
+<p class="text-[10px] text-on-surface-variant">1.9kg CO2 avg</p>
+</div>
+<div class="text-right">
+<p class="text-xs font-black text-on-surface">610 pts</p>
+</div>
+</div>
+</div>
+<div class="mt-8 p-4 bg-tertiary text-white rounded-2xl text-center">
+<p class="text-xs font-medium opacity-90">Company Goal: 10,000kg Offset</p>
+<div class="h-1.5 w-full bg-white/20 rounded-full mt-2 overflow-hidden">
+<div class="h-full bg-white w-3/4 rounded-full"></div>
+</div>
+<p class="text-[10px] font-bold mt-2">7,542kg reached (75%)</p>
+</div>
+</div>
+</aside>
+</div>
+<!-- Bottom Quick-Log Buttons -->
+<div class="sticky bottom-0 w-full p-8 pt-0 mt-auto">
+<div class="bg-white/80 backdrop-blur-xl border border-slate-200/50 rounded-full shadow-2xl p-2 flex items-center justify-between max-w-2xl mx-auto overflow-hidden">
+<div class="px-6">
+<p class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Quick Log Transport</p>
+</div>
+<div class="flex items-center gap-1">
+<button class="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-tertiary/10 text-tertiary hover:bg-tertiary hover:text-white transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="directions_walk">directions_walk</span>
+<span class="text-[9px] font-bold mt-0.5">Walk</span>
+</button>
+<button class="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-tertiary/10 text-tertiary hover:bg-tertiary hover:text-white transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="pedal_bike">pedal_bike</span>
+<span class="text-[9px] font-bold mt-0.5">Bike</span>
+</button>
+<button class="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="directions_bus">directions_bus</span>
+<span class="text-[9px] font-bold mt-0.5">Bus</span>
+</button>
+<button class="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="train">train</span>
+<span class="text-[9px] font-bold mt-0.5">Train</span>
+</button>
+<div class="w-px h-8 bg-slate-200 mx-2"></div>
+<button class="w-14 h-14 rounded-full bg-surface-container-highest text-on-surface flex items-center justify-center hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

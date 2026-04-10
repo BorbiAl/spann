@@ -6,7 +6,6 @@ import { useTheme } from "./ThemeProvider";
 import Icon from "../components/Icon";
 import {
 	APP_NOTICE_EVENT_NAME,
-	NETWORK_LOADING_EVENT_NAME,
 	apiRequest,
 	createOrganization,
 	decideOrganizationInvitation,
@@ -167,6 +166,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	const [email, setEmail] = useState(defaultEmail || "");
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
+	const [showRegisterPasswords, setShowRegisterPasswords] = useState(false);
 	const [rememberEmail, setRememberEmail] = useState(false);
 	const [agreeTerms, setAgreeTerms] = useState(false);
 	const [errorText, setErrorText] = useState("");
@@ -247,6 +247,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	useEffect(() => {
 		setErrorText("");
 		setInfoText("");
+		setShowRegisterPasswords(false);
 	}, [mode]);
 
 	async function handleSubmit(event) {
@@ -369,6 +370,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 		<div className={`auth-shell auth-mode-${mode}`}>
 			{errorText ? (
 				<div className="auth-banner error" role="alert" aria-live="assertive">
+					<span className="auth-banner-leading" aria-hidden="true">!</span>
 					<span>{errorText}</span>
 					<button type="button" onClick={() => setErrorText("")} aria-label="Dismiss alert">
 						<Icon name="close" size={14} />
@@ -377,6 +379,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 			) : null}
 			{!errorText && infoText ? (
 				<div className="auth-banner info" role="status" aria-live="polite">
+					<span className="auth-banner-leading" aria-hidden="true">i</span>
 					<span>{infoText}</span>
 					<button type="button" onClick={() => setInfoText("")} aria-label="Dismiss info">
 						<Icon name="close" size={14} />
@@ -388,9 +391,20 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 					<aside className="auth-aside">
 						<div className="auth-aside-brand">
 							<div className="logo-chip">
-								<Icon name="hub" size={18} />
+								<svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+									<circle cx="14" cy="14" r="2.4" fill="currentColor" />
+									<circle cx="14" cy="5" r="1.8" fill="currentColor" fillOpacity="0.95" />
+									<circle cx="14" cy="23" r="1.8" fill="currentColor" fillOpacity="0.95" />
+									<circle cx="5" cy="14" r="1.8" fill="currentColor" fillOpacity="0.95" />
+									<circle cx="23" cy="14" r="1.8" fill="currentColor" fillOpacity="0.95" />
+									<circle cx="7.6" cy="7.6" r="1.6" fill="currentColor" fillOpacity="0.9" />
+									<circle cx="20.4" cy="7.6" r="1.6" fill="currentColor" fillOpacity="0.9" />
+									<circle cx="7.6" cy="20.4" r="1.6" fill="currentColor" fillOpacity="0.9" />
+									<circle cx="20.4" cy="20.4" r="1.6" fill="currentColor" fillOpacity="0.9" />
+									<path d="M14 7.8V11.2M14 16.8V20.2M7.8 14H11.2M16.8 14H20.2M9.4 9.4L11.8 11.8M16.2 16.2L18.6 18.6M18.6 9.4L16.2 11.8M11.8 16.2L9.4 18.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.78" />
+								</svg>
 							</div>
-							<p>Spann</p>
+							<p className="auth-brand-wordmark">Spann</p>
 						</div>
 						<h3>The future of collaborative communication starts here.</h3>
 						<p>Join a workspace built on atmospheric focus and seamless connectivity.</p>
@@ -417,7 +431,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 					</aside>
 				) : null}
 
-				<div className="auth-main">
+				<div className={`auth-main ${mode === "register" ? "auth-main-register" : ""}`}>
 					<div className="auth-head">
 						{mode === "login" ? (
 							<div className="auth-login-brand">
@@ -440,7 +454,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 						)}
 					</div>
 
-					<form className="auth-form" onSubmit={handleSubmit}>
+					<form className={`auth-form ${mode === "register" ? "auth-register-form" : ""}`} onSubmit={handleSubmit}>
 						{mode === "register" ? (
 							<>
 								<label className="auth-field">
@@ -470,27 +484,69 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 								<div className="auth-form-grid">
 									<label className="auth-field">
 										<span>Password</span>
-										<input
-											type="password"
-											className="auth-input"
-											value={password}
-											onChange={(event) => setPassword(event.target.value)}
-											placeholder="••••••••"
-											minLength={8}
-											required
-										/>
+										<div className="auth-input-wrap">
+											<input
+												type={showRegisterPasswords ? "text" : "password"}
+												className="auth-input"
+												value={password}
+												onChange={(event) => setPassword(event.target.value)}
+												placeholder="••••••••"
+												minLength={8}
+												required
+											/>
+											<button
+												type="button"
+												className="auth-pass-toggle"
+												onClick={() => setShowRegisterPasswords((value) => !value)}
+												aria-label={showRegisterPasswords ? "Hide password" : "Preview password"}
+											>
+												{showRegisterPasswords ? (
+													<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+														<path d="M3 3L21 21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+														<path d="M10.6 10.6A2 2 0 0012 14a2 2 0 001.4-.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+														<path d="M9.9 4.2A10.9 10.9 0 0112 4c5.2 0 8.9 3.4 10 8-0.4 1.6-1.3 3.1-2.5 4.3M6.2 6.2A11.4 11.4 0 002 12c1.1 4.6 4.8 8 10 8 1.8 0 3.5-.4 5-1.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+													</svg>
+												) : (
+													<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+														<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+														<circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+													</svg>
+												)}
+											</button>
+										</div>
 									</label>
 									<label className="auth-field">
 										<span>Confirm password</span>
-										<input
-											type="password"
-											className="auth-input"
-											value={confirmPassword}
-											onChange={(event) => setConfirmPassword(event.target.value)}
-											placeholder="••••••••"
-											minLength={8}
-											required
-										/>
+										<div className="auth-input-wrap">
+											<input
+												type={showRegisterPasswords ? "text" : "password"}
+												className="auth-input"
+												value={confirmPassword}
+												onChange={(event) => setConfirmPassword(event.target.value)}
+												placeholder="••••••••"
+												minLength={8}
+												required
+											/>
+											<button
+												type="button"
+												className="auth-pass-toggle"
+												onClick={() => setShowRegisterPasswords((value) => !value)}
+												aria-label={showRegisterPasswords ? "Hide password confirmation" : "Preview password confirmation"}
+											>
+												{showRegisterPasswords ? (
+													<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+														<path d="M3 3L21 21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+														<path d="M10.6 10.6A2 2 0 0012 14a2 2 0 001.4-.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+														<path d="M9.9 4.2A10.9 10.9 0 0112 4c5.2 0 8.9 3.4 10 8-0.4 1.6-1.3 3.1-2.5 4.3M6.2 6.2A11.4 11.4 0 002 12c1.1 4.6 4.8 8 10 8 1.8 0 3.5-.4 5-1.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+													</svg>
+												) : (
+													<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+														<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+														<circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+													</svg>
+												)}
+											</button>
+										</div>
 									</label>
 								</div>
 
@@ -520,8 +576,14 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 								</button>
 
 								<div className="auth-social-row" aria-hidden="true">
-									<button type="button" className="auth-social-btn">Google</button>
-									<button type="button" className="auth-social-btn">Microsoft</button>
+									<button type="button" className="auth-social-btn">
+										<span className="auth-social-logo google" aria-hidden="true"></span>
+										Google
+									</button>
+									<button type="button" className="auth-social-btn">
+										<span className="auth-social-logo microsoft" aria-hidden="true"></span>
+										Microsoft
+									</button>
 								</div>
 							</>
 						) : (
@@ -589,19 +651,6 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	);
 }
 
-function AppBusyIndicator({ visible }) {
-	if (!visible) {
-		return null;
-	}
-
-	return (
-		<div className="app-busy-indicator" role="status" aria-live="polite" aria-atomic="true">
-			<span className="busy-spinner" aria-hidden="true" />
-			<span>Working...</span>
-		</div>
-	);
-}
-
 function AppNotice({ notice }) {
 	if (!notice?.message) {
 		return null;
@@ -616,7 +665,6 @@ function AppNotice({ notice }) {
 
 function AppFlow() {
 	const initialAuth = getAuthState();
-	const clickFeedbackTimerRef = useRef(null);
 	const noticeTimerRef = useRef(null);
 	const [entryStage, setEntryStage] = useState(() => {
 		if (initialAuth?.accessToken) {
@@ -630,8 +678,6 @@ function AppFlow() {
 		return "landing";
 	});
 	const [authState, setAuthState] = useState(initialAuth);
-	const [buttonBusy, setButtonBusy] = useState(false);
-	const [networkBusy, setNetworkBusy] = useState(false);
 	const [notice, setNotice] = useState(null);
 
 	useEffect(() => {
@@ -639,43 +685,6 @@ function AppFlow() {
 	}, [entryStage]);
 
 	useEffect(() => {
-		function showButtonFeedback() {
-			setButtonBusy(true);
-			if (clickFeedbackTimerRef.current) {
-				clearTimeout(clickFeedbackTimerRef.current);
-			}
-
-			clickFeedbackTimerRef.current = setTimeout(() => {
-				setButtonBusy(false);
-				clickFeedbackTimerRef.current = null;
-			}, 700);
-		}
-
-		function handleDocumentClick(event) {
-			const target = event.target;
-			if (!(target instanceof Element)) {
-				return;
-			}
-
-			const button = target.closest("button");
-			if (!button || button.disabled) {
-				return;
-			}
-
-			showButtonFeedback();
-		}
-
-		function handleDocumentSubmit(event) {
-			if (event.target instanceof HTMLFormElement) {
-				showButtonFeedback();
-			}
-		}
-
-		function handleNetworkLoading(event) {
-			const pending = Number(event?.detail?.pending || 0);
-			setNetworkBusy(pending > 0);
-		}
-
 		function handleAppNotice(event) {
 			const detail = event?.detail || {};
 			const message = String(detail.message || "").trim();
@@ -693,20 +702,10 @@ function AppFlow() {
 			}, 2200);
 		}
 
-		document.addEventListener("click", handleDocumentClick, true);
-		document.addEventListener("submit", handleDocumentSubmit, true);
-		window.addEventListener(NETWORK_LOADING_EVENT_NAME, handleNetworkLoading);
 		window.addEventListener(APP_NOTICE_EVENT_NAME, handleAppNotice);
 
 		return () => {
-			document.removeEventListener("click", handleDocumentClick, true);
-			document.removeEventListener("submit", handleDocumentSubmit, true);
-			window.removeEventListener(NETWORK_LOADING_EVENT_NAME, handleNetworkLoading);
 			window.removeEventListener(APP_NOTICE_EVENT_NAME, handleAppNotice);
-			if (clickFeedbackTimerRef.current) {
-				clearTimeout(clickFeedbackTimerRef.current);
-				clickFeedbackTimerRef.current = null;
-			}
 			if (noticeTimerRef.current) {
 				clearTimeout(noticeTimerRef.current);
 				noticeTimerRef.current = null;
@@ -715,7 +714,6 @@ function AppFlow() {
 	}, []);
 
 	const hasSession = Boolean(authState?.accessToken);
-	const isWorking = buttonBusy || networkBusy;
 
 	async function handleLogout() {
 		await logoutSession();
@@ -770,7 +768,6 @@ function AppFlow() {
 	return (
 		<>
 			{content}
-			<AppBusyIndicator visible={isWorking} />
 			<AppNotice notice={notice} />
 		</>
 	);

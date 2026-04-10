@@ -8,6 +8,7 @@ import CarbonView from "../views/CarbonView";
 import PulseView from "../views/PulseView";
 import AccessibilityView from "../views/AccessibilityView";
 import TranslatorView from "../views/TranslatorView";
+import SettingsView from "../views/SettingsView";
 import { useTheme } from "./ThemeProvider";
 import {
 	CHANNELS,
@@ -393,7 +394,8 @@ function WorkspaceHeaderBar({ activeView, onToggleContext, onLogout }) {
 		carbon: "Carbon Tracker",
 		pulse: "Crowd Pulse",
 		accessibility: "Accessibility Panel",
-		translator: "Cultural Translator"
+		translator: "Cultural Translator",
+		settings: "Settings"
 	};
 
 	return (
@@ -452,7 +454,9 @@ function MainPanel({
 	meshError,
 	accessibilityPrefs,
 	onChangeAccessibility,
-	accessibilitySaveState
+	accessibilitySaveState,
+	authState,
+	onLogout
 }) {
 	function renderView() {
 		if (activeView === "chat") {
@@ -511,6 +515,14 @@ function MainPanel({
 					preferences={accessibilityPrefs}
 					onChangePreference={onChangeAccessibility}
 					saveState={accessibilitySaveState}
+				/>
+			);
+		}
+		if (activeView === "settings") {
+			return (
+				<SettingsView
+					authState={authState}
+					onLogout={onLogout}
 				/>
 			);
 		}
@@ -1137,6 +1149,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								accessibilityPrefs={accessibilityPrefs}
 								onChangeAccessibility={handleAccessibilityPreferenceChange}
 								accessibilitySaveState={accessibilitySaveState}
+								authState={liveAuth}
+								onLogout={onLogout}
 							/>
 							<ChatUtilityRail />
 						</>
@@ -1189,6 +1203,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								accessibilityPrefs={accessibilityPrefs}
 								onChangeAccessibility={handleAccessibilityPreferenceChange}
 								accessibilitySaveState={accessibilitySaveState}
+								authState={liveAuth}
+								onLogout={onLogout}
 							/>
 							<aside className={`context-panel workspace-context-rail ${contextOpen ? "" : "collapsed"}`}>
 								<ContextContent activeView={activeView} activeChannel={activeChannel} />

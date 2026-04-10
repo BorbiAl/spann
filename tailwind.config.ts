@@ -99,6 +99,9 @@ const config: Config = {
       fontFamily: {
         outfit: ['Outfit', 'system-ui', '-apple-system', 'sans-serif'],
         sans: ['Outfit', 'system-ui', '-apple-system', 'sans-serif'],
+        headline: ['Inter'],
+        body: ['Inter'],
+        label: ['Inter'],
       },
 
       borderRadius: {
@@ -106,6 +109,10 @@ const config: Config = {
         'apple-md': '16px',
         'apple-lg': '20px',
         'apple-pill': '50px',
+        DEFAULT: '0.25rem',
+        lg: '0.5rem',
+        xl: '0.75rem',
+        full: '9999px',
       },
 
       boxShadow: {

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Spann - Accessibility Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#004881",
+                        "on-tertiary-fixed": "#001c38",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#e2e2e2",
+                        "surface-dim": "#dadada",
+                        "outline-variant": "#c0c7d4",
+                        "outline": "#717783",
+                        "primary-fixed-dim": "#a3c9ff",
+                        "tertiary-fixed": "#d3e4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-fixed-variant": "#004883",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed-dim": "#9ecaff",
+                        "surface-bright": "#f9f9f9",
+                        "primary": "#005faa",
+                        "error": "#ba1a1a",
+                        "surface-container-low": "#f3f3f3",
+                        "on-primary-fixed": "#001c39",
+                        "on-secondary-fixed": "#001d36",
+                        "on-secondary-fixed-variant": "#00497d",
+                        "primary-container": "#0078d4",
+                        "tertiary-container": "#3779bf",
+                        "surface-container-high": "#e8e8e8",
+                        "on-surface": "#1a1c1c",
+                        "on-secondary-container": "#003f6d",
+                        "background": "#f9f9f9",
+                        "inverse-on-surface": "#f1f1f1",
+                        "secondary-container": "#5badff",
+                        "surface-tint": "#0060ab",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#d3e3ff",
+                        "secondary": "#0061a3",
+                        "surface-container": "#eeeeee",
+                        "on-background": "#1a1c1c",
+                        "surface": "#f9f9f9",
+                        "inverse-primary": "#a3c9ff",
+                        "on-primary-container": "#ffffff",
+                        "tertiary-fixed-dim": "#a2c9ff",
+                        "inverse-surface": "#2f3131",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#404752",
+                        "surface-variant": "#e2e2e2",
+                        "tertiary": "#1160a4",
+                        "on-tertiary-container": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#d1e4ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+        }
+        .mica-effect {
+            background: rgba(249, 249, 249, 0.8);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-background font-body text-on-background selection:bg-primary-fixed selection:text-on-primary-fixed">
+<nav class="w-full top-0 sticky bg-slate-50/70 backdrop-blur-xl shadow-sm z-50 flex justify-between items-center px-6 h-12 w-full">
+<div class="flex items-center gap-4">
+<span class="text-lg font-semibold tracking-tight text-slate-900">Spann</span>
+<div class="h-4 w-px bg-outline-variant/30 mx-2"></div>
+<div class="flex gap-6">
+<a class="text-slate-600 hover:text-slate-900 transition-colors text-sm font-['Segoe_UI_Variable',sans-serif] antialiased" href="#">Chat</a>
+<a class="text-slate-600 hover:text-slate-900 transition-colors text-sm font-['Segoe_UI_Variable',sans-serif] antialiased" href="#">Network</a>
+<a class="text-blue-600 font-medium border-b-2 border-blue-600 text-sm font-['Segoe_UI_Variable',sans-serif] antialiased" href="#">Accessibility</a>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-1.5 rounded-lg hover:bg-slate-200/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined text-[20px] text-slate-600" data-icon="settings">settings</span>
+</button>
+<button class="p-1.5 rounded-lg hover:bg-slate-200/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined text-[20px] text-slate-600" data-icon="help">help</span>
+</button>
+<button class="p-1.5 rounded-lg hover:bg-slate-200/50 transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined text-[20px] text-slate-600" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</nav>
+<div class="flex min-h-screen">
+<aside class="h-screen w-64 left-0 top-0 sticky border-r border-slate-200/30 bg-slate-100/60 backdrop-blur-2xl flex flex-col p-4 gap-2">
+<div class="px-4 py-6 mb-4">
+<h2 class="text-on-surface font-semibold text-lg tracking-tight">Workspace</h2>
+<p class="text-on-surface-variant text-[11px] uppercase tracking-wider font-bold opacity-70">Premium Connectivity</p>
+</div>
+<nav class="flex flex-col gap-1">
+<div class="text-slate-600 hover:bg-slate-200/40 rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="chat">chat</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Chat</span>
+</div>
+<div class="text-slate-600 hover:bg-slate-200/40 rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="lan">lan</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Network</span>
+</div>
+<div class="text-slate-600 hover:bg-slate-200/40 rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="eco">eco</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Carbon</span>
+</div>
+<div class="text-slate-600 hover:bg-slate-200/40 rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="insert_chart">insert_chart</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Analytics</span>
+</div>
+<div class="bg-white/80 text-blue-700 font-semibold shadow-sm rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="accessibility_new">accessibility_new</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Accessibility</span>
+</div>
+<div class="text-slate-600 hover:bg-slate-200/40 rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="translate">translate</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Translate</span>
+</div>
+</nav>
+<div class="mt-auto pt-4 flex flex-col gap-1 border-t border-slate-200/30">
+<div class="text-slate-600 hover:bg-slate-200/40 rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Settings</span>
+</div>
+<div class="text-slate-600 hover:bg-slate-200/40 rounded-lg p-3 flex items-center gap-3 cursor-pointer active:opacity-80 transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]" data-icon="contact_support">contact_support</span>
+<span class="font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed">Support</span>
+</div>
+</div>
+</aside>
+<main class="flex-1 max-w-5xl mx-auto px-8 py-12">
+<header class="mb-12">
+<h1 class="text-4xl font-headline font-bold text-on-surface -tracking-[0.02em] mb-2">Accessibility Settings</h1>
+<p class="text-on-surface-variant text-lg">Make Spann easier to see, hear, and use.</p>
+</header>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<div class="lg:col-span-7 space-y-8">
+<section class="space-y-4">
+<div class="flex items-center gap-2 px-2">
+<span class="material-symbols-outlined text-primary" data-icon="visibility">visibility</span>
+<h3 class="font-headline font-semibold text-on-surface">Visual Enhancements</h3>
+</div>
+<div class="bg-surface-container-low rounded-xl overflow-hidden">
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="font_download">font_download</span>
+<div>
+<p class="font-medium text-on-surface">Dyslexia Font</p>
+<p class="text-xs text-on-surface-variant">Uses OpenDyslexic for better readability.</p>
+</div>
+</div>
+<button class="relative inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest transition-colors focus:outline-none ring-offset-2 ring-primary">
+<span class="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform"></span>
+</button>
+</div>
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="contrast">contrast</span>
+<div>
+<p class="font-medium text-on-surface">High Contrast Mode</p>
+<p class="text-xs text-on-surface-variant">Increases text contrast against backgrounds.</p>
+</div>
+</div>
+<button class="relative inline-flex h-6 w-11 items-center rounded-full bg-primary transition-colors focus:outline-none ring-offset-2 ring-primary">
+<span class="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform"></span>
+</button>
+</div>
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="palette">palette</span>
+<div>
+<p class="font-medium text-on-surface">Color Blind Modes</p>
+<p class="text-xs text-on-surface-variant">Adjust colors for Protanopia, Deuteranopia, or Tritanopia.</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</section>
+<section class="space-y-4">
+<div class="flex items-center gap-2 px-2">
+<span class="material-symbols-outlined text-primary" data-icon="menu_book">menu_book</span>
+<h3 class="font-headline font-semibold text-on-surface">Cognitive &amp; Reading</h3>
+</div>
+<div class="bg-surface-container-low rounded-xl overflow-hidden">
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="auto_stories">auto_stories</span>
+<div>
+<p class="font-medium text-on-surface">Simplified Language</p>
+<p class="text-xs text-on-surface-variant">Reduces complex terminology in system messages.</p>
+</div>
+</div>
+<button class="relative inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest transition-colors focus:outline-none ring-offset-2 ring-primary">
+<span class="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform"></span>
+</button>
+</div>
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="record_voice_over">record_voice_over</span>
+<div>
+<p class="font-medium text-on-surface">Text-to-Speech</p>
+<p class="text-xs text-on-surface-variant">Read messages aloud using high-quality neutral voices.</p>
+</div>
+</div>
+<button class="relative inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest transition-colors focus:outline-none ring-offset-2 ring-primary">
+<span class="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform"></span>
+</button>
+</div>
+</div>
+</section>
+<section class="space-y-4">
+<div class="flex items-center gap-2 px-2">
+<span class="material-symbols-outlined text-primary" data-icon="format_size">format_size</span>
+<h3 class="font-headline font-semibold text-on-surface">Text Size</h3>
+</div>
+<div class="bg-surface-container-low rounded-xl p-6 space-y-6">
+<div class="flex items-center gap-4">
+<span class="text-xs font-bold text-on-surface-variant">A</span>
+<div class="relative flex-1 group">
+<div class="h-1 bg-surface-container-high rounded-full w-full">
+<div class="h-1 bg-primary rounded-full w-3/4 absolute"></div>
+</div>
+<div class="absolute top-1/2 left-3/4 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-primary rounded-full shadow-md cursor-pointer group-hover:scale-125 transition-transform"></div>
+</div>
+<span class="text-xl font-bold text-on-surface-variant">A</span>
+</div>
+<p class="text-center text-sm text-on-surface-variant">Currently set to <span class="text-primary font-bold">125% (Large)</span></p>
+</div>
+</section>
+</div>
+<div class="lg:col-span-5">
+<div class="sticky top-20">
+<div class="bg-surface-container-lowest rounded-2xl shadow-xl shadow-on-surface/5 overflow-hidden border border-outline-variant/10">
+<div class="bg-gradient-to-br from-primary to-primary-container p-4 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-sm" data-icon="preview">preview</span>
+</div>
+<span class="text-white font-medium text-sm">Live Preview</span>
+</div>
+<div class="p-8 space-y-6">
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-full overflow-hidden bg-surface-container flex-shrink-0">
+<img alt="Preview User" class="w-full h-full object-cover" data-alt="close-up portrait of a friendly professional person with a warm smile and soft natural office lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAkvuKlsBcunjuKFf7IsHe3HHKFacmqiluiRtW3iPrOnSBQ5zOrV8WdrWjuuRmMbml7g_pZnIQyuj_yOzUNx70gM9H969678lUSFrTfY0ZgMY_mvJW7BeK4fobwFBVEhfc6hKbfSiteFhMnkHMLGnDw3mOvkcBACOMU6L8BCjISKZEiddn3c7SXRP0CNhcONZlkg3S5f6wjOvAi2Wi_sZKrV3VB-T8iTpJvGPkKDavNXxpS28MKSyxe96ZnHSfUvBR6xZdQyrcDPhJF"/>
+</div>
+<div class="space-y-2">
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Workspace Update</p>
+<h4 class="text-2xl font-bold leading-snug">The future of collaborative design is here.</h4>
+<p class="text-lg leading-relaxed text-on-surface-variant">
+                                            Spann allows your team to communicate across different modalities without friction. Our new accessibility engine ensures every voice is heard and every message is understood clearly.
+                                        </p>
+</div>
+</div>
+<div class="pt-6 border-t border-outline-variant/20 flex justify-end gap-2">
+<button class="px-4 py-2 rounded-lg bg-surface-container-highest text-sm font-semibold hover:bg-surface-container-high transition-colors">
+                                        Discard
+                                    </button>
+<button class="px-6 py-2 rounded-lg bg-gradient-to-br from-primary to-primary-container text-white text-sm font-semibold shadow-md shadow-primary/20 active:scale-95 transition-all">
+                                        Apply Changes
+                                    </button>
+</div>
+</div>
+</div>
+<div class="mt-8 p-6 bg-tertiary-fixed text-on-tertiary-fixed rounded-xl border border-on-tertiary-fixed-variant/10">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-on-tertiary-fixed-variant" data-icon="lightbulb">lightbulb</span>
+<h5 class="font-bold">Pro Tip</h5>
+</div>
+<p class="text-sm opacity-90">Press <kbd class="px-1.5 py-0.5 rounded bg-white/50 font-mono text-xs border border-on-tertiary-fixed-variant/20">Alt + Z</kbd> to toggle Text-to-Speech anywhere in the application.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<footer class="mt-24 border-t border-slate-200/30 p-12 bg-white/50">
+<div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+<div class="flex items-center gap-2">
+<span class="text-2xl font-bold tracking-tighter text-primary">Spann</span>
+<span class="text-xs text-on-surface-variant ml-2">v4.2.0-stable</span>
+</div>
+<nav class="flex gap-8 text-sm font-medium text-on-surface-variant">
+<a class="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="hover:text-primary transition-colors" href="#">Accessibility Statement</a>
+<a class="hover:text-primary transition-colors" href="#">Contact</a>
+</nav>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center hover:bg-primary hover:text-white transition-all cursor-pointer">
+<span class="material-symbols-outlined text-lg" data-icon="share">share</span>
+</div>
+</div>
+</div>
+</footer>
+</body></html>

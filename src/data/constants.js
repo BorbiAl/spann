@@ -82,7 +82,8 @@ export const NAV_ITEMS = [
 	{ key: "carbon", label: "Carbon", icon: "leaf", badge: 0 },
 	{ key: "pulse", label: "Pulse", icon: "wave", badge: 2 },
 	{ key: "accessibility", label: "Access", icon: "eye", badge: 0 },
-	{ key: "translator", label: "Translate", icon: "globe", badge: 1 }
+	{ key: "translator", label: "Translate", icon: "globe", badge: 1 },
+	{ key: "settings", label: "Settings", icon: "settings", badge: 0 }
 ];
 
 export const DEFAULT_UNREAD_BY_CHANNEL = CHANNELS.reduce((accumulator, channel) => {

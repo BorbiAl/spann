@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Register | Spann</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#004881",
+                        "on-tertiary-fixed": "#001c38",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#e2e2e2",
+                        "surface-dim": "#dadada",
+                        "outline-variant": "#c0c7d4",
+                        "outline": "#717783",
+                        "primary-fixed-dim": "#a3c9ff",
+                        "tertiary-fixed": "#d3e4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-fixed-variant": "#004883",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed-dim": "#9ecaff",
+                        "surface-bright": "#f9f9f9",
+                        "primary": "#005faa",
+                        "error": "#ba1a1a",
+                        "surface-container-low": "#f3f3f3",
+                        "on-primary-fixed": "#001c39",
+                        "on-secondary-fixed": "#001d36",
+                        "on-secondary-fixed-variant": "#00497d",
+                        "primary-container": "#0078d4",
+                        "tertiary-container": "#3779bf",
+                        "surface-container-high": "#e8e8e8",
+                        "on-surface": "#1a1c1c",
+                        "on-secondary-container": "#003f6d",
+                        "background": "#f9f9f9",
+                        "inverse-on-surface": "#f1f1f1",
+                        "secondary-container": "#5badff",
+                        "surface-tint": "#0060ab",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#d3e3ff",
+                        "secondary": "#0061a3",
+                        "surface-container": "#eeeeee",
+                        "on-background": "#1a1c1c",
+                        "surface": "#f9f9f9",
+                        "inverse-primary": "#a3c9ff",
+                        "on-primary-container": "#ffffff",
+                        "tertiary-fixed-dim": "#a2c9ff",
+                        "inverse-surface": "#2f3131",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#404752",
+                        "surface-variant": "#e2e2e2",
+                        "tertiary": "#1160a4",
+                        "on-tertiary-container": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#d1e4ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-mica { backdrop-filter: blur(40px); background-color: rgba(249, 249, 249, 0.8); }
+        .accent-gradient { background: linear-gradient(135deg, #005faa 0%, #0078d4 100%); }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+<!-- Background Decor (The Luminous Canvas) -->
+<div class="absolute inset-0 z-0">
+<div class="absolute top-[-10%] left-[-5%] w-[40%] h-[50%] rounded-full bg-primary/10 blur-[120px]"></div>
+<div class="absolute bottom-[-10%] right-[-5%] w-[40%] h-[50%] rounded-full bg-secondary-container/15 blur-[120px]"></div>
+</div>
+<!-- Main Registration Shell -->
+<main class="relative z-10 w-full max-w-4xl flex bg-surface-container-low shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)] rounded-xl overflow-hidden glass-mica">
+<!-- Left Side: Visual/Branding -->
+<div class="hidden md:flex md:w-5/12 accent-gradient flex-col justify-between p-12 text-on-primary-container">
+<div>
+<div class="flex items-center gap-2 mb-12">
+<span class="material-symbols-outlined text-4xl" data-weight="fill">hub</span>
+<span class="text-2xl font-bold tracking-tight">Spann</span>
+</div>
+<h1 class="text-3xl font-bold leading-tight mb-4">The future of collaborative communication starts here.</h1>
+<p class="text-on-primary-container/80 text-lg">Join a workspace built on atmospheric focus and seamless connectivity.</p>
+</div>
+<div class="space-y-6">
+<div class="flex items-center gap-4">
+<div class="p-2 bg-white/10 rounded-lg">
+<span class="material-symbols-outlined text-white">security</span>
+</div>
+<div>
+<p class="font-medium">Enterprise Security</p>
+<p class="text-sm opacity-70">End-to-end encrypted messaging.</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="p-2 bg-white/10 rounded-lg">
+<span class="material-symbols-outlined text-white">bolt</span>
+</div>
+<div>
+<p class="font-medium">Instant Sync</p>
+<p class="text-sm opacity-70">Unified across all your devices.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Side: Form -->
+<div class="w-full md:w-7/12 p-8 md:p-12 bg-surface-container-lowest">
+<div class="mb-8">
+<h2 class="text-2xl font-bold text-on-surface mb-2">Create an account</h2>
+<p class="text-on-surface-variant text-sm">Already have an account? <a class="text-primary font-semibold hover:underline" href="#">Log in</a></p>
+</div>
+<form class="space-y-6">
+<!-- Name -->
+<div class="space-y-1.5">
+<label class="text-[13px] font-semibold text-on-surface-variant" for="full_name">Full name</label>
+<div class="relative">
+<input class="w-full px-4 py-2.5 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all placeholder:text-outline/60 text-on-surface" id="full_name" name="full_name" placeholder="John Doe" type="text"/>
+</div>
+</div>
+<!-- Email -->
+<div class="space-y-1.5">
+<label class="text-[13px] font-semibold text-on-surface-variant" for="email">Email address</label>
+<input class="w-full px-4 py-2.5 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all placeholder:text-outline/60 text-on-surface" id="email" name="email" placeholder="name@company.com" type="email"/>
+</div>
+<!-- Password Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Password -->
+<div class="space-y-1.5">
+<label class="text-[13px] font-semibold text-on-surface-variant" for="password">Password</label>
+<input class="w-full px-4 py-2.5 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all placeholder:text-outline/60 text-on-surface" id="password" name="password" placeholder="••••••••" type="password"/>
+</div>
+<!-- Confirm Password -->
+<div class="space-y-1.5">
+<label class="text-[13px] font-semibold text-on-surface-variant" for="confirm_password">Confirm password</label>
+<input class="w-full px-4 py-2.5 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all placeholder:text-outline/60 text-on-surface" id="confirm_password" name="confirm_password" placeholder="••••••••" type="password"/>
+</div>
+</div>
+<!-- Strength Indicator (Sentiment Bar Style) -->
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[12px]">
+<span class="text-on-surface-variant font-medium">Strength: <span class="text-tertiary">Strong</span></span>
+<span class="text-outline">85% secure</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full w-[85%] accent-gradient rounded-full"></div>
+</div>
+<p class="text-[11px] text-on-surface-variant italic leading-relaxed">Hint: Use at least 12 characters, including numbers and symbols.</p>
+</div>
+<!-- Terms & Conditions -->
+<div class="flex items-start gap-3 py-2">
+<div class="flex items-center h-5">
+<input class="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary/20 bg-surface-container-low cursor-pointer" id="terms" name="terms" type="checkbox"/>
+</div>
+<label class="text-[13px] text-on-surface-variant leading-tight cursor-pointer" for="terms">
+                        I agree to the <a class="text-primary font-medium hover:underline" href="#">Terms of Service</a> and <a class="text-primary font-medium hover:underline" href="#">Privacy Policy</a>.
+                    </label>
+</div>
+<!-- Submit Action -->
+<div class="pt-4">
+<button class="w-full accent-gradient text-on-primary-container font-semibold py-3 rounded-lg shadow-lg shadow-primary/20 active:scale-[0.98] transition-transform flex items-center justify-center gap-2" type="submit">
+<span>Register</span>
+<span class="material-symbols-outlined text-xl">arrow_forward</span>
+</button>
+</div>
+</form>
+<!-- Footer Meta -->
+<div class="mt-8 pt-8 border-t border-outline-variant/10 flex flex-wrap gap-4 justify-center">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-low hover:bg-surface-container-high rounded-lg transition-colors text-xs font-medium text-on-surface-variant">
+<img class="w-4 h-4" data-alt="minimalist flat icon of the Google logo with professional colors" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrge9yfrQpNcW7bSbJkVV3H9hImLLnNIuRfoRB2tgTtlr9nhHVRLQSk1FfalVJvHm3hGQwb1gMXKUPQJV4LjdZnxaSwe6TwUAO_cexEORVI7UXDTKBtrsUkIOKfVGTkkyZmbVndNvb3CwwwgvcJ524ZQeDjlA5ms0yKH76J1_PsbIsRoS93PPGs0fn-_p6p0iO46NZSva-uxT7ulFW4lRDlDCXfQrZYGzjnJvJyWOSg1vGEZjALHwQM0f5UWzkILfgl7SIXt4aOI7M"/>
+                    Google
+                </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-low hover:bg-surface-container-high rounded-lg transition-colors text-xs font-medium text-on-surface-variant">
+<img class="w-4 h-4" data-alt="minimalist flat icon of the Microsoft logo in corporate blue and grey" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAapXbOhJcXNvs2CT6usIpdW-7AGglnYg8gMhvnHxzVzRMjMQs7lZHOfX9ao_fgHOXGnjZ7icWJy8GDRrf51J5ywNGKawswl0DwTr7joXeKAmwS4GV9XtdLsqq5BwIBma2_NSShx2Ho9J-PI3m7eTJIiS8JaQrDZxdv-CdNrKNz-dDyTTxj2mEcRqAAfPltqM1nOy7sBcuMWwwtgAogpY31fyjYizXqYeza5UvvyeN_ZF2BcQfq3P_P2C_9fYS5p82n1qwCy7d46gyf"/>
+                    Microsoft
+                </button>
+</div>
+</div>
+</main>
+<!-- Contextual InfoBar (Suppressed by default, showing only on focus/task) -->
+<div class="fixed bottom-8 right-8 flex items-center gap-3 bg-surface-container-highest px-4 py-3 rounded-xl shadow-xl max-w-xs border border-outline-variant/20">
+<div class="p-1.5 bg-tertiary/10 rounded-full">
+<span class="material-symbols-outlined text-tertiary text-lg" data-weight="fill">verified_user</span>
+</div>
+<p class="text-[12px] text-on-surface-variant font-medium">Your data is stored securely using industry-standard AES-256 encryption.</p>
+</div>
+</body></html>
