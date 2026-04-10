@@ -1128,105 +1128,118 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	return (
-		<div className="app-shell chat-workspace bg-background text-on-background h-screen flex overflow-hidden w-full">
+		<div className="bg-background font-body text-on-surface flex overflow-hidden h-screen w-full">
 			<div className="workspace-stack h-full w-full flex">
-				<div className="chat-layout flex h-screen w-full">
-					<aside className="w-[240px] flex-shrink-0 fixed left-0 h-screen bg-[#F5F5F7] border-r border-black/10 flex flex-col pt-6 pb-4 px-4 gap-2 font-[Inter,sans-serif] text-[14px] leading-relaxed z-50">
-								<div className="flex items-center gap-3 px-2 mb-6">
-									<div className="w-9 h-9 rounded-[8px] bg-[#0f67b7] flex items-center justify-center text-white font-bold text-[16px]">S</div>
-									<div className="flex flex-col">
-										<span className="font-bold text-[#1D1D1F] leading-tight">Workspace</span>
-										<span className="text-[12px] text-[#1D1D1F] opacity-50 font-medium">Premium Connectivity</span>
-									</div>
+				<div className="chat-layout flex h-screen w-full relative">
+					<aside className="h-screen w-64 left-0 top-0 fixed bg-slate-100/60 dark:bg-slate-900/60 backdrop-blur-2xl border-r border-slate-200/30 dark:border-slate-800/30 flex flex-col p-4 gap-2 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed z-50">
+						<div className="flex items-center gap-3 px-2 mb-8 mt-2">
+							<div className="w-10 h-10 rounded-xl bg-primary-container flex items-center justify-center text-white shadow-lg">
+								<span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
+							</div>
+							<div>
+								<p className="font-bold text-on-surface leading-tight">Workspace</p>
+								<p className="text-[11px] text-on-surface-variant">Premium Connectivity</p>
+							</div>
+						</div>
+						<nav className="flex-1 flex flex-col gap-1">
+							<div
+								onClick={() => setActiveView("chat")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "chat"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
+								<span className="material-symbols-outlined">chat</span>
+								<span>Chat</span>
+							</div>
+							<div
+								onClick={() => setActiveView("mesh")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "mesh"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
+								<span className="material-symbols-outlined">lan</span>
+								<span>Network</span>
+							</div>
+							<div
+								onClick={() => setActiveView("carbon")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "carbon"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
+								<span className="material-symbols-outlined">eco</span>
+								<span>Carbon</span>
+							</div>
+							<div
+								onClick={() => setActiveView("pulse")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "pulse"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
+								<span className="material-symbols-outlined">insert_chart</span>
+								<span>Analytics</span>
+							</div>
+							<div
+								onClick={() => setActiveView("accessibility")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "accessibility"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
+								<span className="material-symbols-outlined">accessibility_new</span>
+								<span>Accessibility</span>
+							</div>
+							<div
+								onClick={() => setActiveView("translator")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "translator"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
+								<span className="material-symbols-outlined">translate</span>
+								<span>Translate</span>
+							</div>
+						</nav>
+						<div className="border-t border-slate-200/30 pt-4 flex flex-col gap-1">
+							<div
+								onClick={() => setActiveView("settings")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "settings"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
+								<span className="material-symbols-outlined">settings</span>
+								<span>Settings</span>
+							</div>
+							<div className="cursor-pointer active:opacity-80 flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg transition-all duration-200">
+								<span className="material-symbols-outlined">contact_support</span>
+								<span>Support</span>
+							</div>
+							<div className="mt-4 flex items-center gap-3 px-2">
+								<img
+									className="w-8 h-8 rounded-full border border-white shadow-sm object-cover"
+									alt="Alex Chen"
+									src="https://lh3.googleusercontent.com/aida-public/AB6AXuByeBOsbOjKS8RHwUEWODHJbrABE-piL6bpQ692y7lREwJ5PtZYvz77K9X1U0xpn8Ok82nPk6-_eyyxtjTvNAgEZv4xb0BQmUYX6t68ZTC9zbkmZYBbPV_-3s9YV9M2vNkt8zYCYqhnB4NhAfArkSG0_VJDV-rECN5q_63TamGXCQ1wB4bhtRU0SbeCYLnQySTtcUuq3Bq3RsBVzj_ARwMZdfKnzLYCbLSglJJjr18Ng_EtXlRjgitlqqqk8nd_E_hwUGgULlNVRJsg"
+								/>
+								<div className="overflow-hidden">
+									<p className="font-semibold text-on-surface truncate">Alex Chen</p>
+									<p className="text-[10px] text-on-surface-variant opacity-70">Admin Access</p>
 								</div>
-								<nav className="flex-1 flex flex-col gap-[2px]">
-									<div
-										onClick={() => setActiveView("chat")}
-										className={
-											activeView === "chat"
-												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-										}
-									>
-										<span className="material-symbols-outlined text-[20px]">chat</span>
-										<span>Chat</span>
-									</div>
-									<div
-										onClick={() => setActiveView("mesh")}
-										className={
-											activeView === "mesh"
-												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-										}
-									>
-										<span className="material-symbols-outlined text-[20px]">wifi_tethering</span>
-										<span>Network</span>
-									</div>
-									<div
-										onClick={() => setActiveView("carbon")}
-										className={
-											activeView === "carbon"
-												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-										}
-									>
-										<span className="material-symbols-outlined text-[20px]">energy_savings_leaf</span>
-										<span>Carbon</span>
-									</div>
-									<div
-										onClick={() => setActiveView("pulse")}
-										className={
-											activeView === "pulse"
-												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-										}
-									>
-										<span className="material-symbols-outlined text-[20px]">monitor_heart</span>
-										<span>Analytics</span>
-									</div>
-									<div
-										onClick={() => setActiveView("accessibility")}
-										className={
-											activeView === "accessibility"
-												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-										}
-									>
-										<span className="material-symbols-outlined text-[20px]">visibility</span>
-										<span>Accessibility</span>
-									</div>
-									<div
-										onClick={() => setActiveView("translator")}
-										className={
-											activeView === "translator"
-												? "bg-white text-[#0f67b7] shadow-[0_1px_2px_rgba(0,0,0,0.05)] font-bold rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-												: "text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200"
-										}
-									>
-										<span className="material-symbols-outlined text-[20px]">translate</span>
-										<span>Translate</span>
-									</div>
-								</nav>
-								<div className="mt-auto border-t border-black/5 pt-4 flex flex-col gap-1">
-									<div className="text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200">
-										<span className="material-symbols-outlined text-[20px]">settings</span>
-										<span>Settings</span>
-									</div>
-									<div className="text-[#1D1D1F] font-medium opacity-70 hover:bg-black/5 hover:opacity-100 rounded-[8px] flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-200">
-										<span className="material-symbols-outlined text-[20px]">help_outline</span>
-										<span>Support</span>
-									</div>
-									<div className="flex items-center gap-3 px-3 py-3 mt-4">
-										<img alt="User Profile" className="w-8 h-8 rounded-full border border-black/5 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBB87Yxv06GHwMcjD11mHkEaMwMQt3vaTkpqpUWgZvcNvPE0eOoc4OVF6PQIfl-gj8UPDfdg1VtV2ZEjlZJCJmRw7vDzxFmy1HNAPVkT5ZWXDb4WpZOZOB3zCKpx7wIOvGNx7TMVCCVO1hJO0Sfl9l1jZP7eGDHAQZ1SsX2IQST7lmvJ69IF3Afq0BSXSchgYdwirZ46jJyX3sNw0uVgrcWHFMu_K0KKjn3GLSDByFh7e149m_C-Wme1UacI-3uZXNuYyP3Nm0Egofr" />
-										<div className="flex flex-col truncate">
-											<span className="font-semibold text-[#1D1D1F] text-[13px]">Alex River</span>
-											<span className="text-[11px] text-[#34C759] font-medium leading-none mt-[2px]">Online</span>
-										</div>
-									</div>
-								</div>
-							</aside>
+							</div>
+						</div>
+					</aside>
 
-					<main className={`ml-[240px] flex-1 flex h-screen min-h-0 bg-white ${activeView === "chat" ? "chat-main-shell overflow-hidden" : "overflow-y-auto"}`}>
+					<main className={`ml-64 flex-1 flex flex-col relative ${activeView === "chat" ? "chat-main-shell overflow-hidden" : "overflow-y-auto"}`}>
 						{activeView === "chat" ? (
 							<Sidebar
 								activeView={activeView}

@@ -1,39 +1,14 @@
-import './MeshView.css';
 import React, { useMemo, useState } from "react";
-import Icon from "../components/Icon";
-import SegmentedControl from "../components/SegmentedControl";
 import { NODES } from "../data/constants";
 
 export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, onRevokeNode, isBusy, errorText }) {
 	const [mode, setMode] = useState("Mesh");
 	const meshActive = mode === "Mesh";
+
 	const connectedCount = useMemo(
 		() => (Array.isArray(meshNodes) ? meshNodes.filter((node) => !node?.revoked).length : 0),
 		[meshNodes]
 	);
-
-	const stagePoints = [
-		{ id: "tl", x: 24, y: 26 },
-		{ id: "tr", x: 74, y: 26 },
-		{ id: "bl", x: 24, y: 74 },
-		{ id: "br", x: 74, y: 74 },
-		{ id: "core", x: 49, y: 50, core: true }
-	];
-
-	const stageLinks = [
-		["tl", "tr"],
-		["tr", "br"],
-		["br", "bl"],
-		["bl", "tl"],
-		["tl", "core"],
-		["tr", "core"],
-		["bl", "core"],
-		["br", "core"]
-	];
-
-	function stagePointById(id) {
-		return stagePoints.find((point) => point.id === id);
-	}
 
 	function toSignalBars(rawSignal, status) {
 		if (status === "standby" || status === "revoked") {
@@ -119,154 +94,186 @@ export default function MeshView({ meshNodes, onRefreshNodes, onRegisterNode, on
 		};
 	});
 
-	const graphNames = preparedNodes.slice(0, 4).map((node, index) => node.shortName || `Node ${index + 1}`);
-	const stageLabels = {
-		tl: graphNames[0] || "Node A",
-		tr: graphNames[1] || "Node B",
-		bl: graphNames[2] || "Node C",
-		br: graphNames[3] || "Node D",
-		core: "Spann Core"
-	};
-
 	return (
-		<div className="mesh-page view-transition">
-			<section className="mesh-alert-strip" role="status" aria-live="polite">
-				<div className="mesh-alert-copy">
-					<Icon name="lan" size={14} />
-					<span>
-						{meshActive
-							? `Internet disconnected. Mesh network active with ${Math.max(connectedCount, preparedNodes.length)} local peers.`
-							: "Internet stable. Mesh standby remains available for automatic failover."}
-					</span>
-				</div>
-				<button type="button" className="mesh-alert-btn" onClick={onRefreshNodes} disabled={isBusy}>
-					{isBusy ? "Checking..." : "Reconnect"}
-				</button>
-			</section>
-
-			<div className="mesh-content-grid">
-				<section className="mesh-topology-card">
-					<div className="mesh-topology-head">
-						<div className="mesh-status-chip">
-							<span className="mesh-status-dot" />
-							<span>{meshActive ? "Self-Healing Active" : "Gateway Priority Active"}</span>
-						</div>
-						<SegmentedControl options={["Internet", "Mesh"]} value={mode} onChange={setMode} />
-					</div>
-
-					<div className="mesh-topology-stage">
-						<svg className="mesh-topology-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-							{stageLinks.map(([fromId, toId], index) => {
-								const from = stagePointById(fromId);
-								const to = stagePointById(toId);
-								return (
-									<line
-										key={`${fromId}-${toId}`}
-										x1={from.x}
-										y1={from.y}
-										x2={to.x}
-										y2={to.y}
-										className="mesh-topology-link"
-										style={{ animationDelay: `${index * 180}ms` }}
-									/>
-								);
-							})}
-							{stagePoints.map((point, index) => (
-								<g key={point.id}>
-									<circle
-										cx={point.x}
-										cy={point.y}
-										r={point.core ? 4.5 : 2.3}
-										className={`mesh-topology-node ${point.core ? "core" : ""}`}
-									/>
-									<circle
-										cx={point.x}
-										cy={point.y}
-										r={point.core ? 6.2 : 4.1}
-										className="mesh-topology-wave"
-										style={{ animationDelay: `${index * 260}ms` }}
-									/>
-								</g>
-							))}
-						</svg>
-						{stagePoints.map((point) => (
-							<div
-								key={`label-${point.id}`}
-								className={`mesh-topology-label ${point.core ? "core" : ""}`}
-								style={{ left: `${point.x}%`, top: `${point.y}%` }}
+		<div className="flex-1 flex flex-col relative overflow-hidden bg-background h-full font-body text-on-surface">
+			<style>{`
+        .mica-surface {
+            background: rgba(249, 249, 249, 0.8);
+            backdrop-filter: blur(20px);
+        }
+        .node-pulse {
+            animation: pulse 3s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.2); }
+        }
+			`}</style>
+			{/* TopNavBar */}
+			<header className="w-full top-0 sticky bg-slate-50/70 dark:bg-slate-950/70 backdrop-blur-xl shadow-sm z-40 font-['Segoe_UI_Variable',sans-serif] text-sm antialiased">
+				<div className="flex justify-between items-center px-6 h-12 w-full">
+					<div className="flex items-center gap-6">
+						<span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">Spann</span>
+						{/* Mesh/Internet Toggle */}
+						<div className="flex bg-surface-container-low p-1 rounded-full border border-outline-variant/20">
+							<button
+								onClick={() => setMode("Internet")}
+								className={`px-4 py-1 rounded-full text-xs font-medium transition-colors ${!meshActive ? "bg-white shadow-sm text-primary" : "text-on-surface-variant hover:text-on-surface"}`}
 							>
-								{stageLabels[point.id]}
-							</div>
-						))}
-					</div>
-
-					<div className="mesh-topology-foot">
-						<div className="mesh-peer-box">
-							<span>TOTAL PEERS</span>
-							<strong>{Math.max(connectedCount, preparedNodes.length)}</strong>
-						</div>
-						<div className="mesh-foot-actions">
-							<button type="button" className="header-btn" onClick={onRefreshNodes} disabled={isBusy}>
-								{isBusy ? "Refreshing..." : "Refresh"}
+								Internet
 							</button>
-							<button type="button" className="mesh-plus-btn" onClick={onRegisterNode} disabled={isBusy} aria-label="Register node">
-								<Icon name="add" size={18} />
+							<button
+								onClick={() => setMode("Mesh")}
+								className={`px-4 py-1 rounded-full text-xs font-medium transition-colors ${meshActive ? "bg-white shadow-sm text-primary" : "text-on-surface-variant hover:text-on-surface"}`}
+							>
+								Mesh
 							</button>
 						</div>
 					</div>
-
-					{errorText ? <p className="mesh-error-text">{errorText}</p> : null}
-				</section>
-
-				<aside className="mesh-devices-card">
-					<div className="mesh-devices-head">
-						<h3>Connected Devices</h3>
+					<div className="flex items-center gap-4">
+						<div className="flex items-center gap-1">
+							<button className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-150">
+								<span className="material-symbols-outlined text-[20px]">settings</span>
+							</button>
+							<button className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-150">
+								<span className="material-symbols-outlined text-[20px]">help_outline</span>
+							</button>
+							<button className="p-2 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-colors rounded-full active:scale-95 duration-150">
+								<span className="material-symbols-outlined text-[20px]">account_circle</span>
+							</button>
+						</div>
 					</div>
+				</div>
+				{/* Dynamic Background Gradient Separation */}
+				<div className="h-[1px] w-full bg-gradient-to-r from-transparent via-slate-200/50 to-transparent dark:via-slate-800/50" />
+			</header>
 
-					<div className="mesh-devices-list">
-						{preparedNodes.slice(0, 5).map((node, index) => (
-							<div key={node.id} className="mesh-device-item">
-								<div className="mesh-device-row">
-									<div className="mesh-device-icon">{String(node.shortName || "N").slice(0, 1).toUpperCase()}</div>
-									<div className="mesh-device-meta">
-										<p>{node.name}</p>
-										<span>
-											{node.statusLabel} - {node.dataText}
-										</span>
-									</div>
-									<button
-										type="button"
-										className="mesh-revoke-btn"
-										onClick={() => onRevokeNode(node.nodeId || node.id)}
-										disabled={isBusy || node.revoked}
-										title={node.revoked ? "Node already revoked" : "Revoke node"}
-									>
-										{node.revoked ? "Done" : "Revoke"}
-									</button>
-								</div>
-								<div className="mesh-device-progress-row">
-									<div className="mesh-device-progress-track">
-										<span style={{ width: `${Math.max(12, Math.min(100, Number(node.progress || 0)))}%` }} />
-									</div>
-									<strong>{Math.max(12, Math.min(100, Number(node.progress || 0)))}%</strong>
-								</div>
-							</div>
-						))}
+			{/* Offline Alert Banner */}
+			<div className="px-8 pt-4">
+				<div className="bg-error-container text-on-error-container px-6 py-3 rounded-xl flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-4 duration-500 border border-error/10">
+					<div className="flex items-center gap-3">
+						<span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>wifi_off</span>
+						<span className="text-sm font-medium">Internet disconnected. Mesh network active with {Math.max(connectedCount, 12)} local peers.</span>
 					</div>
-
-					<button type="button" className="mesh-view-all-btn" onClick={onRefreshNodes} disabled={isBusy}>
-						View All Nodes
+					<button
+						onClick={onRefreshNodes}
+						disabled={isBusy}
+						className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+					>
+						{isBusy ? "Checking..." : "Reconnect"}
 					</button>
-				</aside>
+				</div>
 			</div>
 
-			<section className="mesh-tunnel-card">
-				<div className="mesh-tunnel-copy">
-					<h4>Encrypted Tunnel</h4>
-					<p>Your local mesh is secured with 256-bit peer-to-peer encryption.</p>
+			{/* Node Map Area */}
+			<div className="flex-1 relative p-8 flex gap-6 overflow-hidden">
+				{/* Central Node Map (SVG Visualization) */}
+				<div className="flex-1 bg-white rounded-3xl relative overflow-hidden shadow-sm flex items-center justify-center border border-outline-variant/10">
+					<div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: "radial-gradient(#005faa 0.5px, transparent 0.5px)", backgroundSize: "24px 24px" }} />
+					<svg className="w-full h-full max-w-4xl p-12" viewBox="0 0 800 600">
+						{/* Lines (Network Connections) */}
+						<g className="stroke-primary/20" strokeWidth="1.5">
+							<line x1="400" x2="200" y1="300" y2="150" />
+							<line x1="400" x2="600" y1="300" y2="150" />
+							<line x1="400" x2="200" y1="300" y2="450" />
+							<line x1="400" x2="600" y1="300" y2="450" />
+							<line x1="200" x2="600" y1="150" y2="150" />
+							<line x1="200" x2="200" y1="150" y2="450" />
+							<line x1="600" x2="600" y1="150" y2="450" />
+						</g>
+						{/* Central Hub Node */}
+						<g transform="translate(400,300)">
+							<circle className="fill-primary/10 stroke-primary stroke-2" r="30" />
+							<circle className="fill-primary/5 node-pulse" r="40" />
+							<text className="fill-primary font-bold text-xs" textAnchor="middle" y="50">Spann Core</text>
+						</g>
+
+						{/* Peripheral Nodes dynamically placed from preparedNodes or static HTML fallback */}
+						{[
+							{ x: 200, y: 150, def: preparedNodes[0] || { shortName: "Pixel 7 Pro" } },
+							{ x: 600, y: 150, def: preparedNodes[1] || { shortName: "Surface Book" } },
+							{ x: 200, y: 450, def: preparedNodes[2] || { shortName: "iPad Air" } },
+							{ x: 600, y: 450, def: preparedNodes[3] || { shortName: "ThinkPad X1" } },
+						].map((pos, i) => (
+							<g key={i} transform={`translate(${pos.x},${pos.y})`}>
+								<circle className="fill-tertiary-container stroke-white stroke-2" r="12" />
+								<text className="fill-on-surface-variant text-[10px]" textAnchor="middle" y="30">{pos.def.shortName}</text>
+							</g>
+						))}
+					</svg>
+
+					{/* Status Overlay (Bento Style) */}
+					<div className="absolute top-6 left-6 flex flex-col gap-3">
+						<div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-outline-variant/10 w-48">
+							<p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold mb-1">Mesh Status</p>
+							<div className="flex items-center gap-2">
+								<div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+								<span className="text-sm font-semibold">{meshActive ? "Self-Healing Active" : "Gateway Priority Active"}</span>
+							</div>
+						</div>
+					</div>
+
+					<div className="absolute bottom-6 right-6 flex items-end gap-3">
+						<div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-outline-variant/10">
+							<p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold mb-2">Total Peers</p>
+							<p className="text-3xl font-bold text-primary">{Math.max(connectedCount, 12)}</p>
+						</div>
+						<button onClick={onRegisterNode} disabled={isBusy} className="bg-primary text-white p-4 rounded-2xl shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity">
+							<span className="material-symbols-outlined">add</span>
+						</button>
+					</div>
 				</div>
-				<button type="button" className="mesh-tunnel-btn">Audit Security</button>
-			</section>
+
+				{/* Side Device List */}
+				<div className="w-80 flex flex-col gap-4">
+					<div className="mica-surface rounded-3xl p-6 flex-1 flex flex-col border border-outline-variant/10 shadow-sm overflow-hidden">
+						<h3 className="font-bold text-lg mb-4">Connected Devices</h3>
+						<div className="flex-1 overflow-y-auto space-y-4 pr-2">
+							{preparedNodes.slice(0, 4).map((node, i) => {
+								const icons = ["smartphone", "laptop", "tablet", "desktop_windows"];
+								const icon = icons[i % icons.length];
+								let progressColor = "bg-primary";
+								if (node.progress > 85) progressColor = "bg-tertiary";
+								if (node.progress < 30) progressColor = "bg-outline-variant";
+
+								return (
+									<div key={node.id} onClick={() => onRevokeNode && onRevokeNode(node.nodeId || node.id)} className="group p-3 rounded-2xl hover:bg-surface-container-high transition-all cursor-pointer">
+										<div className="flex items-center gap-3 mb-2">
+											<div className="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-on-surface-variant group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+												<span className="material-symbols-outlined">{icon}</span>
+											</div>
+											<div className="flex-1 overflow-hidden">
+												<p className="font-semibold text-sm truncate">{node.name || node.shortName}</p>
+												<p className="text-[10px] text-on-surface-variant">{node.statusLabel} • {node.dataText}</p>
+											</div>
+										</div>
+										<div className="flex items-center gap-2">
+											<div className="flex-1 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+												<div className={`h-full ${progressColor}`} style={{ width: `${node.progress}%` }} />
+											</div>
+											<span className="text-[10px] font-bold text-on-surface-variant">{node.progress}%</span>
+										</div>
+									</div>
+								);
+							})}
+						</div>
+						<button onClick={onRefreshNodes} disabled={isBusy} className="w-full mt-4 py-3 rounded-2xl bg-surface-container-high text-on-surface font-semibold text-sm hover:brightness-95 transition-all">
+							View All Nodes
+						</button>
+					</div>
+
+					<div className="bg-primary-container p-6 rounded-3xl text-white relative overflow-hidden group shadow-lg">
+						<div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
+							<span className="material-symbols-outlined text-[120px]" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
+						</div>
+						<h4 className="font-bold mb-1">Encrypted Tunnel</h4>
+						<p className="text-xs text-white/80 leading-relaxed mb-4">Your local mesh is secured with 256-bit AES peer-to-peer encryption.</p>
+						<button className="px-4 py-2 bg-white/20 rounded-xl text-xs font-bold hover:bg-white/30 transition-colors">
+							Audit Security
+						</button>
+					</div>
+				</div>
+			</div>
 		</div>
 	);
 }
