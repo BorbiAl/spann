@@ -61,7 +61,7 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 									</div>
 									<button onClick={onRefreshPulse} disabled={isRefreshing} className="flex items-center gap-2 bg-surface-container-lowest px-3 py-1.5 rounded-full shadow-sm hover:opacity-80 transition-opacity">
 										<div className={`w-2 h-2 rounded-full bg-tertiary ${isRefreshing ? "animate-spin" : "animate-pulse"}`}></div>
-										<span className="text-xs font-medium">{isRefreshing ? "Refreshing..." : "94 Active Now"}</span>
+										<span className="text-xs font-medium">{isRefreshing ? "Refreshing..." : "6 Active Now"}</span>
 									</button>
 								</div>
 								{errorText ? (
@@ -82,7 +82,7 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 									<img className="w-8 h-8 rounded-full border-2 border-surface-container-low" alt="Worker 1" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4k8NyFhNItsgE0bjWdnDTElT3CneLBFs1Ei6tpRszMl2HC3p9gwiW1hs5GgfE9jKJfyJuwlYX58nSwrKg5sX-2MVwczAE_ZetpU3zbhFC9Q4X5PY2W-AMP9i3v_PGtk5h61yNu4rP4qKx9ZqDKeIRqAtnmVAfg-mgvJILC4X63Xn4kwToUmEV2Yh6HMSqA4L6P1SrNYY6Ymp8m65HUdTqBofw4QDmRIfi1mY5kZJdcuXjZZSx51YbmBA65XhVB-g0S6rSrz2xQRzI" />
 									<img className="w-8 h-8 rounded-full border-2 border-surface-container-low" alt="Worker 2" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHgfsCvFEZlhqk7pIhy40453-Ox8dDLwcNsUWPnGLrpq34-cVkfigzL7vCrB8lqHBHCp3pEipDHSwzeK6oqiI4s_qy41_X3e6ge5VmioXouxzc-AdNz9lZxayc2S4VQkAODW27_6xzzidylM55sf__el8x4_VoyN0zmFqnzYR6fW0wvkIrKQAMHli8LxnaJfNBNfN2xh8NvktD_qGP1gHtojVKvBCnNHD0NV5-3jUmwutleZqNsPyjPTNClPP7QFvUq-XjDjASuGjj" />
 									<img className="w-8 h-8 rounded-full border-2 border-surface-container-low" alt="Worker 3" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGvMeWLqU2cTSpt-iibjHvdfSFooWuJOZdZ9eLSEYDEDx3_JfXOP10G0BnvH8WWcEs-XHyO2j5PBqlM4iBkCxD_MeKKdS2PUwOaZh00SCLu1wKt9bCy-LKfCGB2n9ciNErZ5z0rtey3ztPIdpOrmLDEHVTiUp4ZTL5s7uhyd9E8Ae6Uf2FO0DXjDSPx5FCFun5SRiP1mN27lpBaA0AzdnijFPtSXcIv7qdvKxLzlW-6GBRMXczn7oVn4EHpbxYRjQQXrHnw16zs5wc" />
-									<div className="w-8 h-8 rounded-full border-2 border-surface-container-low bg-primary text-white flex items-center justify-center text-[10px] font-bold shadow-sm">+82</div>
+									<div className="w-8 h-8 rounded-full border-2 border-surface-container-low bg-primary text-white flex items-center justify-center text-[10px] font-bold shadow-sm">+3</div>
 								</div>
 								<p className="text-sm text-on-surface-variant max-w-xs text-right">Activity is peaking in <b>#engineering</b> and <b>#product-sync</b>. Overall engagement is up 12%.</p>
 							</div>

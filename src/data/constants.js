@@ -238,10 +238,26 @@ const fallbackApiBase = isFileProtocol ? nativeDefaultApiBase : "/api";
 // Prefer runtime override, then Vite env, then protocol-aware fallback.
 export const API_BASE = String(runtimeApiBase || envApiBase || fallbackApiBase).replace(/\/+$/, "");
 
+function shouldRetryDirectBackend(responseStatus) {
+	return Number(responseStatus) === 404 && String(API_BASE).startsWith("/api");
+}
+
+async function fetchWithProxyFallback(path, requestInit) {
+	const normalizedPath = String(path || "").startsWith("/") ? String(path) : `/${String(path || "")}`;
+	let response = await fetch(`${API_BASE}${normalizedPath}`, requestInit);
+	if (!shouldRetryDirectBackend(response.status)) {
+		return response;
+	}
+
+	response = await fetch(`${nativeDefaultApiBase}${normalizedPath}`, requestInit);
+	return response;
+}
+
 const AUTH_STATE_STORAGE_KEY = "spann-auth-state";
 const AUTH_STATE_SESSION_KEY = "spann-auth-state-session";
 const NETWORK_LOADING_EVENT = "spann:network-loading";
 const APP_NOTICE_EVENT = "spann:notice";
+const AUTH_STATE_UPDATED_EVENT = "spann:auth-state-updated";
 let pendingNetworkRequests = 0;
 
 function emitNetworkLoading() {
@@ -270,6 +286,7 @@ function endNetworkRequest() {
 
 export const NETWORK_LOADING_EVENT_NAME = NETWORK_LOADING_EVENT;
 export const APP_NOTICE_EVENT_NAME = APP_NOTICE_EVENT;
+export const AUTH_STATE_UPDATED_EVENT_NAME = AUTH_STATE_UPDATED_EVENT;
 
 export function pushAppNotice(message, tone = "info") {
 	const text = String(message || "").trim();
@@ -365,12 +382,19 @@ export function setAuthState(authState, options = {}) {
 		localStorage.removeItem(AUTH_STATE_STORAGE_KEY);
 	}
 
+	if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+		window.dispatchEvent(new CustomEvent(AUTH_STATE_UPDATED_EVENT, { detail: { authState: { ...normalized, persist } } }));
+	}
+
 	return { ...normalized, persist };
 }
 
 export function clearAuthState() {
 	localStorage.removeItem(AUTH_STATE_STORAGE_KEY);
 	sessionStorage.removeItem(AUTH_STATE_SESSION_KEY);
+	if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+		window.dispatchEvent(new CustomEvent(AUTH_STATE_UPDATED_EVENT, { detail: { authState: null } }));
+	}
 }
 
 export function normalizeApiError(error, fallbackMessage = "Request failed") {
@@ -472,9 +496,67 @@ async function requestRaw(path, options = {}, accessToken) {
 	try {
 		let response;
 		try {
-			response = await fetch(`${API_BASE}${path}`, {
+			response = await fetchWithProxyFallback(path, {
 				method: options.method || "GET",
 				headers,
+				...(options.body ? { body: options.body } : {}),
+				...(controller ? { signal: controller.signal } : {})
+			});
+		} finally {
+			if (timeoutHandle) {
+				clearTimeout(timeoutHandle);
+			}
+		}
+
+		let payload = null;
+		const contentType = response.headers.get("content-type") || "";
+		if (contentType.includes("application/json")) {
+			payload = await response.json();
+		} else {
+			const text = await response.text();
+			payload = text ? { message: text } : null;
+		}
+
+		if (!response.ok) {
+			const errorBody = payload?.error || payload?.detail || payload || {};
+			const error = new Error(errorBody.message || payload?.message || `HTTP ${response.status}`);
+			error.status = response.status;
+			error.code = errorBody.code || errorBody.error_code || "REQUEST_FAILED";
+			error.details = errorBody.details || null;
+			throw error;
+		}
+
+		return payload;
+	} finally {
+		endNetworkRequest();
+	}
+}
+
+async function requestFormDataRaw(path, options = {}, accessToken) {
+	beginNetworkRequest();
+	const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
+	const controller = timeoutMs > 0 ? new AbortController() : null;
+	const timeoutHandle =
+		controller !== null
+			? setTimeout(() => {
+				controller.abort();
+			}, timeoutMs)
+			: null;
+
+	const headers = {
+		...(options.headers || {})
+	};
+
+	if (options.auth !== false && accessToken) {
+		headers.Authorization = `Bearer ${accessToken}`;
+	}
+
+	try {
+		let response;
+		try {
+			response = await fetchWithProxyFallback(path, {
+				method: options.method || "POST",
+				headers: Object.keys(headers).length ? headers : undefined,
 				...(options.body ? { body: options.body } : {}),
 				...(controller ? { signal: controller.signal } : {})
 			});
@@ -511,6 +593,7 @@ async function requestRaw(path, options = {}, accessToken) {
 export async function apiRequest(path, options = {}) {
 	const authState = getAuthState();
 	const token = options.accessToken || authState?.accessToken;
+	const allowAuthFailOpen = Boolean(options.allowAuthFailOpen);
 
 	try {
 		return await requestRaw(path, options, token);
@@ -519,12 +602,55 @@ export async function apiRequest(path, options = {}) {
 			throw error;
 		}
 
+		if (Number(error.status) === 401 && allowAuthFailOpen) {
+			return requestRaw(path, { ...options, auth: false, skipRefresh: true }, null);
+		}
+
 		if (Number(error.status) !== 401 || !authState?.refreshToken || path === "/auth/refresh") {
 			throw error;
 		}
 
-		const nextToken = await refreshAccessToken();
-		return requestRaw(path, { ...options, skipRefresh: true }, nextToken);
+		try {
+			const nextToken = await refreshAccessToken();
+			return requestRaw(path, { ...options, skipRefresh: true }, nextToken);
+		} catch (refreshError) {
+			if (allowAuthFailOpen) {
+				return requestRaw(path, { ...options, auth: false, skipRefresh: true }, null);
+			}
+			throw refreshError;
+		}
+	}
+}
+
+export async function apiRequestFormData(path, options = {}) {
+	const authState = getAuthState();
+	const token = options.accessToken || authState?.accessToken;
+	const allowAuthFailOpen = Boolean(options.allowAuthFailOpen);
+
+	try {
+		return await requestFormDataRaw(path, options, token);
+	} catch (error) {
+		if (options.auth === false || options.skipRefresh) {
+			throw error;
+		}
+
+		if (Number(error.status) === 401 && allowAuthFailOpen) {
+			return requestFormDataRaw(path, { ...options, auth: false, skipRefresh: true }, null);
+		}
+
+		if (Number(error.status) !== 401 || !authState?.refreshToken || path === "/auth/refresh") {
+			throw error;
+		}
+
+		try {
+			const nextToken = await refreshAccessToken();
+			return requestFormDataRaw(path, { ...options, skipRefresh: true }, nextToken);
+		} catch (refreshError) {
+			if (allowAuthFailOpen) {
+				return requestFormDataRaw(path, { ...options, auth: false, skipRefresh: true }, null);
+			}
+			throw refreshError;
+		}
 	}
 }
 
@@ -556,7 +682,16 @@ export async function loginWithPassword({ email, password, deviceHint, persistSe
 	};
 }
 
-export async function registerWithPassword({ email, password, confirmPassword, name, companyName, deviceHint, persistSession = true }) {
+export async function registerWithPassword({
+	email,
+	password,
+	confirmPassword,
+	name,
+	companyName,
+	deviceHint,
+	locale,
+	persistSession = true
+}) {
 	const payload = await apiRequest("/auth/register", {
 		method: "POST",
 		auth: false,
@@ -566,7 +701,8 @@ export async function registerWithPassword({ email, password, confirmPassword, n
 			confirm_password: confirmPassword || null,
 			name,
 			company_name: companyName || null,
-			device_hint: deviceHint || null
+			device_hint: deviceHint || null,
+			locale: locale || "en-US"
 		})
 	});
 

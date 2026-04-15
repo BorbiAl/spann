@@ -185,14 +185,18 @@ export type MeshTransport = 'bluetooth' | 'wifi_direct' | 'lan' | 'relay'
 
 export interface MeshNode {
   node_id: string
-  user_id: string
-  user: Pick<User, 'id' | 'display_name' | 'avatar_url'>
-  transport: MeshTransport
-  signal_strength: number | null
-  ip_address: string | null
-  is_relay: boolean
-  joined_at: string
-  last_ping_at: string
+  user_id?: string
+  user?: Pick<User, 'id' | 'display_name' | 'avatar_url'>
+  transport?: MeshTransport
+  signal_strength?: number | null
+  ip_address?: string | null
+  is_relay?: boolean
+  joined_at?: string
+  last_ping_at?: string
+  last_seen?: string
+  revoked?: boolean
+  workspace_id?: string
+  secret_hash?: string
 }
 
 export interface MeshSyncPayload {

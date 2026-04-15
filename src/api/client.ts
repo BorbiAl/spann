@@ -165,7 +165,11 @@ apiClient.interceptors.response.use(
       }
 
       if (!email && typeof localStorage !== 'undefined') {
-        const lastEmail = localStorage.getItem('lastEmail')
+        // Try both possible key formats (with and without spann- prefix)
+        let lastEmail = localStorage.getItem('spann-lastEmail')
+        if (!lastEmail) {
+          lastEmail = localStorage.getItem('lastEmail')
+        }
         if (lastEmail?.trim()) {
           email = lastEmail.trim()
         }

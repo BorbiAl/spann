@@ -393,12 +393,21 @@ class DatabaseClient:
             logger.warning("supabase_healthcheck_failed", extra={"error": str(exc)})
             return False
 
-    async def register_user(self, *, email: str, password: str, name: str, company_name: str | None = None) -> dict[str, Any]:
+    async def register_user(
+        self,
+        *,
+        email: str,
+        password: str,
+        name: str,
+        company_name: str | None = None,
+        locale: str | None = None,
+    ) -> dict[str, Any]:
         """Create a new user and default workspace for login bootstrap flows."""
 
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
         display_name = self._sanitize_text(name, max_len=120)
         safe_company_name = self._sanitize_optional_text(company_name, max_len=120)
+        safe_locale = self._sanitize_text(locale or "en-US", max_len=16)
         email_domain = self._extract_email_domain(normalized_email)
         company_domain = email_domain if self._is_company_domain(email_domain) else None
 
@@ -408,6 +417,7 @@ class DatabaseClient:
                 password=password,
                 name=display_name,
                 company_name=safe_company_name,
+                locale=safe_locale,
             )
 
         auth_client = await self.auth_client()
@@ -442,6 +452,7 @@ class DatabaseClient:
                         password=password,
                         name=display_name,
                         company_name=safe_company_name,
+                        locale=safe_locale,
                     )
                 raise HTTPException(status_code=400, detail={"code": "register_failed", "message": "Unable to register user."})
         except Exception as exc:
@@ -467,6 +478,7 @@ class DatabaseClient:
                             password=password,
                             name=display_name,
                             company_name=safe_company_name,
+                            locale=safe_locale,
                         )
                     raise
                 else:
@@ -483,6 +495,7 @@ class DatabaseClient:
                         password=password,
                         name=display_name,
                         company_name=safe_company_name,
+                        locale=safe_locale,
                     )
                 raise
         finally:
@@ -500,12 +513,14 @@ class DatabaseClient:
                 user_id=user_id,
                 email=user.email or normalized_email,
                 display_name=display_name,
-                locale="en-US",
+                locale=safe_locale,
             )
         except Exception as exc:
             if self._is_users_email_conflict(exc):
                 raise ValueError("email_already_exists") from exc
             raise
+
+        await self.update_user_preferences(user_id=user_id, locale=safe_locale, coaching_enabled=None, accessibility_settings=None)
 
         write_client = await self._privileged_client()
 
@@ -811,6 +826,37 @@ class DatabaseClient:
             return None
         email = rows[0].get("email")
         return str(email).lower() if email else None
+
+    async def resolve_user_email(self, *, user_id: str, fallback_email: str | None = None) -> str | None:
+        """Resolve user email from profile, auth provider fallback, or trusted client fallback."""
+
+        resolved = await self.get_user_email(user_id=user_id)
+        if resolved:
+            return resolved
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+
+        if not settings.test_mode:
+            try:
+                client = await self._privileged_client()
+                response = await self._execute(
+                    "resolve_user_email_auth_users",
+                    client.table("auth.users").select("email").eq("id", safe_user_id).limit(1),
+                )
+                rows = self._extract_data(response) or []
+                if rows:
+                    email = rows[0].get("email")
+                    if email:
+                        return str(email).lower()
+            except Exception:
+                pass
+
+        if fallback_email:
+            safe_fallback = self._sanitize_text(fallback_email.lower(), max_len=320)
+            if safe_fallback:
+                return safe_fallback
+
+        return None
 
     async def invite_user_by_email(
         self,
@@ -1436,6 +1482,78 @@ class DatabaseClient:
             raise
         data = self._extract_data(response) or []
         return data[0] if data else payload
+
+    async def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
+        """Fetch the current user's full profile."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            return local_store.get_user_profile(safe_user_id)
+
+        client = await self.client()
+        response = await self._execute(
+            "get_user_profile",
+            client.table("users")
+            .select("id,email,username,display_name,bio,timezone,locale,role,avatar_url")
+            .eq("id", safe_user_id)
+            .limit(1),
+        )
+        rows = self._extract_data(response) or []
+        return cast(dict[str, Any], rows[0]) if rows else None
+
+    async def update_user_profile(
+        self,
+        user_id: str,
+        *,
+        display_name: str | None,
+        bio: str | None,
+        timezone: str | None,
+        avatar_url: str | None,
+    ) -> dict[str, Any] | None:
+        """Patch mutable user profile fields and return the updated row."""
+
+        safe_user_id = self._sanitize_text(user_id, max_len=128)
+        if settings.test_mode or (settings.auth_fallback_enabled and safe_user_id in local_store.users_by_id):
+            return local_store.update_user_profile(
+                safe_user_id,
+                display_name=display_name,
+                bio=bio,
+                timezone=timezone,
+                avatar_url=avatar_url,
+            )
+
+        client = await self.client()
+        payload: dict[str, Any] = {"updated_at": datetime.now(UTC).isoformat()}
+        if display_name is not None:
+            normalized_display_name = self._sanitize_text(display_name, max_len=64)
+            payload["display_name"] = normalized_display_name
+            # Keep legacy profile columns in sync with display_name updates.
+            payload["name"] = self._sanitize_text(normalized_display_name, max_len=120)
+            payload["initials"] = self._initials_from_name(normalized_display_name)
+        if bio is not None:
+            payload["bio"] = self._sanitize_optional_text(bio, max_len=500)
+        if timezone is not None:
+            payload["timezone"] = self._sanitize_text(timezone, max_len=64) if timezone else None
+        if avatar_url is not None:
+            payload["avatar_url"] = self._sanitize_optional_text(avatar_url, max_len=1_000_000)
+
+        try:
+            await self._execute(
+                "update_user_profile",
+                client.table("users").update(payload).eq("id", safe_user_id),
+            )
+        except APIError as exc:
+            error_text = str(exc).lower()
+            # Backward compatibility for environments where users.avatar_url is not present yet.
+            if "avatar_url" in payload and ("column" in error_text and "avatar_url" in error_text):
+                payload.pop("avatar_url", None)
+                await self._execute(
+                    "update_user_profile_without_avatar",
+                    client.table("users").update(payload).eq("id", safe_user_id),
+                )
+            else:
+                raise
+        return await self.get_user_profile(user_id)
 
     async def get_user_preferences(self, user_id: str) -> dict[str, Any]:
         """Fetch user preferences by user id."""

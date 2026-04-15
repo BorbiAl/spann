@@ -10,7 +10,9 @@ import AccessibilityView from "../views/AccessibilityView";
 import TranslatorView from "../views/TranslatorView";
 import SettingsView from "../views/SettingsView";
 import CallView from "../views/CallView";
+import SupportView from "../views/SupportView";
 import { useTheme } from "./ThemeProvider";
+import { meshApi } from "../api/mesh";
 import {
 	CHANNELS,
 	DEFAULT_MESSAGES_BY_CHANNEL,
@@ -56,6 +58,19 @@ function toFallbackUnread() {
 	return unread;
 }
 
+function sanitizeUnreadMap(unreadMap, channelRows) {
+	const next = {};
+	(channelRows || []).forEach((channel) => {
+		const channelId = String(channel?.id || "");
+		if (!channelId) {
+			return;
+		}
+		const value = Number(unreadMap?.[channelId] || 0);
+		next[channelId] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+	});
+	return next;
+}
+
 function toFallbackMoodByChannel() {
 	const moodMap = {};
 	CHANNELS.forEach((channel) => {
@@ -75,6 +90,68 @@ function normalizePulseScore(scoreValue) {
 	return Math.max(0, Math.min(100, Math.round(raw)));
 }
 
+function isUuidLike(value) {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function hasCyrillicText(value) {
+	return /[\u0400-\u04FF]/.test(String(value || ""));
+}
+
+function detectSourceLanguage(text) {
+	const value = String(text || "").trim();
+	if (!value) {
+		return { locale: "en-US", culture: "American", isEnglish: true };
+	}
+
+	const checks = [
+		{ regex: /[\u0400-\u04FF]/, locale: "bg-BG", culture: "Bulgarian" },
+		{ regex: /[\u0370-\u03FF]/, locale: "el-GR", culture: "Greek" },
+		{ regex: /[\u0590-\u05FF]/, locale: "he-IL", culture: "Israeli" },
+		{ regex: /[\u0600-\u06FF]/, locale: "ar-SA", culture: "Arabian" },
+		{ regex: /[\u0900-\u097F]/, locale: "hi-IN", culture: "Indian" },
+		{ regex: /[\u0E00-\u0E7F]/, locale: "th-TH", culture: "Thai" },
+		{ regex: /[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/, locale: "ko-KR", culture: "Korean" },
+		{ regex: /[\u3040-\u30FF]/, locale: "ja-JP", culture: "Japanese" },
+		{ regex: /[\u4E00-\u9FFF]/, locale: "zh-CN", culture: "Chinese" }
+	];
+
+	for (const check of checks) {
+		if (check.regex.test(value)) {
+			return { locale: check.locale, culture: check.culture, isEnglish: false };
+		}
+	}
+
+	const lowered = value.toLowerCase();
+	const latinRules = [
+		{ locale: "es-ES", culture: "Spanish", pattern: /\b(hola|gracias|por favor|buenos|equipo|mensaje|necesito)\b/ },
+		{ locale: "fr-FR", culture: "French", pattern: /\b(bonjour|merci|s'il vous plait|équipe|besoin|message)\b/ },
+		{ locale: "de-DE", culture: "German", pattern: /\b(hallo|danke|bitte|team|nachricht|brauche)\b/ },
+		{ locale: "it-IT", culture: "Italian", pattern: /\b(ciao|grazie|per favore|squadra|messaggio|bisogno)\b/ },
+		{ locale: "pt-BR", culture: "Brazilian", pattern: /\b(olá|obrigado|por favor|equipe|mensagem|preciso)\b/ },
+		{ locale: "nl-NL", culture: "Dutch", pattern: /\b(hallo|dank|alsjeblieft|team|bericht|nodig)\b/ },
+		{ locale: "tr-TR", culture: "Turkish", pattern: /\b(merhaba|teşekkürler|lütfen|takım|mesaj|ihtiyacım)\b/ },
+		{ locale: "pl-PL", culture: "Polish", pattern: /\b(cześć|dziękuję|proszę|zespół|wiadomość|potrzebuję)\b/ }
+	];
+
+	for (const rule of latinRules) {
+		if (rule.pattern.test(lowered)) {
+			return { locale: rule.locale, culture: rule.culture, isEnglish: false };
+		}
+	}
+
+	const hasExtendedLatin = /[\u00C0-\u024F]/.test(value);
+	if (hasExtendedLatin) {
+		return { locale: "auto", culture: "Global", isEnglish: false };
+	}
+
+	return { locale: "en-US", culture: "American", isEnglish: true };
+}
+
+function isDirectChannel(channel) {
+	return String(channel?.kind || "").toLowerCase() === "dm" || String(channel?.id || "").startsWith("dm:") || String(channel?.name || "").startsWith("@");
+}
+
 function formatMessageTime(timestamp) {
 	const date = timestamp ? new Date(timestamp) : new Date();
 	if (Number.isNaN(date.getTime())) {
@@ -87,6 +164,8 @@ function toUiMessage(apiMessage) {
 	const reactions = Array.isArray(apiMessage?.reactions)
 		? apiMessage.reactions.map((reaction) => `${reaction.emoji || ""} ${Number(reaction.count) || 0}`.trim())
 		: [];
+	const originalText = String(apiMessage?.text || "").trim();
+	const translatedText = String(apiMessage?.text_translated || "").trim();
 
 	return {
 		id: String(apiMessage?.id || Date.now()),
@@ -94,10 +173,11 @@ function toUiMessage(apiMessage) {
 		initials: String(apiMessage?.user?.initials || "US"),
 		color: String(apiMessage?.user?.color || "#0f67b7"),
 		time: formatMessageTime(apiMessage?.created_at),
-		text: String(apiMessage?.text_translated || apiMessage?.text || ""),
+		text: originalText || translatedText,
+		translatedText: translatedText || null,
 		reactions,
-		translated: Boolean(apiMessage?.text_translated),
-		lang: apiMessage?.source_locale ? `=��� ${apiMessage.source_locale}` : undefined
+		translated: Boolean(translatedText),
+		lang: apiMessage?.source_locale ? `${apiMessage.source_locale} -> en-US` : undefined
 	};
 }
 
@@ -180,25 +260,51 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, onJoinChannel, onLeaveChannel, joinedChannelIds, jumpRef, collapsed }) {
+	const [jumpSearch, setJumpSearch] = useState("");
+
 	if (isChatLayout) {
+		if (collapsed) return null;
+
+		const filteredChannels = jumpSearch.trim()
+			? channels.filter((c) => String(c.name).toLowerCase().includes(jumpSearch.toLowerCase()))
+			: channels;
+
 		return (
 			<aside className="sidebar chat-sidebar">
 				<div className="chat-sidebar-head">
 					<p className="chat-sidebar-title">Teams</p>
 					<label className="chat-jump">
 						<Icon name="search" size={14} />
-						<input type="text" value="" placeholder="Jump to..." readOnly aria-label="Jump to" />
+						<input
+							ref={jumpRef}
+							type="text"
+							value={jumpSearch}
+							onChange={(e) => setJumpSearch(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Escape") { setJumpSearch(""); e.target.blur(); }
+								if (e.key === "Enter" && filteredChannels.length > 0) {
+									onChannelChange(filteredChannels[0].id);
+									setJumpSearch("");
+									e.target.blur();
+								}
+							}}
+							placeholder="Jump to..."
+							aria-label="Jump to channel"
+						/>
 					</label>
 				</div>
 
 				<ChannelList
-					channels={channels}
+					channels={filteredChannels}
 					activeChannelId={activeChannelId}
-					onChannelChange={onChannelChange}
+					onChannelChange={(id) => { onChannelChange(id); setJumpSearch(""); }}
 					channelUnread={channelUnread}
 					onCreateChannel={onCreateChannel}
 					onStartDirectMessage={onStartDirectMessage}
+					onJoinChannel={onJoinChannel}
+					onLeaveChannel={onLeaveChannel}
+					joinedChannelIds={joinedChannelIds}
 					variant="teams"
 				/>
 			</aside>
@@ -235,6 +341,9 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					activeChannelId={activeChannelId}
 					onChannelChange={onChannelChange}
 					channelUnread={channelUnread}
+					onJoinChannel={onJoinChannel}
+					onLeaveChannel={onLeaveChannel}
+					joinedChannelIds={joinedChannelIds}
 				/>
 			) : (
 				<SideSection activeView={activeView} />
@@ -398,7 +507,8 @@ function WorkspaceHeaderBar({ activeView, onToggleContext, onLogout }) {
 		pulse: "Crowd Pulse",
 		accessibility: "Accessibility Panel",
 		translator: "Cultural Translator",
-		settings: "Settings"
+		settings: "Settings",
+		support: "Support"
 	};
 
 	return (
@@ -460,7 +570,8 @@ function MainPanel({
 	onChangeAccessibility,
 	accessibilitySaveState,
 	authState,
-	onLogout
+	onLogout,
+	currentUserName,
 }) {
 	function renderView() {
 		if (activeView === "call") {
@@ -473,11 +584,13 @@ function MainPanel({
 					channelMood={channelMood}
 					messages={messages}
 					accessibilityPrefs={accessibilityPrefs}
+					preferredLocale={authState?.user?.locale || "en-US"}
 					onSendMessage={onSendMessage}
 					onReactMessage={onReactMessage}
 					translateEnabled={translateEnabled}
 					setTranslateEnabled={setTranslateEnabled}
 					showNudge={showNudge}
+					currentUserName={currentUserName}
 					setShowNudge={setShowNudge}
 					onStartCall={() => onViewChange("call")}
 				/>
@@ -503,6 +616,8 @@ function MainPanel({
 					onLogAction={onLogCarbon}
 					isSubmitting={carbonSaving}
 					errorText={carbonError}
+					onOpenSettings={() => onViewChange("settings")}
+					onOpenSupport={() => onViewChange("support")}
 				/>
 			);
 		}
@@ -532,8 +647,13 @@ function MainPanel({
 				<SettingsView
 					authState={authState}
 					onLogout={onLogout}
+					accessibilityPrefs={accessibilityPrefs}
+					onChangeAccessibility={onChangeAccessibility}
 				/>
 			);
+		}
+		if (activeView === "support") {
+			return <SupportView />;
 		}
 		return <TranslatorView />;
 	}
@@ -570,6 +690,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const [channelUnread, setChannelUnread] = useState(() => loadFromStorage("spann-channel-unread", toFallbackUnread()));
 	const [translateEnabled, setTranslateEnabled] = useState(() => loadFromStorage("spann-translate-enabled", true));
 	const [showNudge, setShowNudge] = useState(() => loadFromStorage("spann-show-nudge", true));
+	const [joinedChannelIds, setJoinedChannelIds] = useState(() => loadFromStorage("spann-joined-channel-ids", []));
+	const [myReactionsByMessage, setMyReactionsByMessage] = useState(() => loadFromStorage("spann-my-reactions", {}));
 	const [channelMoodById, setChannelMoodById] = useState(() => toFallbackMoodByChannel());
 	const [pulseChannels, setPulseChannels] = useState(() =>
 		fallbackChannels.map((channel) => ({ id: channel.id, name: channel.name, energy: Number(channel.mood || 60) }))
@@ -595,11 +717,46 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		})
 	);
 	const [backendConnected, setBackendConnected] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const prefsLoadedRef = useRef(false);
+	const jumpInputRef = useRef(null);
+
+	// Refs so the stable keydown effect can read current values without stale closures
+	const activeViewRef = useRef(activeView);
+	const activeChannelIdRef = useRef(activeChannelId);
+	const channelsRef = useRef(channels);
+	useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
+	useEffect(() => { activeChannelIdRef.current = activeChannelId; }, [activeChannelId]);
+	useEffect(() => { channelsRef.current = channels; }, [channels]);
 
 	const liveAuth = authState || getAuthState();
 	const workspaceId = String(liveAuth?.workspaceId || "").trim();
 	const currentUserId = String(liveAuth?.userId || liveAuth?.user?.id || "").trim();
+	const workspaceName = String(
+		liveAuth?.workspaceName ||
+		liveAuth?.workspace?.name ||
+		liveAuth?.user?.workspace_name ||
+		""
+	).trim() || (workspaceId ? `Workspace ${workspaceId.slice(0, 8)}` : "Spann Workspace");
+	const workspaceSubtitle = workspaceId
+		? `ID ${workspaceId.slice(0, 8)}...`
+		: "Premium Connectivity";
+	const userName = String(
+		liveAuth?.user?.display_name ||
+		liveAuth?.user?.name ||
+		liveAuth?.user?.email ||
+		liveAuth?.email ||
+		"Member"
+	).trim();
+	const userRole = String(liveAuth?.user?.role || "Member").trim() || "Member";
+	const userAvatar = String(liveAuth?.user?.avatar_url || liveAuth?.user?.avatar || "").trim();
+	const userInitials = userName
+		.split(/\s+/)
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((word) => word[0])
+		.join("")
+		.toUpperCase() || "ME";
 
 	const activeChannel = useMemo(() => {
 		const found = channels.find((channel) => String(channel.id) === String(activeChannelId));
@@ -611,14 +768,98 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const micActive = Boolean(accessibilityPrefs.micJoined);
 
 	const navItems = useMemo(() => {
-		const totalChatUnread = Object.values(channelUnread).reduce((sum, count) => sum + (Number(count) || 0), 0);
+		const totalChatUnread = channels.reduce((sum, channel) => sum + (Number(channelUnread?.[channel.id]) || 0), 0);
 		return NAV_ITEMS.map((item) => {
 			if (item.key === "chat") {
 				return { ...item, badge: totalChatUnread };
 			}
 			return item;
 		});
-	}, [channelUnread]);
+	}, [channelUnread, channels]);
+
+	const sidebarItems = useMemo(() => navItems.filter((item) => item.key !== "settings"), [navItems]);
+	const sidebarIconByKey = {
+		chat: "chat",
+		mesh: "lan",
+		carbon: "eco",
+		pulse: "insert_chart",
+		accessibility: "accessibility_new",
+		translator: "translate",
+		settings: "settings"
+	};
+	const sidebarLabelByKey = {
+		mesh: "Network",
+		pulse: "Analytics",
+		translator: "Translate"
+	};
+
+	// ── Global keyboard shortcuts ─────────────────────────────────────────────
+	useEffect(() => {
+		function onKeyDown(e) {
+			const ctrl = e.ctrlKey || e.metaKey;
+			const shift = e.shiftKey;
+			const view = activeViewRef.current;
+			const chanId = activeChannelIdRef.current;
+			const chans = channelsRef.current;
+
+			// Ctrl+, → open settings (profile)
+			if (ctrl && !shift && e.key === ",") {
+				e.preventDefault();
+				document.dispatchEvent(new CustomEvent("spann:goto-settings", { detail: { section: "profile" } }));
+				setActiveView("settings");
+				return;
+			}
+
+			// Ctrl+/ → open settings (shortcuts section)
+			if (ctrl && !shift && e.key === "/") {
+				e.preventDefault();
+				document.dispatchEvent(new CustomEvent("spann:goto-settings", { detail: { section: "shortcuts" } }));
+				setActiveView("settings");
+				return;
+			}
+
+			// F11 → fullscreen toggle
+			if (e.key === "F11") {
+				e.preventDefault();
+				if (!document.fullscreenElement) {
+					document.documentElement.requestFullscreen?.().catch(() => {});
+				} else {
+					document.exitFullscreen?.().catch(() => {});
+				}
+				return;
+			}
+
+			// Ctrl+Shift+\ → collapse/expand chat sidebar
+			if (ctrl && shift && (e.key === "\\" || e.key === "|")) {
+				e.preventDefault();
+				setSidebarCollapsed((c) => !c);
+				return;
+			}
+
+			// Ctrl+K → focus channel jump input (chat only)
+			if (ctrl && !shift && e.key === "k" && view === "chat") {
+				e.preventDefault();
+				jumpInputRef.current?.focus();
+				return;
+			}
+
+			// Alt+↑/↓ → previous / next channel (chat only)
+			if (e.altKey && !ctrl && !shift && (e.key === "ArrowUp" || e.key === "ArrowDown") && view === "chat") {
+				e.preventDefault();
+				const idx = chans.findIndex((c) => String(c.id) === String(chanId));
+				if (idx < 0) return;
+				const next = e.key === "ArrowUp"
+					? Math.max(0, idx - 1)
+					: Math.min(chans.length - 1, idx + 1);
+				if (String(chans[next]?.id) !== String(chanId)) {
+					setActiveChannelId(chans[next].id);
+				}
+			}
+		}
+
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, []); // intentionally stable — reads live values via refs
 
 	useEffect(() => {
 		localStorage.setItem("spann-active-view", JSON.stringify(activeView));
@@ -643,6 +884,14 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	useEffect(() => {
 		localStorage.setItem("spann-show-nudge", JSON.stringify(showNudge));
 	}, [showNudge]);
+
+	useEffect(() => {
+		localStorage.setItem("spann-my-reactions", JSON.stringify(myReactionsByMessage));
+	}, [myReactionsByMessage]);
+
+	useEffect(() => {
+		localStorage.setItem("spann-joined-channel-ids", JSON.stringify(joinedChannelIds));
+	}, [joinedChannelIds]);
 
 	useEffect(() => {
 		setForcedTheme("light");
@@ -700,6 +949,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			return;
 		}
 
+		if (!isUuidLike(channelId)) {
+			return;
+		}
+
 		try {
 			const payload = await apiRequest(`/channels/${encodeURIComponent(channelId)}/messages?limit=100`);
 			const apiMessages = Array.isArray(payload?.data?.messages) ? payload.data.messages : [];
@@ -730,6 +983,14 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		try {
 			const snapshots = await Promise.all(
 				channelRows.map(async (channel) => {
+					if (!isUuidLike(channel?.id)) {
+						return {
+							id: channel.id,
+							name: channel.name,
+							energy: Number(channelMoodById[channel.id] || 60)
+						};
+					}
+
 					try {
 						const payload = await apiRequest(`/pulse/${encodeURIComponent(channel.id)}`);
 						const snapshot = payload?.data || {};
@@ -787,8 +1048,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMeshBusy(true);
 		setMeshError("");
 		try {
-			const payload = await apiRequest("/mesh/nodes");
-			setMeshNodes(Array.isArray(payload?.data) ? payload.data : []);
+			const nodes = await meshApi.listNodes();
+			setMeshNodes(Array.isArray(nodes) ? nodes : []);
 			return true;
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Unable to load mesh nodes");
@@ -847,7 +1108,16 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						  }))
 						: fallbackChannels;
 
-				setChannels(mappedChannels);
+				setChannels((current) => {
+					const localOnlyChannels = (current || []).filter((channel) => !isUuidLike(channel?.id));
+					const merged = [...mappedChannels];
+					localOnlyChannels.forEach((channel) => {
+						if (!merged.some((row) => String(row.id) === String(channel.id))) {
+							merged.push(channel);
+						}
+					});
+					return merged;
+				});
 				setBackendConnected(true);
 
 				const nextChannelId = mappedChannels.some((channel) => String(channel.id) === String(activeChannelId))
@@ -915,7 +1185,53 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMobileSheetOpen(false);
 	}, [activeView]);
 
+	useEffect(() => {
+		setChannelUnread((current) => {
+			const sanitized = sanitizeUnreadMap(current, channels);
+			const currentKeys = Object.keys(current || {}).sort();
+			const sanitizedKeys = Object.keys(sanitized).sort();
+			if (currentKeys.length !== sanitizedKeys.length) {
+				return sanitized;
+			}
+			for (let i = 0; i < sanitizedKeys.length; i += 1) {
+				const key = sanitizedKeys[i];
+				if (currentKeys[i] !== key || Number(current[key] || 0) !== Number(sanitized[key] || 0)) {
+					return sanitized;
+				}
+			}
+			return current;
+		});
+	}, [channels]);
+
+	useEffect(() => {
+		setJoinedChannelIds((current) => {
+			const joinedSet = new Set((current || []).map((id) => String(id)));
+			let changed = false;
+			channels.forEach((channel) => {
+				if (isDirectChannel(channel)) {
+					return;
+				}
+				const id = String(channel.id || "");
+				if (!id) {
+					return;
+				}
+				if (!joinedSet.has(id)) {
+					joinedSet.add(id);
+					changed = true;
+				}
+			});
+			if (!changed) {
+				return current;
+			}
+			return Array.from(joinedSet);
+		});
+	}, [channels]);
+
 	function handleChannelChange(channelId) {
+		setChannelUnread((current) => ({
+			...current,
+			[channelId]: 0
+		}));
 		setActiveChannelId(channelId);
 		if (activeView !== "chat") {
 			setActiveView("chat");
@@ -963,25 +1279,134 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	function handleStartDirectMessage(person) {
-		const personName = String(person?.name || "teammate").trim();
+		const inputName = String(person?.name || "").trim();
+		const rawName = inputName || (typeof window !== "undefined" ? window.prompt("Start direct message with", "Sarah Chen") : "");
+		const personName = String(rawName || "").trim();
+		if (!personName) {
+			return;
+		}
+
+		const dmId = `dm:${personName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+		const dmName = `@${personName}`;
+
+		setChannels((current) => {
+			if (current.some((channel) => String(channel.id) === dmId)) {
+				return current;
+			}
+			return [
+				...current,
+				{
+					id: dmId,
+					name: dmName,
+					mood: 60,
+					kind: "dm"
+				}
+			];
+		});
+		setMessagesByChannel((current) => ({
+			...current,
+			[dmId]: current[dmId] || []
+		}));
+		setChannelUnread((current) => ({
+			...current,
+			[dmId]: 0
+		}));
+		setActiveView("chat");
+		setActiveChannelId(dmId);
 		pushAppNotice(`Started direct chat with ${personName}.`, "success");
 	}
 
-	async function handleSendMessage(channelId, text, translated) {
+	function handleJoinChannel(channelId) {
+		const id = String(channelId || "");
+		if (!id) {
+			return;
+		}
+		setJoinedChannelIds((current) => {
+			const set = new Set((current || []).map((value) => String(value)));
+			set.add(id);
+			return Array.from(set);
+		});
+		setActiveView("chat");
+		setActiveChannelId(id);
+		pushAppNotice("Joined group.", "success");
+	}
+
+	function handleLeaveChannel(channelId) {
+		const id = String(channelId || "");
+		if (!id) {
+			return;
+		}
+		setJoinedChannelIds((current) => (current || []).filter((value) => String(value) !== id));
+		if (String(activeChannelId) === id) {
+			const joinedSet = new Set((joinedChannelIds || []).map((value) => String(value)).filter((value) => value !== id));
+			const fallbackChannel = channels.find((channel) => isDirectChannel(channel) || joinedSet.has(String(channel.id)));
+			if (fallbackChannel) {
+				setActiveChannelId(fallbackChannel.id);
+			}
+		}
+		pushAppNotice("Left group.", "info");
+	}
+
+	async function handleSendMessage(channelId, text, translated, sendOptions = {}) {
 		if (!channelId) {
 			return;
 		}
 
+		let outboundText = String(text || "");
+		let sourceLocale = translated ? "en-US" : null;
+		let wasAutoTranslated = false;
+		let translatedEnglishText = "";
+		const fromVoice = String(sendOptions?.origin || "").toLowerCase() === "voice";
+		const voiceSourceLocale = String(sendOptions?.sourceLocale || "").trim();
+		const shouldUseAiAdaptation = translated || fromVoice || Boolean(sendOptions?.autoDetectLanguage) || Boolean(sendOptions?.applyCulturalMeaning);
+		const detected = detectSourceLanguage(text);
+
+		if (shouldUseAiAdaptation && (!detected.isEnglish || fromVoice)) {
+			try {
+				const channelTone = String(channels.find((channel) => String(channel.id) === String(channelId))?.tone || "neutral");
+				const translationPayload = await apiRequest("/translate", {
+					method: "POST",
+					body: JSON.stringify({
+						phrase: text,
+						source_locale: fromVoice ? "auto" : (detected.locale || voiceSourceLocale || "auto"),
+						target_locale: "en-US",
+						source_culture: fromVoice ? "auto" : (detected.culture || "Global"),
+						target_culture: "American",
+						workplace_tone: channelTone
+					})
+				});
+
+				const translationData = translationPayload?.data || translationPayload || {};
+				const literal = String(translationData?.literal || "").trim();
+				const cultural = String(translationData?.cultural || "").trim();
+				const culturallyAdapted = cultural || literal;
+				if (culturallyAdapted) {
+					translatedEnglishText = culturallyAdapted;
+					sourceLocale = fromVoice ? (voiceSourceLocale || "auto") : detected.locale;
+					wasAutoTranslated = true;
+					const localeLabel = fromVoice ? (voiceSourceLocale || "auto") : detected.locale;
+					pushAppNotice(`Translated from ${localeLabel} to English with cultural adaptation.`, "info");
+				}
+			} catch (error) {
+				if (fromVoice) {
+					pushAppNotice("AI translation unavailable right now. Sent original voice transcript.", "info");
+				} else {
+					pushAppNotice("Translation unavailable right now. Sent original text.", "info");
+				}
+			}
+		}
+
 		let usedLocalFallback = false;
 
-		if (backendConnected) {
+		if (backendConnected && isUuidLike(channelId)) {
 			try {
 				const payload = await apiRequest("/messages", {
 					method: "POST",
 					body: JSON.stringify({
 						channel_id: channelId,
-						text,
-						source_locale: translated ? "en-US" : null
+						text: String(text || "").trim(),
+						text_translated: translatedEnglishText || undefined,
+						source_locale: sourceLocale
 					})
 				});
 
@@ -1012,10 +1437,12 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			initials: "YU",
 			color: "#0f67b7",
 			time: formatted,
-			text,
+			text: String(text || "").trim(),
+			translatedText: translatedEnglishText || null,
+			origin: fromVoice ? "voice" : "text",
 			reactions: ["G�� 1"],
-			translated,
-			lang: translated ? "=��� en-US" : undefined
+			translated: wasAutoTranslated,
+			lang: wasAutoTranslated ? `${sourceLocale || "auto"} -> en-US` : undefined
 		};
 
 		setMessagesByChannel((current) => ({
@@ -1030,9 +1457,17 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			return;
 		}
 
+		const messageKey = String(messageId);
+		const emojiKey = String(emoji);
+		const alreadyReacted = Array.isArray(myReactionsByMessage?.[messageKey]) && myReactionsByMessage[messageKey].includes(emojiKey);
+		if (alreadyReacted) {
+			pushAppNotice("You already used that reaction on this message.", "info");
+			return;
+		}
+
 		let usedLocalFallback = false;
 
-		if (backendConnected) {
+		if (backendConnected && isUuidLike(channelId) && isUuidLike(messageId)) {
 			try {
 				const payload = await apiRequest(`/messages/${encodeURIComponent(messageId)}/reactions`, {
 					method: "POST",
@@ -1051,6 +1486,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 							reactions: reactions.map((reaction) => `${reaction.emoji} ${reaction.count}`)
 						};
 					})
+				}));
+				setMyReactionsByMessage((current) => ({
+					...current,
+					[messageKey]: [...(current[messageKey] || []), emojiKey]
 				}));
 				pushAppNotice("Reaction added.", "success");
 				return;
@@ -1075,6 +1514,10 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 					reactions: incrementReaction(message.reactions || [], emoji)
 				};
 			})
+		}));
+		setMyReactionsByMessage((current) => ({
+			...current,
+			[messageKey]: [...(current[messageKey] || []), emojiKey]
 		}));
 		pushAppNotice(usedLocalFallback ? "Reaction saved locally." : "Reaction added.", usedLocalFallback ? "info" : "success");
 	}
@@ -1111,10 +1554,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMeshError("");
 		try {
 			const suffix = String(Date.now()).slice(-4);
-			await apiRequest("/mesh/register", {
-				method: "POST",
-				body: JSON.stringify({ node_name: `web-${suffix}` })
-			});
+			await meshApi.register(`web-${suffix}`);
 			await refreshMeshNodes();
 			pushAppNotice("Mesh node registered.", "success");
 		} catch (error) {
@@ -1133,9 +1573,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		setMeshBusy(true);
 		setMeshError("");
 		try {
-			await apiRequest(`/mesh/nodes/${encodeURIComponent(nodeId)}/revoke`, {
-				method: "POST"
-			});
+			await meshApi.revokeNode(nodeId);
 			await refreshMeshNodes();
 			pushAppNotice("Mesh node revoked.", "success");
 		} catch (error) {
@@ -1189,77 +1627,26 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								<span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
 							</div>
 							<div>
-								<p className="font-bold text-on-surface leading-tight">Workspace</p>
-								<p className="text-[11px] text-on-surface-variant">Premium Connectivity</p>
+								<p className="font-bold text-on-surface leading-tight truncate max-w-[180px]">{workspaceName}</p>
+								<p className="text-[11px] text-on-surface-variant truncate max-w-[180px]">{workspaceSubtitle}</p>
 							</div>
 						</div>
 						<nav className="flex-1 flex flex-col gap-1">
-							<div
-								onClick={() => setActiveView("chat")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "chat"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">chat</span>
-								<span>Chat</span>
-							</div>
-							<div
-								onClick={() => setActiveView("mesh")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "mesh"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">lan</span>
-								<span>Network</span>
-							</div>
-							<div
-								onClick={() => setActiveView("carbon")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "carbon"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">eco</span>
-								<span>Carbon</span>
-							</div>
-							<div
-								onClick={() => setActiveView("pulse")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "pulse"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">insert_chart</span>
-								<span>Analytics</span>
-							</div>
-							<div
-								onClick={() => setActiveView("accessibility")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "accessibility"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">accessibility_new</span>
-								<span>Accessibility</span>
-							</div>
-							<div
-								onClick={() => setActiveView("translator")}
-								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
-									activeView === "translator"
-										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
-										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
-								}`}
-							>
-								<span className="material-symbols-outlined">translate</span>
-								<span>Translate</span>
-							</div>
+							{sidebarItems.map((item) => (
+								<div
+									key={item.key}
+									onClick={() => setActiveView(item.key)}
+									className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+										activeView === item.key
+											? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+											: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+									}`}
+								>
+									<span className="material-symbols-outlined">{sidebarIconByKey[item.key] || "circle"}</span>
+									<span>{sidebarLabelByKey[item.key] || item.label}</span>
+									{item.badge > 0 ? <span className="channel-unread">{item.badge}</span> : null}
+								</div>
+							))}
 						</nav>
 						<div className="border-t border-slate-200/30 pt-4 flex flex-col gap-1">
 							<div
@@ -1273,19 +1660,32 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								<span className="material-symbols-outlined">settings</span>
 								<span>Settings</span>
 							</div>
-							<div className="cursor-pointer active:opacity-80 flex items-center gap-3 p-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40 rounded-lg transition-all duration-200">
+							<div
+								onClick={() => setActiveView("support")}
+								className={`cursor-pointer active:opacity-80 flex items-center gap-3 p-3 rounded-lg transition-all duration-200 ${
+									activeView === "support"
+										? "bg-white/80 dark:bg-slate-800/80 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+										: "text-slate-600 dark:text-slate-400 hover:bg-slate-200/40 dark:hover:bg-slate-800/40"
+								}`}
+							>
 								<span className="material-symbols-outlined">contact_support</span>
 								<span>Support</span>
 							</div>
 							<div className="mt-4 flex items-center gap-3 px-2">
-								<img
-									className="w-8 h-8 rounded-full border border-white shadow-sm object-cover"
-									alt="Alex Chen"
-									src="https://lh3.googleusercontent.com/aida-public/AB6AXuByeBOsbOjKS8RHwUEWODHJbrABE-piL6bpQ692y7lREwJ5PtZYvz77K9X1U0xpn8Ok82nPk6-_eyyxtjTvNAgEZv4xb0BQmUYX6t68ZTC9zbkmZYBbPV_-3s9YV9M2vNkt8zYCYqhnB4NhAfArkSG0_VJDV-rECN5q_63TamGXCQ1wB4bhtRU0SbeCYLnQySTtcUuq3Bq3RsBVzj_ARwMZdfKnzLYCbLSglJJjr18Ng_EtXlRjgitlqqqk8nd_E_hwUGgULlNVRJsg"
-								/>
+								{userAvatar ? (
+									<img
+										className="w-8 h-8 rounded-full border border-white shadow-sm object-cover"
+										alt={`${userName} avatar`}
+										src={userAvatar}
+									/>
+								) : (
+									<div className="w-8 h-8 rounded-full border border-white shadow-sm bg-primary-container text-on-primary-container flex items-center justify-center text-[11px] font-bold">
+										{userInitials}
+									</div>
+								)}
 								<div className="overflow-hidden">
-									<p className="font-semibold text-on-surface truncate">Alex Chen</p>
-									<p className="text-[10px] text-on-surface-variant opacity-70">Admin Access</p>
+									<p className="font-semibold text-on-surface truncate">{userName}</p>
+									<p className="text-[10px] text-on-surface-variant opacity-70">{userRole}</p>
 								</div>
 							</div>
 						</div>
@@ -1303,6 +1703,11 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								onViewChange={setActiveView}
 								onCreateChannel={handleCreateChannel}
 								onStartDirectMessage={handleStartDirectMessage}
+								onJoinChannel={handleJoinChannel}
+								onLeaveChannel={handleLeaveChannel}
+								joinedChannelIds={joinedChannelIds}
+								jumpRef={jumpInputRef}
+								collapsed={sidebarCollapsed}
 								isChatLayout
 							/>
 						) : null}
@@ -1314,9 +1719,9 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 									activeChannel={activeChannel}
 									channelMood={activeMood}
 									messages={currentMessages}
-									onSendMessage={(channelLabel, text, translated) => {
+									onSendMessage={(channelLabel, text, translated, sendOptions) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-										return handleSendMessage(channel?.id || activeChannelId, text, translated);
+										return handleSendMessage(channel?.id || activeChannelId, text, translated, sendOptions);
 									}}
 									onReactMessage={(channelLabel, messageId, emoji) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
@@ -1348,6 +1753,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								accessibilitySaveState={accessibilitySaveState}
 									authState={liveAuth}
 									onLogout={onLogout}
+									currentUserName={liveAuth?.user?.display_name || liveAuth?.user?.name || ""}
 						/>
 						</div>
 

@@ -41,8 +41,17 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     -- Compatibility fields used by existing backend code paths.
     display_name TEXT,
+    username TEXT,
+    bio TEXT,
+    timezone TEXT,
+    role TEXT DEFAULT 'member',
+    avatar_url TEXT,
     coaching_enabled BOOLEAN DEFAULT TRUE,
-    accessibility_settings JSONB DEFAULT '{}'::jsonb
+    accessibility_settings JSONB DEFAULT '{}'::jsonb,
+    setup_platform TEXT,
+    setup_issues JSONB DEFAULT '[]'::jsonb,
+    setup_notes TEXT,
+    onboarding_completed BOOLEAN DEFAULT FALSE
 );
 
 -- 3) workspace_members

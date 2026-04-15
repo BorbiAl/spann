@@ -43,12 +43,20 @@ export default function Message({ message, index, onReaction }) {
                                                         ? "bg-[#0f67b7] text-white p-[14px] rounded-[8px] rounded-tr-sm max-w-[90%] shadow-[0_1px_2px_rgba(0,0,0,0.05)] flex-shrink"
                                                         : "text-[#1D1D1F] px-1 py-1 w-full"
                                         }
+                                                onDoubleClick={() => onReaction(message.id, "👍")}
                                 >
                                         <p className="text-[14px] leading-[1.45]">{message.text}</p>
+                                                {message.translatedText ? (
+                                                                <div className={`mt-2 pt-2 border-t ${isSelf ? "border-white/30" : "border-black/10"}`}>
+                                                                        <p className={`text-[12px] italic ${isSelf ? "text-white/90" : "text-[#425466]"}`}>
+                                                                                English: {message.translatedText}
+                                                                        </p>
+                                                                </div>
+                                                ) : null}
                                         {!isSelf && (
                                                 <div className="absolute -bottom-4 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white shadow-sm rounded-full p-1 border border-black/10">
-                                                        <span className="cursor-pointer hover:scale-125 transition-transform text-sm" onClick={() => onReaction(message.id, "??")} title="Like">??</span>
-                                                        <span className="cursor-pointer hover:scale-125 transition-transform text-sm" onClick={() => onReaction(message.id, "??")} title="Fire">??</span>
+                                                                <span className="cursor-pointer hover:scale-125 transition-transform text-sm" onClick={() => onReaction(message.id, "👍")} title="Like">👍</span>
+                                                                <span className="cursor-pointer hover:scale-125 transition-transform text-sm" onClick={() => onReaction(message.id, "🔥")} title="Fire">🔥</span>
                                                 </div>
                                         )}
                                 </div>

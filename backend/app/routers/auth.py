@@ -119,6 +119,7 @@ async def register(payload: RegisterRequest, request: Request, _rate_limit: None
             password=payload.password,
             name=payload.name,
             company_name=payload.company_name,
+            locale=payload.locale,
         )
     except ValueError:
         return error_response(status_code=409, code="email_already_exists", message="A user with this email already exists.")

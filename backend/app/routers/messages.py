@@ -67,6 +67,7 @@ async def create_message(
         channel_id=str(payload.channel_id),
         workspace_id=workspace_id,
         text=payload.text,
+        text_translated=payload.text_translated,
         mesh_origin=payload.mesh_origin,
         source_locale=payload.source_locale,
     )

@@ -24,6 +24,19 @@ class MagicLinkRequest(BaseModel):
     email: EmailStr
 
 
+class UserProfilePatchRequest(BaseModel):
+    """Patch payload for mutable user profile fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=64)
+    bio: str | None = Field(default=None, max_length=500)
+    timezone: str | None = Field(default=None, max_length=64)
+    # Settings avatar uploads are sent as data URLs (base64), which are often >4KB.
+    avatar_url: str | None = Field(default=None, max_length=1_000_000)
+    email: EmailStr | None = None
+
+
 class UserPreferencesPatchRequest(BaseModel):
     """Patch payload for user preferences and accessibility settings."""
 

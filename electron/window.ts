@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, app } from 'electron'
 import path from 'path'
+import { resolveElectronPath } from './path-utils'
 
 const isDev = !app.isPackaged
 
@@ -16,9 +17,10 @@ export function createMainWindow(): BrowserWindow {
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#111113',
+    fullscreen: true,
     show: false, // show after ready-to-show to avoid flash
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: resolveElectronPath('preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -33,7 +35,7 @@ export function createMainWindow(): BrowserWindow {
     win.loadURL(devUrl)
     win.webContents.openDevTools({ mode: 'detach' })
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'))
+    win.loadFile(resolveElectronPath('../dist/index.html'))
   }
 
   // ── Show when ready ───────────────────────────────────────────────────────
