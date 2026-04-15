@@ -685,19 +685,24 @@ function ShortcutsSection() {
 function AboutSection() {
 	const [checkState, setCheckState] = useState("idle");
 
-	function handleCheckUpdates() {
+	async function handleCheckUpdates() {
 		setCheckState("checking");
-		setTimeout(() => {
-			setCheckState("latest");
-			setTimeout(() => setCheckState("idle"), 3000);
-		}, 1200);
+		try {
+			const payload = await apiRequest("/health", { auth: false, skipRefresh: true, timeoutMs: 7000 });
+			const serverVersion = String(payload?.version || payload?.data?.version || "").trim();
+			const localVersion = String(import.meta.env.VITE_APP_VERSION || "").trim();
+			setCheckState(serverVersion && localVersion && serverVersion !== localVersion ? "update_available" : "latest");
+		} catch {
+			setCheckState("error");
+		}
+		setTimeout(() => setCheckState("idle"), 3000);
 	}
 
 	const links = [
-		{ label: "Release Notes",   href: "#" },
-		{ label: "Privacy Policy",  href: "#" },
-		{ label: "Terms of Service", href: "#" },
-		{ label: "Support",          href: "#" },
+		{ label: "Release Notes",   href: "https://github.com/BorbiAl/spann/releases" },
+		{ label: "Privacy Policy",  href: "https://github.com/BorbiAl/spann/blob/main/README.md" },
+		{ label: "Terms of Service", href: "https://github.com/BorbiAl/spann/blob/main/README.md" },
+		{ label: "Support",          href: "mailto:support@spann.io" },
 	];
 
 	return (
@@ -724,6 +729,8 @@ function AboutSection() {
 				>
 					{checkState === "checking" && "Checking…"}
 					{checkState === "latest"   && "✓ Up to date"}
+					{checkState === "update_available" && "Update available"}
+					{checkState === "error"    && "Check failed"}
 					{checkState === "idle"     && "Check for updates"}
 				</button>
 			</div>

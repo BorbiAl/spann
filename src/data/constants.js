@@ -228,18 +228,16 @@ export function incrementReaction(reactions, emoji) {
 
 const runtimeApiBase = typeof window !== "undefined" ? window.SPANN_API_BASE : "";
 const envApiBase = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "";
+const envNativeApiBase = (typeof import.meta !== "undefined" && import.meta.env?.VITE_NATIVE_API_BASE_URL) || "";
 const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent || "");
-
-// Native shells run without the Vite proxy, so file:// builds need an absolute backend URL.
-const nativeDefaultApiBase = isAndroid ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000";
-const fallbackApiBase = isFileProtocol ? nativeDefaultApiBase : "/api";
+const nativeConfiguredApiBase = String(envNativeApiBase || runtimeApiBase || "").trim();
+const fallbackApiBase = isFileProtocol ? nativeConfiguredApiBase : "/api";
 
 // Prefer runtime override, then Vite env, then protocol-aware fallback.
 export const API_BASE = String(runtimeApiBase || envApiBase || fallbackApiBase).replace(/\/+$/, "");
 
 function shouldRetryDirectBackend(responseStatus) {
-	return Number(responseStatus) === 404 && String(API_BASE).startsWith("/api");
+	return Number(responseStatus) === 404 && String(API_BASE).startsWith("/api") && nativeConfiguredApiBase;
 }
 
 async function fetchWithProxyFallback(path, requestInit) {
@@ -474,6 +472,13 @@ async function refreshAccessToken() {
 }
 
 async function requestRaw(path, options = {}, accessToken) {
+	if (!API_BASE) {
+		const error = new Error("API base URL is not configured. Set VITE_API_BASE_URL or VITE_NATIVE_API_BASE_URL.");
+		error.code = "API_BASE_NOT_CONFIGURED";
+		error.status = 0;
+		throw error;
+	}
+
 	beginNetworkRequest();
 	const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
 	const controller = timeoutMs > 0 ? new AbortController() : null;
@@ -533,6 +538,13 @@ async function requestRaw(path, options = {}, accessToken) {
 }
 
 async function requestFormDataRaw(path, options = {}, accessToken) {
+	if (!API_BASE) {
+		const error = new Error("API base URL is not configured. Set VITE_API_BASE_URL or VITE_NATIVE_API_BASE_URL.");
+		error.code = "API_BASE_NOT_CONFIGURED";
+		error.status = 0;
+		throw error;
+	}
+
 	beginNetworkRequest();
 	const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
 	const controller = timeoutMs > 0 ? new AbortController() : null;
@@ -768,6 +780,18 @@ export async function inviteOrganizationMember({ workspaceId, email, note }) {
 	return payload?.data || payload || {};
 }
 
+export async function fetchOrganizationMembers({ workspaceId }) {
+	const payload = await apiRequest(`/organizations/${encodeURIComponent(workspaceId)}/members`);
+	return payload?.data || payload || [];
+}
+
+export async function removeOrganizationMember({ workspaceId, memberUserId }) {
+	const payload = await apiRequest(`/organizations/${encodeURIComponent(workspaceId)}/members/${encodeURIComponent(memberUserId)}`, {
+		method: "DELETE"
+	});
+	return payload?.data || payload || {};
+}
+
 export async function requestOrganizationJoin({ workspaceId, message }) {
 	const payload = await apiRequest("/organizations/join-requests", {
 		method: "POST",
@@ -791,6 +815,14 @@ export async function decideOrganizationInvitation({ invitationId, decision }) {
 	const payload = await apiRequest(`/organizations/invitations/${encodeURIComponent(invitationId)}/decision`, {
 		method: "POST",
 		body: JSON.stringify({ decision })
+	});
+	return payload?.data || payload || {};
+}
+
+export async function fetchPublicRuntimeConfig() {
+	const payload = await apiRequest("/config/public", {
+		auth: false,
+		skipRefresh: true
 	});
 	return payload?.data || payload || {};
 }

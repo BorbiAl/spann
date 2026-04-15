@@ -174,6 +174,27 @@ def test_magic_link_rate_limited(client, monkeypatch: pytest.MonkeyPatch) -> Non
     assert status_codes[-1] == 429
 
 
+def test_register_email_not_confirmed_maps_to_conflict(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_register_user(**kwargs: object):
+        raise RuntimeError("Email not confirmed")
+
+    monkeypatch.setattr("app.routers.auth.db.register_user", fake_register_user)
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "user@spann.app",
+            "password": "Password123!",
+            "confirm_password": "Password123!",
+            "name": "User",
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 409
+    assert body["error"]["code"] == "email_not_confirmed"
+
+
 def test_login_device_hint_stored(client, monkeypatch: pytest.MonkeyPatch) -> None:
     captured = _mock_login_db(monkeypatch, user_id=str(uuid4()), workspace_id=str(uuid4()))
 

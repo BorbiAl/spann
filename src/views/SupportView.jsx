@@ -300,7 +300,11 @@ function ContactModal({ onClose }) {
 		e.preventDefault();
 		if (!form.subject.trim() || !form.body.trim()) return;
 		setState("sending");
-		await new Promise((r) => setTimeout(r, 1000));
+
+		const subject = encodeURIComponent(`[${String(form.priority || "normal").toUpperCase()}] ${form.subject.trim()}`);
+		const body = encodeURIComponent(form.body.trim());
+		const mailto = `mailto:support@spann.io?subject=${subject}&body=${body}`;
+		window.location.href = mailto;
 		setState("sent");
 	}
 

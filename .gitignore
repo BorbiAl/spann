@@ -10,6 +10,12 @@ logs/
 !.env.example
 backend/.env
 
+# Build artifacts
+dist-release/
+dist/
+*.exe
+*.asar
+
 # Python
 .venv/
 venv/

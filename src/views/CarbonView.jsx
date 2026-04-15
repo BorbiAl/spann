@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 
 export default function CarbonView({
 	leaderboard = [],
@@ -9,6 +9,8 @@ export default function CarbonView({
 	onOpenSettings,
 	onOpenSupport
 }) {
+	const [customLogBusy, setCustomLogBusy] = useState(false);
+
 	function toUserInitial(nameValue) {
 		const safeName = String(nameValue || "").trim();
 		return safeName ? safeName.charAt(0).toUpperCase() : "?";
@@ -23,6 +25,7 @@ export default function CarbonView({
 	}
 
 	const quickLogActions = [
+		{ key: "remote", label: "Home Office", icon: "home_work", kgCo2: 0, note: "Logged home office day", tone: "tertiary" },
 		{ key: "walk", label: "Walk", icon: "directions_walk", kgCo2: 0, note: "Logged walking commute", tone: "tertiary" },
 		{ key: "bike", label: "Bike", icon: "pedal_bike", kgCo2: 0, note: "Logged biking commute", tone: "tertiary" },
 		{ key: "bus", label: "Bus", icon: "directions_bus", kgCo2: 0.5, note: "Logged bus commute", tone: "primary" },
@@ -30,8 +33,12 @@ export default function CarbonView({
 		{ key: "car", label: "Car", icon: "directions_car", kgCo2: 2.8, note: "Logged car commute", tone: "primary" }
 	];
 
-	const normalizedLeaderboard = Array.isArray(leaderboard)
-		? leaderboard.map((entry) => {
+	const normalizedLeaderboard = useMemo(() => {
+		if (!Array.isArray(leaderboard)) {
+			return [];
+		}
+
+		return leaderboard.map((entry) => {
 			const id = String(entry?.id || entry?.user_id || "");
 			const name = String(entry?.name || entry?.display_name || "Member");
 			const score = Number(entry?.score ?? entry?.total_score ?? 0);
@@ -47,16 +54,79 @@ export default function CarbonView({
 				avatar,
 				isMe
 			};
-		})
-		: [];
+		});
+	}, [leaderboard, currentUserId]);
 
-	// Fallback leaderboard data if empty
-	const topUsers = normalizedLeaderboard.length > 0 ? normalizedLeaderboard : [
-		{ id: "1", name: "Marcus Chen", score: 980, avg: "0.8kg", avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuDbToWXTJtpLAu6OLo0gisg1VaLHAUN7GmHCRxb5HD9d_2Wkbo_5TubIliJIL6KlckguOalSFV3RMhcrFMbmPggGIZ8pgT7Rnyfupr24h6XXJVwDTgHXWEmO94QVGkAmkpmWZkxZsipH4M1BhtSTPj_Ng0jdXA_Lj7fqCJvPMaxqrPMGshMqmBxCTaz2Hn9FohXrvO6rphJWCMop3T8ripQR01MWL-eC2cNRDyqhAFumZsmdjkIjgJDYp-fEPvvBYCYl0TyZY_mcbnN", isMe: false },
-		{ id: "2", name: "Alex Rivera", score: 845, avg: "1.2kg", avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCjWDvIzVLkqHgTAdsOQaXIY1-WRuPFbLy3EHGzYGK4xJa8LvaH4qQY8ui7wGlU8Kw0NJox87YskH_-NrfkOvTxs3NzrE8OSqJBFtEFEqTwmgZw62DkB3lf6qWViIoZM3DAS-A0U2LCA3p3ynn1rDjB2dA4g8xL2iVESaY0MNGVkwCueiRYqGXnBYC6jg1uuD3w3q93GoCEFj2qKZTsvdrQZw2Bz5sabL9S9IyZiGgEdXmq6BDIYwkZA4jX22b1DwxFp-7bY_RErFcs", isMe: true },
-		{ id: "3", name: "Jordan Smith", score: 720, avg: "1.5kg", avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuDywbLAw_cvjxu2AsAQBMqu2LkM71uMpZYDw_98tytHx1rZRMGLa5xXcBwhP8jwEpDlIk66ORU2JXLmdqbcfG2K7UKltsnVKbn4WCMDHoBgr84RPtmw1aHPcUfkpJ-GyaXk1Jf0AyZZw-D1zPpyYbv7NzR809y2dE8ba2K5hZsUre1rwskG-EEqQmLVUMvisSnrnOjtqBpXNR_RQYl2YUqZAymppCC0RS9l-R1MJ5qR5D7QooYXqDywhfMW04Mpidq62fNpSICLlCFB", isMe: false },
-		{ id: "4", name: "Elena Gomez", score: 610, avg: "1.9kg", avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuAmYjLYVz1qoKczOARWyQPrD2DJsfWkGHQ9wKF1PvleEsFqyFE3HUx7_H6Skd5_Uxwc7L3Tgy_VUow_r8t_aWZRdzwCFd2yT2eWE805F0d0bJQSUUO41_aPavrWtpN0t9Tl9RR7BNEGecdYP0pYDxtgfMBBGdhTxrgu_QRXImlHJgFqMmpxy4nOe7KlPUhqHOEJsZ0O44ZiKwy_xEGAroNW0Lz4rIBLg_UeaRoQq72J2yspX_PvRBEIk3lF1--H3OhrTxUIRnX3QHo3", isMe: false }
-	];
+	const totalTeamKg = useMemo(
+		() => normalizedLeaderboard.reduce((sum, item) => sum + Number(item?.avg?.replace("kg", "") || 0), 0),
+		[normalizedLeaderboard]
+	);
+	const currentUserEntry = useMemo(
+		() => normalizedLeaderboard.find((entry) => entry.isMe) || normalizedLeaderboard[0] || null,
+		[normalizedLeaderboard]
+	);
+	const currentUserAvgKg = useMemo(() => {
+		if (!currentUserEntry) {
+			return 0;
+		}
+		const parsed = Number(String(currentUserEntry.avg || "0").replace("kg", ""));
+		return Number.isFinite(parsed) ? parsed : 0;
+	}, [currentUserEntry]);
+	const carbonScorePercent = useMemo(() => {
+		const score = Number(currentUserEntry?.score || 0);
+		if (!Number.isFinite(score)) {
+			return 0;
+		}
+		return Math.max(0, Math.min(100, Math.round(score)));
+	}, [currentUserEntry]);
+	const impactLabel = currentUserAvgKg <= 1 ? "Very Low Impact" : currentUserAvgKg <= 2 ? "Low Impact" : currentUserAvgKg <= 4 ? "Moderate Impact" : "High Impact";
+	const ringCircumference = 691;
+	const ringOffset = ringCircumference - (ringCircumference * carbonScorePercent) / 100;
+
+	async function handleCustomLog() {
+		if (customLogBusy || isSubmitting) {
+			return;
+		}
+
+		const modeInput = window.prompt("Commute type: home office, bike, bus, train, or car", "home office");
+		const mode = String(modeInput || "").trim().toLowerCase();
+		if (!mode) {
+			return;
+		}
+
+		const normalizedMode = mode === "home office" ? "remote" : mode;
+		const allowed = new Set(["remote", "bike", "walk", "bus", "train", "car"]);
+		if (!allowed.has(normalizedMode)) {
+			window.alert("Invalid commute type. Use home office, bike, bus, train, walk, or car.");
+			return;
+		}
+
+		let km = 0;
+		if (normalizedMode !== "remote") {
+			const kmInput = window.prompt("Distance in km (one-way)", "8");
+			const parsed = Number(kmInput || 0);
+			if (!Number.isFinite(parsed) || parsed <= 0) {
+				window.alert("Enter a valid distance in km.");
+				return;
+			}
+			km = parsed;
+		}
+
+		const location = window.prompt("Location (city or district)", "");
+		const factors = { remote: 0, walk: 0, bike: 0, bus: 0.105, train: 0.041, car: 0.192 };
+		const estimatedKg = Math.max(0, Number((km * 2 * (factors[normalizedMode] || 0)).toFixed(2)));
+
+		setCustomLogBusy(true);
+		try {
+			await onLogAction?.({
+				transportType: normalizedMode,
+				kgCo2: estimatedKg,
+				note: `Logged ${mode}${location ? ` for ${location}` : ""}.`
+			});
+		} finally {
+			setCustomLogBusy(false);
+		}
+	}
 
 	return (
 		<div className="flex-1 flex flex-col w-full bg-surface font-body text-on-surface antialiased selection:bg-primary-fixed relative">
@@ -113,14 +183,14 @@ export default function CarbonView({
 						<div className="relative w-64 h-64 flex items-center justify-center">
 							<svg className="w-full h-full transform -rotate-90">
 								<circle className="text-surface-container-high" cx="128" cy="128" fill="transparent" r="110" stroke="currentColor" strokeWidth="12"></circle>
-								<circle className="text-tertiary transition-all duration-1000 ease-out" cx="128" cy="128" fill="transparent" r="110" stroke="currentColor" strokeDasharray="691" strokeDashoffset="150" strokeLinecap="round" strokeWidth="12"></circle>
+								<circle className="text-tertiary transition-all duration-1000 ease-out" cx="128" cy="128" fill="transparent" r="110" stroke="currentColor" strokeDasharray={ringCircumference} strokeDashoffset={ringOffset} strokeLinecap="round" strokeWidth="12"></circle>
 							</svg>
 							<div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-								<span className="text-4xl font-extrabold text-on-surface tracking-tight">1.2<span className="text-lg font-medium text-on-surface-variant">kg</span></span>
-								<span className="text-sm font-semibold uppercase tracking-widest text-tertiary mt-1">Low Impact</span>
+								<span className="text-4xl font-extrabold text-on-surface tracking-tight">{currentUserAvgKg.toFixed(1)}<span className="text-lg font-medium text-on-surface-variant">kg</span></span>
+								<span className="text-sm font-semibold uppercase tracking-widest text-tertiary mt-1">{impactLabel}</span>
 								<div className="mt-4 flex items-center gap-1 bg-tertiary/10 text-tertiary px-3 py-1 rounded-full text-[10px] font-bold">
 									<span className="material-symbols-outlined text-xs" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>trending_down</span>
-									12% vs Yesterday
+									Score {carbonScorePercent}/100
 								</div>
 							</div>
 						</div>
@@ -128,7 +198,7 @@ export default function CarbonView({
 						<div className="flex-1 space-y-6">
 							<div>
 								<h2 className="text-3xl font-bold tracking-tight text-on-surface">Daily Carbon Score</h2>
-								<p className="text-on-surface-variant mt-2 max-w-md leading-relaxed">Your footprint today is equivalent to powering a laptop for 24 hours. Great job maintaining a low impact profile!</p>
+								<p className="text-on-surface-variant mt-2 max-w-md leading-relaxed">Daily carbon insights are based on the latest logs from your workspace and update as new entries are added.</p>
 							</div>
 							
 							{/* Sentiment Bar */}
@@ -139,7 +209,7 @@ export default function CarbonView({
 									<span>Heavy Output</span>
 								</div>
 								<div className="h-3 w-full bg-surface-container-high rounded-full overflow-hidden relative">
-									<div className="absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-tertiary to-primary rounded-full shadow-lg shadow-tertiary/20"></div>
+									<div className="absolute inset-y-0 left-0 bg-gradient-to-r from-tertiary to-primary rounded-full shadow-lg shadow-tertiary/20" style={{ width: `${Math.max(8, carbonScorePercent)}%` }}></div>
 								</div>
 							</div>
 							
@@ -159,38 +229,13 @@ export default function CarbonView({
 					{/* Badges Shelf */}
 					<section className="space-y-4">
 						<div className="flex justify-between items-center px-2">
-							<h3 className="text-lg font-bold text-on-surface">Environmental Achievements</h3>
-							<span className="text-primary text-xs font-bold flex items-center gap-1 opacity-70">View All <span className="material-symbols-outlined text-xs" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>chevron_right</span></span>
+							<h3 className="text-lg font-bold text-on-surface">Carbon Inputs</h3>
+							<button type="button" onClick={handleCustomLog} disabled={customLogBusy || isSubmitting} className="text-primary text-xs font-bold flex items-center gap-1 opacity-90 hover:opacity-100 disabled:opacity-50">
+								Log with location
+							</button>
 						</div>
-						<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-							<div className="bg-white/60 backdrop-blur-[12px] border border-outline-variant/20 p-6 rounded-3xl flex flex-col items-center text-center group hover:scale-[1.02] transition-transform shadow-sm">
-								<div className="w-16 h-16 rounded-2xl bg-tertiary/10 flex items-center justify-center text-tertiary mb-4 group-hover:bg-tertiary group-hover:text-white transition-colors">
-									<span className="material-symbols-outlined text-3xl" style={{fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>pedal_bike</span>
-								</div>
-								<p className="text-sm font-bold">Biker 100km</p>
-								<p className="text-[10px] text-on-surface-variant font-medium mt-1">Unlocked May 12</p>
-							</div>
-							<div className="bg-white/60 backdrop-blur-[12px] border border-outline-variant/20 p-6 rounded-3xl flex flex-col items-center text-center group hover:scale-[1.02] transition-transform shadow-sm">
-								<div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 mb-4 group-hover:bg-amber-600 group-hover:text-white transition-colors">
-									<span className="material-symbols-outlined text-3xl" style={{fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>forest</span>
-								</div>
-								<p className="text-sm font-bold">Forest Guardian</p>
-								<p className="text-[10px] text-on-surface-variant font-medium mt-1">Tier 3 Contributor</p>
-							</div>
-							<div className="bg-white/60 backdrop-blur-[12px] border border-outline-variant/20 p-6 rounded-3xl flex flex-col items-center text-center group hover:scale-[1.02] transition-transform shadow-sm">
-								<div className="w-16 h-16 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-									<span className="material-symbols-outlined text-3xl" style={{fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>commute</span>
-								</div>
-								<p className="text-sm font-bold">Transit Pro</p>
-								<p className="text-[10px] text-on-surface-variant font-medium mt-1">30 Day Streak</p>
-							</div>
-							<div className="bg-surface-container-low border border-dashed border-outline-variant rounded-3xl flex flex-col items-center justify-center text-center p-6 opacity-60">
-								<div className="w-16 h-16 rounded-2xl bg-surface-variant flex items-center justify-center text-on-surface-variant mb-4">
-									<span className="material-symbols-outlined text-3xl" style={{fontVariationSettings: "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"}}>lock</span>
-								</div>
-								<p className="text-sm font-bold">???</p>
-								<p className="text-[10px] text-on-surface-variant font-medium mt-1">5 Challenges Left</p>
-							</div>
+						<div className="rounded-3xl border border-outline-variant/20 bg-white/60 p-5 text-sm text-on-surface-variant">
+							Choose Home Office, Bike, Bus, Train, Walk, or Car. The custom logger asks for location and distance to estimate CO2.
 						</div>
 					</section>
 				</div>
@@ -204,7 +249,12 @@ export default function CarbonView({
 						</div>
 						
 						<div className="space-y-4 flex-1">
-							{topUsers.map((user, index) => (
+							{normalizedLeaderboard.length === 0 ? (
+								<div className="rounded-2xl border border-dashed border-outline-variant/40 px-4 py-6 text-center text-sm text-on-surface-variant">
+									No carbon logs yet for this workspace.
+								</div>
+							) : null}
+							{normalizedLeaderboard.map((user, index) => (
 								<div key={user.id} className={`flex items-center gap-4 p-3 rounded-2xl transition-colors cursor-pointer ${user.isMe ? 'bg-primary/5 border border-primary/10' : 'hover:bg-surface-container-low'}`}>
 									<span className={`text-sm font-black w-4 ${user.isMe ? 'text-primary' : 'text-on-surface-variant'}`}>{index + 1}</span>
 									<div className="relative">
@@ -233,11 +283,11 @@ export default function CarbonView({
 						</div>
 						
 						<div className="mt-8 p-4 bg-tertiary text-white rounded-2xl text-center">
-							<p className="text-xs font-medium opacity-90">Company Goal: 10,000kg Offset</p>
-							<div className="h-1.5 w-full bg-white/20 rounded-full mt-2 overflow-hidden">
-								<div className="h-full bg-white w-3/4 rounded-full"></div>
-							</div>
-							<p className="text-[10px] font-bold mt-2">7,542kg reached (75%)</p>
+							<p className="text-xs font-medium opacity-90">Workspace Carbon Snapshot</p>
+							<p className="text-[11px] font-bold mt-2">
+								{normalizedLeaderboard.length} member{normalizedLeaderboard.length !== 1 ? "s" : ""} tracked
+							</p>
+							<p className="text-[10px] font-medium mt-1">Approx total daily average: {Number.isFinite(totalTeamKg) ? totalTeamKg.toFixed(1) : "0.0"}kg</p>
 						</div>
 					</div>
 				</aside>

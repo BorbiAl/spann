@@ -25,6 +25,9 @@ def test_translate_success_returns_detected_and_translated(client, auth_headers)
     assert data["literal"].startswith("translated:")
     assert data["cultural"]
     assert data["explanation"]
+    assert isinstance(data["tags"], list)
+    assert isinstance(data["sentiment_score"], int)
+    assert isinstance(data["sentiment_label"], str)
 
 
 def test_translate_same_language_short_circuit(client, auth_headers):
@@ -148,3 +151,4 @@ def test_translate_error_fails_open(client, auth_headers, monkeypatch):
     assert body["literal"] == "Hello team"
     assert body["cultural"] == "Hello team"
     assert "fallback" in body["explanation"].lower()
+    assert "fallback" in " ".join(body.get("tags") or []).lower()

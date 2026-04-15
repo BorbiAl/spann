@@ -44,6 +44,30 @@ function processQueue(error: unknown, token: string | null): void {
   pendingQueue.length = 0
 }
 
+function normalizeStoredEmail(raw: string | null | undefined): string {
+  if (!raw) {
+    return ''
+  }
+
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (typeof parsed === 'string') {
+        return parsed.trim().toLowerCase()
+      }
+    } catch {
+      return trimmed.slice(1, -1).trim().toLowerCase()
+    }
+  }
+
+  return trimmed.toLowerCase()
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UUID v4 (uses Web Crypto, available in Electron renderer)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,14 +85,11 @@ const runtimeApiBase =
     ? (window as RuntimeWindow).SPANN_API_BASE ?? ''
     : ''
 const envApiBase = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? ''
+const envNativeApiBase = import.meta.env.VITE_NATIVE_API_BASE_URL ?? ''
 const isFileProtocol =
   typeof window !== 'undefined' && window.location?.protocol === 'file:'
-const isAndroid =
-  typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent ?? '')
-const nativeDefaultApiBase = isAndroid
-  ? 'http://10.0.2.2:8000'
-  : 'http://127.0.0.1:8000'
-const fallbackApiBase = isFileProtocol ? nativeDefaultApiBase : '/api'
+const nativeConfiguredApiBase = String(envNativeApiBase || runtimeApiBase || '').trim()
+const fallbackApiBase = isFileProtocol ? nativeConfiguredApiBase : '/api'
 const resolvedApiBase = String(runtimeApiBase || envApiBase || fallbackApiBase).replace(
   /\/+$/,
   '',
@@ -150,14 +171,21 @@ apiClient.interceptors.response.use(
       const { authApi } = await import('./auth')
       // Get email from store to look up refresh token
       const { useAuthStore } = await import('../store/auth')
-      let email = useAuthStore.getState().user?.email?.trim() ?? ''
+      let email = normalizeStoredEmail(useAuthStore.getState().user?.email)
+
+      if (!email) {
+        const hintedEmail = tokenManager.getActiveAccountEmail()
+        if (hintedEmail) {
+          email = normalizeStoredEmail(hintedEmail)
+        }
+      }
 
       if (!email) {
         try {
           const { get: storeGet } = await import('../lib/storage')
           const lastEmail = storeGet('lastEmail')
           if (typeof lastEmail === 'string' && lastEmail.trim()) {
-            email = lastEmail.trim()
+            email = normalizeStoredEmail(lastEmail)
           }
         } catch {
           // Ignore storage fallback failures and keep trying other fallbacks.
@@ -171,7 +199,7 @@ apiClient.interceptors.response.use(
           lastEmail = localStorage.getItem('lastEmail')
         }
         if (lastEmail?.trim()) {
-          email = lastEmail.trim()
+          email = normalizeStoredEmail(lastEmail)
         }
       }
 
@@ -187,6 +215,7 @@ apiClient.interceptors.response.use(
 
       const refreshed = await authApi.refresh(storedRefresh)
       tokenManager.setAccessToken(refreshed.access_token)
+      tokenManager.setActiveAccountEmail(email)
 
       // Persist new refresh token
       await tokenManager.saveRefreshToken(email, refreshed.refresh_token)

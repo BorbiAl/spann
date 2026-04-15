@@ -68,7 +68,7 @@ let store: any = null
 if (typeof window === 'undefined' || (window as any).__ELECTRON__) {
   try {
     const Store = require('electron-store').default
-    store = new Store<StoreSchema>({
+    store = new Store({
       name: 'spann-prefs',
       defaults,
       // Encrypt sensitive fields at rest
@@ -157,12 +157,12 @@ export function deleteKey<K extends keyof StoreSchema>(key: K): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function enqueueOfflineMessage(msg: StoreSchema['offlineMessageQueue'][number]): void {
-  const queue = get('offlineMessageQueue')
+  const queue = get('offlineMessageQueue') ?? []
   set('offlineMessageQueue', [...queue, msg])
 }
 
 export function dequeueOfflineMessages(): StoreSchema['offlineMessageQueue'] {
-  const queue = get('offlineMessageQueue')
+  const queue = get('offlineMessageQueue') ?? []
   set('offlineMessageQueue', [])
   return queue
 }
@@ -176,7 +176,7 @@ const MAX_RECENT_TRANSLATIONS = 50
 export function addRecentTranslation(
   entry: StoreSchema['recentTranslations'][number],
 ): void {
-  const existing = get('recentTranslations')
+  const existing = get('recentTranslations') ?? []
   const deduped = existing.filter((e) => e.phrase !== entry.phrase)
   const updated = [entry, ...deduped].slice(0, MAX_RECENT_TRANSLATIONS)
   set('recentTranslations', updated)

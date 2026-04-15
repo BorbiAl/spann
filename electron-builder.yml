@@ -8,11 +8,11 @@ directories:
 
 files:
   - dist/**/*
-  - dist-electron/**/*
+  - desktop/**/*
   - package.json
 
 extraMetadata:
-  main: dist-electron/main.js
+  main: desktop/main.cjs
 
 win:
   target:
@@ -20,8 +20,7 @@ win:
       arch:
         - x64
         - arm64
-  icon: public/icon.ico
-  requestedExecutionLevel: asUser
+  requestedExecutionLevel: asInvoker
 
 nsis:
   oneClick: false
@@ -29,9 +28,6 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Spann
-  installerIcon: public/icon.ico
-  uninstallerIcon: public/icon.ico
-  installerHeaderIcon: public/icon.ico
   differentialPackage: true
 
 publish:

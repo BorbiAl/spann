@@ -20,6 +20,13 @@ function isElectron(): boolean {
   )
 }
 
+function getElectronApi() {
+  if (!isElectron()) {
+    return null
+  }
+  return window.electronAPI
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Fallback: sessionStorage (non-persistent, clears on tab close)
 // Used in browser / Capacitor builds where keytar is unavailable.
@@ -52,8 +59,9 @@ export const keychain = {
     if (!email || !token) return
 
     try {
-      if (isElectron()) {
-        await window.electronAPI.setPassword(KEYCHAIN_SERVICE, email, token)
+      const electronApi = getElectronApi()
+      if (electronApi) {
+        await electronApi.setPassword(KEYCHAIN_SERVICE, email, token)
       } else {
         await sessionFallback.set(email, token)
       }
@@ -70,8 +78,9 @@ export const keychain = {
     if (!email) return null
 
     try {
-      if (isElectron()) {
-        const result = await window.electronAPI.getPassword(
+      const electronApi = getElectronApi()
+      if (electronApi) {
+        const result = await electronApi.getPassword(
           KEYCHAIN_SERVICE,
           email,
         )
@@ -94,8 +103,9 @@ export const keychain = {
     if (!email) return
 
     try {
-      if (isElectron()) {
-        await window.electronAPI.deletePassword(KEYCHAIN_SERVICE, email)
+      const electronApi = getElectronApi()
+      if (electronApi) {
+        await electronApi.deletePassword(KEYCHAIN_SERVICE, email)
       } else {
         await sessionFallback.delete(email)
       }

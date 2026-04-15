@@ -18,6 +18,7 @@ export interface TokenClaims {
 // ─────────────────────────────────────────────────────────────────────────────
 
 let _accessToken: string | null = null
+let _activeAccountEmail: string | null = null
 
 // ─────────────────────────────────────────────────────────────────────────────
 // JWT helpers
@@ -58,6 +59,7 @@ export const tokenManager = {
   // ── Refresh token (OS keychain) ────────────────────────────────────────
 
   async saveRefreshToken(email: string, token: string): Promise<void> {
+    this.setActiveAccountEmail(email)
     await keychain.saveRefreshToken(email, token)
   },
 
@@ -66,7 +68,26 @@ export const tokenManager = {
   },
 
   async clearRefreshToken(email: string): Promise<void> {
+    const normalized = email.trim().toLowerCase()
+    if (_activeAccountEmail === normalized) {
+      _activeAccountEmail = null
+    }
     await keychain.deleteRefreshToken(email)
+  },
+
+  // ── Active account hint (in-memory) ───────────────────────────────────
+
+  setActiveAccountEmail(email: string): void {
+    const normalized = email.trim().toLowerCase()
+    _activeAccountEmail = normalized || null
+  },
+
+  getActiveAccountEmail(): string | null {
+    return _activeAccountEmail
+  },
+
+  clearActiveAccountEmail(): void {
+    _activeAccountEmail = null
   },
 
   // ── Token inspection ───────────────────────────────────────────────────

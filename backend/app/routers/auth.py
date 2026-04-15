@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+import logging
 from secrets import token_hex
 from uuid import uuid4
 
@@ -19,6 +20,7 @@ from app.schemas.auth import LoginRequest, LogoutRequest, RefreshRequest, Regist
 from app.schemas.user import MagicLinkRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 ACCESS_TOKEN_TTL_MINUTES = 15
 REFRESH_TOKEN_TTL_DAYS = 30
@@ -130,6 +132,15 @@ async def register(payload: RegisterRequest, request: Request, _rate_limit: None
         return error_response(status_code=exc.status_code, code=code, message=message)
     except Exception as exc:
         text = str(exc).lower()
+        logger.exception("register_unexpected_error", extra={"email": payload.email, "error": str(exc)})
+
+        if "email not confirmed" in text or "email_not_confirmed" in text:
+            return error_response(
+                status_code=409,
+                code="email_not_confirmed",
+                message="An account for this email already exists but is not confirmed. Confirm your email and try logging in.",
+            )
+
         if "users_email_key" in text or ("duplicate key" in text and "email" in text):
             return error_response(
                 status_code=409,

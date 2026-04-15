@@ -24,6 +24,9 @@ class TranslateResponse(BaseModel):
     literal: str
     cultural: str
     explanation: str
+    tags: list[str] = Field(default_factory=list)
+    sentiment_label: str = "neutral"
+    sentiment_score: int = 50
 
 
 class CoachingNudge(BaseModel):

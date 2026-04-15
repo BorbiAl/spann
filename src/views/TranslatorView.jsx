@@ -1,53 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CULTURES, apiRequest } from '../data/constants';
-
-const CULTURE_BY_KEY = CULTURES.reduce((accumulator, culture) => {
-	accumulator[culture.key] = culture;
-	return accumulator;
-}, {});
-
-const CULTURE_EMOJI = {
-	American: '\uD83C\uDDFA\uD83C\uDDF8',
-	British: '\uD83C\uDDEC\uD83C\uDDE7',
-	Bulgarian: '\uD83C\uDDE7\uD83C\uDDEC',
-	Japanese: '\uD83C\uDDEF\uD83C\uDDF5',
-	German: '\uD83C\uDDE9\uD83C\uDDEA',
-	Brazilian: '\uD83C\uDDE7\uD83C\uDDF7',
-	Arabic: '\uD83C\uDDF8\uD83C\uDDE6'
-};
-
-const INITIAL_RESULT = {
-	literal: 'Could you possibly do this for me?',
-	cultural: '\u304A\u624B\u6570\u3067\u3059\u304C\u3001\u3053\u3061\u3089\u3092\u304A\u9858\u3044\u3067\u304D\u307E\u3059\u3067\u3057\u3087\u3046\u304B\uFF1F',
-	note:
-		"In Japanese business culture, direct requests can seem aggressive. The phrase 'Otesuu desuga' (I'm sorry to trouble you) is used as a buffer. It acknowledges the recipient's effort before the request is even made, which is essential for maintaining Wa (harmony).",
-	tags: ['Business Etiquette', 'Polite Form (Keigo)', 'High Context'],
-	sentiment: 85,
-	sentimentLabel: 'Highly Formal'
-};
-
-const INITIAL_HISTORY = [
-	{
-		id: 1,
-		sourceCulture: 'American',
-		targetCulture: 'French',
-		sourceEmoji: '🇺🇸',
-		targetEmoji: '🇫🇷',
-		literal: "Let's grab a coffee sometime soon.",
-		cultural: '"On se fait un café ?" (Casual/Implicit)',
-		time: '2 hours ago'
-	},
-	{
-		id: 2,
-		sourceCulture: 'American',
-		targetCulture: 'German',
-		sourceEmoji: '🇺🇸',
-		targetEmoji: '🇩🇪',
-		literal: "I don't think that's the best idea.",
-		cultural: '"Das sehe ich anders." (Direct/Constructive)',
-		time: 'Yesterday'
-	}
-];
+import { apiRequest, apiRequestFormData, fetchPublicRuntimeConfig } from '../data/constants';
 
 function isGarbledMultilingualText(value) {
 	const text = String(value || '');
@@ -59,20 +11,20 @@ function toHistoryEntry(sourceCulture, targetCulture, literal, cultural) {
 		id: Date.now(),
 		sourceCulture,
 		targetCulture,
-		sourceEmoji: CULTURE_EMOJI[sourceCulture] || '🌐',
-		targetEmoji: CULTURE_EMOJI[targetCulture] || '🌐',
+		sourceEmoji: '🌐',
+		targetEmoji: '🌐',
 		literal,
 		cultural,
 		time: 'Just now'
 	};
 }
 
-function cultureLabel(cultureKey) {
-	return CULTURE_BY_KEY[cultureKey]?.label || cultureKey;
+function cultureLabel(cultureKey, cultureByKey) {
+	return cultureByKey[cultureKey]?.label || cultureKey;
 }
 
-function localeCode(cultureKey) {
-	const locale = CULTURE_BY_KEY[cultureKey]?.locale || '';
+function localeCode(cultureKey, cultureByKey) {
+	const locale = cultureByKey[cultureKey]?.locale || '';
 	const [, region] = String(locale).split('-');
 	return (region || locale || '--').toUpperCase();
 }
@@ -101,7 +53,7 @@ function buildCultureFallback(targetCulture, originalText) {
 		return `${directByCulture[target]} (${phrase})`;
 	}
 
-	return `[${cultureLabel(targetCulture)}] ${phrase}`;
+	return `[${targetCulture}] ${phrase}`;
 }
 
 async function requestLegacyAdaptation(trimmed, sourceCulture, targetCulture) {
@@ -126,7 +78,7 @@ async function requestLegacyAdaptation(trimmed, sourceCulture, targetCulture) {
 	};
 }
 
-function LanguageDropdown({ value, onChange, ariaLabel }) {
+function LanguageDropdown({ value, onChange, ariaLabel, cultures, cultureByKey }) {
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef(null);
 
@@ -168,15 +120,15 @@ function LanguageDropdown({ value, onChange, ariaLabel }) {
 				aria-expanded={open}
 			>
 				<span className="inline-flex min-w-[32px] justify-center px-1.5 py-0.5 rounded bg-surface-container-high text-[11px] font-semibold text-on-surface-variant">
-					{localeCode(value)}
+					{localeCode(value, cultureByKey)}
 				</span>
-				<span className="min-w-[138px] text-left">{cultureLabel(value)}</span>
+				<span className="min-w-[138px] text-left">{cultureLabel(value, cultureByKey)}</span>
 				<span className="material-symbols-outlined text-xs text-on-surface-variant">expand_more</span>
 			</button>
 
 			{open ? (
 				<div className="absolute left-0 top-full mt-2 min-w-full w-max max-h-64 overflow-y-auto rounded-xl border border-outline-variant/30 bg-surface-container-lowest shadow-xl z-40 p-1">
-					{CULTURES.map((culture) => (
+					{cultures.map((culture) => (
 						<button
 							key={culture.key}
 							type="button"
@@ -195,7 +147,7 @@ function LanguageDropdown({ value, onChange, ariaLabel }) {
 									value === culture.key ? 'bg-white/20 text-white' : 'bg-surface-container-high text-on-surface-variant'
 								}`}
 							>
-								{localeCode(culture.key)}
+								{localeCode(culture.key, cultureByKey)}
 							</span>
 							<span>{culture.label}</span>
 						</button>
@@ -207,13 +159,65 @@ function LanguageDropdown({ value, onChange, ariaLabel }) {
 }
 
 export default function TranslatorView() {
-	const [sourceCulture, setSourceCulture] = useState('American');
-	const [targetCulture, setTargetCulture] = useState('Japanese');
+	const [cultures, setCultures] = useState([]);
+	const [sourceCulture, setSourceCulture] = useState('');
+	const [targetCulture, setTargetCulture] = useState('');
 	const [inputText, setInputText] = useState('');
 	const [isTranslating, setIsTranslating] = useState(false);
 	const [statusNote, setStatusNote] = useState('');
-	const [result, setResult] = useState(INITIAL_RESULT);
-	const [history, setHistory] = useState(INITIAL_HISTORY);
+	const [result, setResult] = useState(null);
+	const [history, setHistory] = useState([]);
+	const fileInputRef = useRef(null);
+
+	const cultureByKey = cultures.reduce((accumulator, culture) => {
+		accumulator[culture.key] = culture;
+		return accumulator;
+	}, {});
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function loadRuntimeConfig() {
+			try {
+				const payload = await fetchPublicRuntimeConfig();
+				const rows = Array.isArray(payload?.cultures)
+					? payload.cultures
+							.map((item) => ({
+								key: String(item?.key || item?.culture || '').trim(),
+								label: String(item?.label || item?.name || '').trim(),
+								locale: String(item?.locale || '').trim()
+							}))
+							.filter((item) => item.key && item.label && item.locale)
+					: [];
+
+				if (cancelled) {
+					return;
+				}
+
+				if (rows.length > 0) {
+					setCultures(rows);
+					setSourceCulture((current) => current || rows[0].key);
+					setTargetCulture((current) => current || rows[Math.min(1, rows.length - 1)].key);
+					return;
+				}
+			} catch {
+				// Fallback to browser locale when public runtime config is unavailable.
+			}
+
+			const browserLocale = Intl.DateTimeFormat().resolvedOptions().locale || 'en-US';
+			const fallback = [{ key: browserLocale, label: browserLocale, locale: browserLocale }];
+			if (!cancelled) {
+				setCultures(fallback);
+				setSourceCulture(browserLocale);
+				setTargetCulture(browserLocale);
+			}
+		}
+
+		loadRuntimeConfig();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	async function translate() {
 		const trimmed = inputText.trim();
@@ -224,8 +228,8 @@ export default function TranslatorView() {
 		setIsTranslating(true);
 		setStatusNote('');
 
-		const sourceOption = CULTURE_BY_KEY[sourceCulture];
-		const targetOption = CULTURE_BY_KEY[targetCulture];
+		const sourceOption = cultureByKey[sourceCulture];
+		const targetOption = cultureByKey[targetCulture];
 
 		try {
 			const payload = await apiRequest('/translate', {
@@ -244,7 +248,7 @@ export default function TranslatorView() {
 			const data = payload?.data || payload?.result || {};
 			let nextLiteral = data.literal_translation || data.literal || trimmed;
 			const rawCultural = data.cultural_adaptation || data.cultural || trimmed;
-			let nextCultural = isGarbledMultilingualText(rawCultural) ? `[${cultureLabel(targetCulture)}] ${trimmed}` : rawCultural;
+			let nextCultural = isGarbledMultilingualText(rawCultural) ? `[${cultureLabel(targetCulture, cultureByKey)}] ${trimmed}` : rawCultural;
 			let nextNote = data.explanation || data.note || 'Translation complete.';
 
 			const sourceLocale = String(sourceOption?.locale || 'en-US');
@@ -256,11 +260,11 @@ export default function TranslatorView() {
 			if (looksLikeFailOpen) {
 				setStatusNote('Primary translator returned partial output. Please retry.');
 			}
-			const nextTags = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : INITIAL_RESULT.tags;
+			const nextTags = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : ['translation'];
 			const nextSentiment = Number.isFinite(data.sentiment_score)
 				? Math.min(100, Math.max(0, Number(data.sentiment_score)))
-				: INITIAL_RESULT.sentiment;
-			const nextLabel = data.sentiment_label || INITIAL_RESULT.sentimentLabel;
+				: 50;
+			const nextLabel = data.sentiment_label || 'Neutral';
 
 			setResult({
 				literal: String(nextLiteral),
@@ -276,6 +280,91 @@ export default function TranslatorView() {
 		} finally {
 			setIsTranslating(false);
 		}
+	}
+
+	async function handleMicInput() {
+		if (typeof window === 'undefined') {
+			return;
+		}
+
+		const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+		if (!SpeechRecognition) {
+			setStatusNote('Voice input is not supported in this browser.');
+			return;
+		}
+
+		try {
+			setStatusNote('Listening...');
+			const recognition = new SpeechRecognition();
+			recognition.lang = cultureByKey[sourceCulture]?.locale || 'en-US';
+			recognition.interimResults = false;
+			recognition.maxAlternatives = 1;
+			recognition.onresult = (event) => {
+				const transcript = String(event?.results?.[0]?.[0]?.transcript || '').trim();
+				if (!transcript) {
+					setStatusNote('No speech detected. Try again.');
+					return;
+				}
+				setInputText((current) => (current ? `${current} ${transcript}` : transcript));
+				setStatusNote('Voice input added.');
+			};
+			recognition.onerror = () => setStatusNote('Voice input failed. Please retry.');
+			recognition.start();
+		} catch {
+			setStatusNote('Unable to start voice input.');
+		}
+	}
+
+	async function handleAudioFileSelected(event) {
+		const file = event?.target?.files?.[0];
+		if (!file) {
+			return;
+		}
+
+		if (!String(file.type || '').startsWith('audio/')) {
+			setStatusNote('Please select an audio file.');
+			event.target.value = '';
+			return;
+		}
+
+		const formData = new FormData();
+		formData.append('audio', file);
+		const locale = cultureByKey[sourceCulture]?.locale || '';
+		if (locale) {
+			formData.append('locale', locale);
+		}
+
+		setStatusNote('Transcribing audio...');
+		try {
+			const payload = await apiRequestFormData('/speech-to-text', {
+				method: 'POST',
+				auth: false,
+				body: formData,
+				timeoutMs: 30000
+			});
+			const text = String(payload?.data?.text || '').trim();
+			if (text) {
+				setInputText((current) => (current ? `${current} ${text}` : text));
+				setStatusNote('Audio transcription added.');
+			} else {
+				setStatusNote('No transcript was returned.');
+			}
+		} catch {
+			setStatusNote('Audio transcription failed.');
+		} finally {
+			event.target.value = '';
+		}
+	}
+
+	function handleViewAllHistory() {
+		if (!history.length) {
+			setStatusNote('No translation history yet.');
+			return;
+		}
+		const exportText = history
+			.map((item) => `${item.time} | ${item.sourceCulture} -> ${item.targetCulture}\nLiteral: ${item.literal}\nCultural: ${item.cultural}`)
+			.join('\n\n');
+		window.alert(exportText);
 	}
 
 	return (
@@ -296,6 +385,8 @@ export default function TranslatorView() {
 								value={sourceCulture}
 								onChange={setSourceCulture}
 								ariaLabel="Choose source language"
+								cultures={cultures}
+								cultureByKey={cultureByKey}
 							/>
 							<span className="material-symbols-outlined text-on-surface-variant text-sm" aria-hidden="true">
 								swap_horiz
@@ -304,6 +395,8 @@ export default function TranslatorView() {
 								value={targetCulture}
 								onChange={setTargetCulture}
 								ariaLabel="Choose target language"
+								cultures={cultures}
+								cultureByKey={cultureByKey}
 							/>
 						</div>
 						<span className="text-xs text-on-surface-variant uppercase tracking-widest font-bold">Input Text</span>
@@ -318,12 +411,13 @@ export default function TranslatorView() {
 
 					<div className="mt-4 flex justify-between items-center">
 						<div className="flex gap-2">
-							<button type="button" className="p-2 text-on-surface-variant hover:text-primary transition-colors" aria-label="Use microphone">
+							<button type="button" onClick={handleMicInput} className="p-2 text-on-surface-variant hover:text-primary transition-colors" aria-label="Use microphone">
 								<span className="material-symbols-outlined">mic</span>
 							</button>
-							<button type="button" className="p-2 text-on-surface-variant hover:text-primary transition-colors" aria-label="Attach file">
+							<button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-on-surface-variant hover:text-primary transition-colors" aria-label="Attach file">
 								<span className="material-symbols-outlined">attach_file</span>
 							</button>
+							<input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioFileSelected} />
 						</div>
 						<button
 							type="button"
@@ -343,7 +437,7 @@ export default function TranslatorView() {
 								<span className="material-symbols-outlined text-sm">translate</span>
 								<span className="text-[10px] font-bold uppercase tracking-widest">Literal Translation</span>
 							</div>
-							<p className="text-on-surface font-medium italic">{result.literal}</p>
+							<p className="text-on-surface font-medium italic">{result?.literal || 'No translation yet.'}</p>
 						</div>
 
 						<div className="bg-surface-container-lowest p-5 rounded-xl border border-primary/20 shadow-sm relative overflow-hidden group">
@@ -356,7 +450,7 @@ export default function TranslatorView() {
 								<span className="material-symbols-outlined text-sm">auto_awesome</span>
 								<span className="text-[10px] font-bold uppercase tracking-widest">Cultural Context</span>
 							</div>
-							<p className="text-on-surface font-semibold">{result.cultural}</p>
+							<p className="text-on-surface font-semibold">{result?.cultural || 'Run a translation to see adaptation output.'}</p>
 						</div>
 					</div>
 
@@ -369,9 +463,9 @@ export default function TranslatorView() {
 							</div>
 							<div>
 								<h3 className="text-lg font-bold mb-2">Nuance Explanation</h3>
-								<p className="text-sm leading-relaxed opacity-90">{result.note}</p>
+								<p className="text-sm leading-relaxed opacity-90">{result?.note || 'Explanations are generated per translation request.'}</p>
 								<div className="mt-4 flex flex-wrap gap-2">
-									{result.tags.map((tag) => (
+									{(result?.tags || []).map((tag) => (
 										<span key={tag} className="bg-white/10 text-[10px] px-2 py-1 rounded border border-white/20 uppercase font-bold tracking-tighter">
 											{tag}
 										</span>
@@ -386,11 +480,11 @@ export default function TranslatorView() {
 							<span className="text-[10px] font-bold uppercase text-on-surface-variant">Sentiment &amp; Politeness Spectrum</span>
 						</div>
 						<div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden flex">
-							<div className="h-full bg-primary" style={{ width: `${result.sentiment}%` }} />
+							<div className="h-full bg-primary" style={{ width: `${Number(result?.sentiment || 50)}%` }} />
 						</div>
 						<div className="flex justify-between mt-2 text-[10px] text-on-surface-variant font-medium">
 							<span>Casual</span>
-							<span className="text-primary font-bold">{result.sentimentLabel}</span>
+							<span className="text-primary font-bold">{result?.sentimentLabel || 'Neutral'}</span>
 						</div>
 					</div>
 				</div>
@@ -399,7 +493,7 @@ export default function TranslatorView() {
 			<section className="mt-12">
 				<div className="flex items-center justify-between mb-6">
 					<h2 className="text-xl font-bold">Recent Translations</h2>
-					<button type="button" className="text-primary text-sm font-semibold hover:underline">
+					<button type="button" onClick={handleViewAllHistory} className="text-primary text-sm font-semibold hover:underline">
 						View All History
 					</button>
 				</div>

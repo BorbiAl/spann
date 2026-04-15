@@ -79,6 +79,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   setLogoutCallback(async () => {
     const lastEmail = storeGet('lastEmail')
     tokenManager.clearAccessToken()
+    tokenManager.clearActiveAccountEmail()
     if (lastEmail) {
       await tokenManager.clearRefreshToken(lastEmail)
     }
@@ -118,6 +119,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         return
       }
 
+      tokenManager.setActiveAccountEmail(lastEmail)
+
       const success = await get().refreshSession()
       set({ isInitializing: false, isAuthenticated: success })
     } catch {
@@ -134,7 +137,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
       // Use hostname as device hint when running in Electron
       let deviceHint: string | undefined
       try {
-        deviceHint = await window.electronAPI?.getHostname()
+        const getHostname = window.electronAPI?.getHostname
+        if (typeof getHostname === 'function') {
+          deviceHint = await getHostname()
+        }
       } catch {
         deviceHint = undefined
       }
@@ -142,6 +148,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const response = await authApi.login(email, password, deviceHint)
 
       tokenManager.setAccessToken(response.access_token)
+      tokenManager.setActiveAccountEmail(email)
       await tokenManager.saveRefreshToken(email, response.refresh_token)
       storeSet('lastEmail', email)
 
@@ -182,6 +189,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const response = await authApi.register(email, password, name, companyName)
 
       tokenManager.setAccessToken(response.access_token)
+      tokenManager.setActiveAccountEmail(email)
       await tokenManager.saveRefreshToken(email, response.refresh_token)
       storeSet('lastEmail', email)
 
@@ -222,6 +230,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       // Logout errors are non-fatal — always clear local state
     } finally {
       tokenManager.clearAccessToken()
+      tokenManager.clearActiveAccountEmail()
       if (lastEmail) {
         await tokenManager.clearRefreshToken(lastEmail)
       }
@@ -248,6 +257,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const response = await authApi.refresh(storedRefresh)
 
       tokenManager.setAccessToken(response.access_token)
+      tokenManager.setActiveAccountEmail(lastEmail)
       await tokenManager.saveRefreshToken(lastEmail, response.refresh_token)
 
       const claims = tokenManager.getTokenClaims(response.access_token)

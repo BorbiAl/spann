@@ -59,6 +59,7 @@ PERSONAL_EMAIL_DOMAINS = {
     "mail.com",
     "gmx.com",
     "yandex.com",
+    "abv.bg",
 }
 
 
@@ -268,14 +269,57 @@ class DatabaseClient:
         return "." in domain and domain not in PERSONAL_EMAIL_DOMAINS
 
     @staticmethod
-    def _is_rate_limited_error(exc: Exception) -> bool:
+    def _is_rate_limited_error(exc: Any) -> bool:
         text = str(exc).lower()
         return "429" in text or "too many requests" in text or "rate limit" in text
 
     @staticmethod
-    def _is_email_exists_error(exc: Exception) -> bool:
+    def _is_email_exists_error(exc: Any) -> bool:
         text = str(exc).lower()
         return "already registered" in text or "already exists" in text or "email_exists" in text
+
+    @staticmethod
+    def _extract_auth_error_text(payload: Any) -> str:
+        """Best-effort extraction of useful auth error text from SDK responses/exceptions."""
+
+        candidates: list[str] = []
+
+        def _push(value: Any) -> None:
+            if value is None:
+                return
+            text = str(value).strip()
+            if text and text not in candidates:
+                candidates.append(text)
+
+        if isinstance(payload, dict):
+            for key in ("error", "message", "msg", "error_description", "details", "hint", "code"):
+                _push(payload.get(key))
+        else:
+            for attr in ("error", "message", "msg", "error_description", "details", "hint", "code", "status"):
+                _push(getattr(payload, attr, None))
+            _push(payload)
+
+        return " | ".join(candidates)
+
+    @staticmethod
+    def _extract_auth_status_code(payload: Any) -> int | None:
+        """Best-effort extraction of auth status codes from SDK payloads."""
+
+        values: list[Any] = []
+        if isinstance(payload, dict):
+            values.extend([payload.get("status"), payload.get("status_code"), payload.get("code")])
+        else:
+            values.extend([getattr(payload, "status", None), getattr(payload, "status_code", None), getattr(payload, "code", None)])
+
+        for candidate in values:
+            if candidate is None:
+                continue
+            text = str(candidate).strip()
+            if text.isdigit():
+                code = int(text)
+                if 100 <= code <= 599:
+                    return code
+        return None
 
     @staticmethod
     def _is_users_email_conflict(exc: Exception) -> bool:
@@ -311,6 +355,16 @@ class DatabaseClient:
             if company_token:
                 return f"{company_token.title()} Workspace"
         return f"{display_name}'s Workspace"
+
+    @staticmethod
+    def _auth_user_field(user: Any, field: str) -> Any:
+        """Read field from auth user object or dict payload."""
+
+        if user is None:
+            return None
+        if isinstance(user, dict):
+            return user.get(field)
+        return getattr(user, field, None)
 
     async def _register_user_via_admin(
         self,
@@ -351,11 +405,41 @@ class DatabaseClient:
         except Exception as exc:
             if self._is_email_exists_error(exc):
                 raise ValueError("email_already_exists") from exc
+            if self._is_rate_limited_error(exc):
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "code": "too_many_requests",
+                        "message": "Too many signup attempts right now. Please wait a minute and try again.",
+                    },
+                ) from exc
+
+            exc_text = self._extract_auth_error_text(exc).lower()
+            if "password" in exc_text and ("weak" in exc_text or "least" in exc_text or "require" in exc_text):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "weak_password",
+                        "message": "Password does not meet security requirements.",
+                    },
+                ) from exc
+            if "email" in exc_text and ("invalid" in exc_text or "malformed" in exc_text):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "invalid_email",
+                        "message": "Email address is invalid.",
+                    },
+                ) from exc
+
+            if self._extract_auth_status_code(exc) == 422:
+                raise ValueError("email_already_exists") from exc
+
             raise HTTPException(
                 status_code=400,
                 detail={
                     "code": "register_failed",
-                    "message": "Unable to register user.",
+                    "message": "Unable to register user. Please verify email/password requirements and try again.",
                 },
             ) from exc
 
@@ -363,11 +447,47 @@ class DatabaseClient:
         if user is None and isinstance(response, dict):
             user = response.get("user")
         if user is None:
+            response_error_text = self._extract_auth_error_text(response)
+            response_error_lower = response_error_text.lower()
+            response_status = self._extract_auth_status_code(response)
+
+            logger.warning(
+                "register_user_admin_create_missing_user",
+                extra={
+                    "email": email,
+                    "status": response_status,
+                    "error": response_error_text[:240],
+                },
+            )
+
+            if self._is_email_exists_error(response_error_lower):
+                raise ValueError("email_already_exists")
+            if response_status == 422:
+                raise ValueError("email_already_exists")
+            if "password" in response_error_lower and (
+                "weak" in response_error_lower or "least" in response_error_lower or "require" in response_error_lower
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "weak_password",
+                        "message": "Password does not meet security requirements.",
+                    },
+                )
+            if "email" in response_error_lower and ("invalid" in response_error_lower or "malformed" in response_error_lower):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "invalid_email",
+                        "message": "Email address is invalid.",
+                    },
+                )
+
             raise HTTPException(
                 status_code=400,
                 detail={
                     "code": "register_failed",
-                    "message": "Unable to register user.",
+                    "message": "Unable to register user. Please verify email/password requirements and try again.",
                 },
             )
         return user
@@ -467,8 +587,28 @@ class DatabaseClient:
                     )
                 except ValueError:
                     raise
-                except HTTPException:
-                    if settings.auth_fallback_enabled:
+                except HTTPException as admin_exc:
+                    admin_detail = admin_exc.detail if isinstance(admin_exc.detail, dict) else {}
+                    admin_code = str(admin_detail.get("code", "")).lower()
+
+                    if admin_code in {"email_already_exists", "user_already_exists", "email_exists"} or self._is_email_exists_error(admin_exc):
+                        raise ValueError("email_already_exists") from admin_exc
+
+                    if admin_code in {"weak_password", "invalid_email", "too_many_requests"}:
+                        raise
+
+                    # Supabase can create the user despite returning signup 429.
+                    if admin_exc.status_code in (400, 422):
+                        recovered = await self.authenticate_user(normalized_email, password)
+                        recovered_user = recovered.get("user") if recovered else None
+                        recovered_id = self._auth_user_field(recovered_user, "id")
+                        if recovered_id:
+                            user = recovered_user
+                            handled_by_admin_fallback = True
+
+                    if handled_by_admin_fallback:
+                        pass
+                    elif settings.auth_fallback_enabled:
                         logger.warning(
                             "register_user_rate_limited_fallback",
                             extra={"email": normalized_email, "error": str(exc)},
@@ -480,7 +620,16 @@ class DatabaseClient:
                             company_name=safe_company_name,
                             locale=safe_locale,
                         )
-                    raise
+                    elif admin_exc.status_code in (400, 422):
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "email_already_exists",
+                                "message": "An account with this email already exists. Try logging in or resetting your password.",
+                            },
+                        ) from admin_exc
+                    else:
+                        raise
                 else:
                     # Admin fallback succeeded; continue with profile/workspace bootstrap.
                     handled_by_admin_fallback = True
@@ -507,11 +656,20 @@ class DatabaseClient:
                 detail={"code": "register_failed", "message": "Unable to register user."},
             )
 
-        user_id = str(user.id)
+        user_id_value = self._auth_user_field(user, "id")
+        user_email_value = self._auth_user_field(user, "email")
+        if not user_id_value:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "register_failed", "message": "Unable to register user."},
+            )
+
+        user_id = str(user_id_value)
+        user_email = str(user_email_value or normalized_email)
         try:
             await self.upsert_user_profile(
                 user_id=user_id,
-                email=user.email or normalized_email,
+                email=user_email,
                 display_name=display_name,
                 locale=safe_locale,
             )
@@ -571,7 +729,7 @@ class DatabaseClient:
         return {
             "user": {
                 "id": user_id,
-                "email": user.email or normalized_email,
+                "email": user_email,
                 "display_name": display_name,
             },
             "workspace_id": workspace_id,
@@ -722,6 +880,174 @@ class DatabaseClient:
                 }
             )
         return normalized
+
+    async def list_workspace_members(self, *, workspace_id: str, online_window_minutes: int = 10) -> list[dict[str, Any]]:
+        """Return members for a workspace with lightweight online status."""
+
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(minutes=max(1, min(int(online_window_minutes), 120)))
+
+        if settings.test_mode:
+            rows: list[dict[str, Any]] = []
+            member_rows = [m for m in local_store.workspace_members if str(m.get("workspace_id", "")) == safe_workspace_id]
+
+            activity_by_user: dict[str, str] = {}
+            for message in local_store.messages.values():
+                if str(message.get("workspace_id", "")) != safe_workspace_id:
+                    continue
+                user_id = str(message.get("user_id", ""))
+                created_at = str(message.get("created_at", ""))
+                if not user_id or not created_at:
+                    continue
+                previous = activity_by_user.get(user_id)
+                if previous is None or created_at > previous:
+                    activity_by_user[user_id] = created_at
+
+            for member in member_rows:
+                user_id = str(member.get("user_id", ""))
+                user = local_store.users_by_id.get(user_id)
+                last_activity_at = activity_by_user.get(user_id)
+                is_online = False
+                if last_activity_at:
+                    try:
+                        is_online = datetime.fromisoformat(last_activity_at.replace("Z", "+00:00")) >= cutoff
+                    except ValueError:
+                        is_online = False
+
+                rows.append(
+                    {
+                        "user_id": user_id,
+                        "display_name": user.display_name if user is not None else None,
+                        "email": user.email if user is not None else None,
+                        "avatar_url": user.avatar_url if user is not None else None,
+                        "role": str(member.get("role", "member")).lower(),
+                        "joined_at": member.get("joined_at"),
+                        "is_online": is_online,
+                        "last_activity_at": last_activity_at,
+                    }
+                )
+
+            rows.sort(
+                key=lambda row: (
+                    0 if row.get("is_online") else 1,
+                    str(row.get("display_name") or row.get("email") or "").lower(),
+                )
+            )
+            return rows
+
+        client = await self._privileged_client()
+        members_response = await self._execute(
+            "list_workspace_members",
+            client.table("workspace_members")
+            .select("workspace_id,user_id,role,joined_at,users(display_name,email,avatar_url)")
+            .eq("workspace_id", safe_workspace_id)
+            .order("joined_at", desc=False),
+        )
+        members = self._extract_data(members_response) or []
+
+        channel_response = await self._execute(
+            "list_workspace_members_channels",
+            client.table("channels").select("id").eq("workspace_id", safe_workspace_id),
+        )
+        channel_rows = self._extract_data(channel_response) or []
+        channel_ids = [str(row.get("id", "")) for row in channel_rows if row.get("id")]
+
+        active_user_by_latest_timestamp: dict[str, str] = {}
+        if channel_ids:
+            activity_response = await self._execute(
+                "list_workspace_members_activity",
+                client.table("messages")
+                .select("user_id,created_at")
+                .in_("channel_id", channel_ids)
+                .gte("created_at", cutoff.isoformat()),
+            )
+            for row in self._extract_data(activity_response) or []:
+                user_id = str(row.get("user_id", ""))
+                created_at = str(row.get("created_at", ""))
+                if not user_id or not created_at:
+                    continue
+                previous = active_user_by_latest_timestamp.get(user_id)
+                if previous is None or created_at > previous:
+                    active_user_by_latest_timestamp[user_id] = created_at
+
+        results: list[dict[str, Any]] = []
+        for member in members:
+            users_value = member.get("users") if isinstance(member, dict) else {}
+            user_id = str(member.get("user_id", ""))
+            last_activity_at = active_user_by_latest_timestamp.get(user_id)
+            results.append(
+                {
+                    "user_id": user_id,
+                    "display_name": users_value.get("display_name") if isinstance(users_value, dict) else None,
+                    "email": users_value.get("email") if isinstance(users_value, dict) else None,
+                    "avatar_url": users_value.get("avatar_url") if isinstance(users_value, dict) else None,
+                    "role": str(member.get("role", "member")).lower(),
+                    "joined_at": member.get("joined_at"),
+                    "is_online": user_id in active_user_by_latest_timestamp,
+                    "last_activity_at": last_activity_at,
+                }
+            )
+
+        results.sort(
+            key=lambda row: (
+                0 if row.get("is_online") else 1,
+                str(row.get("display_name") or row.get("email") or "").lower(),
+            )
+        )
+        return results
+
+    async def remove_workspace_member(self, *, workspace_id: str, member_user_id: str) -> dict[str, Any]:
+        """Remove one member from workspace membership."""
+
+        safe_workspace_id = self._sanitize_text(workspace_id, max_len=128)
+        safe_member_user_id = self._sanitize_text(member_user_id, max_len=128)
+
+        if settings.test_mode:
+            before_count = len(local_store.workspace_members)
+            local_store.workspace_members = [
+                row
+                for row in local_store.workspace_members
+                if not (
+                    str(row.get("workspace_id", "")) == safe_workspace_id
+                    and str(row.get("user_id", "")) == safe_member_user_id
+                )
+            ]
+            removed = before_count != len(local_store.workspace_members)
+            if not removed:
+                raise HTTPException(status_code=404, detail={"code": "member_not_found", "message": "Member not found in workspace."})
+            return {
+                "workspace_id": safe_workspace_id,
+                "member_user_id": safe_member_user_id,
+                "removed": True,
+            }
+
+        client = await self._privileged_client()
+        lookup = await self._execute(
+            "remove_workspace_member_lookup",
+            client.table("workspace_members")
+            .select("workspace_id,user_id,role")
+            .eq("workspace_id", safe_workspace_id)
+            .eq("user_id", safe_member_user_id)
+            .limit(1),
+        )
+        rows = self._extract_data(lookup) or []
+        if not rows:
+            raise HTTPException(status_code=404, detail={"code": "member_not_found", "message": "Member not found in workspace."})
+
+        await self._execute(
+            "remove_workspace_member",
+            client.table("workspace_members")
+            .delete()
+            .eq("workspace_id", safe_workspace_id)
+            .eq("user_id", safe_member_user_id),
+        )
+
+        return {
+            "workspace_id": safe_workspace_id,
+            "member_user_id": safe_member_user_id,
+            "removed": True,
+        }
 
     async def list_discoverable_organizations(
         self,

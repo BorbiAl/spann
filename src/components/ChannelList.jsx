@@ -2,16 +2,6 @@ import './ChannelList.css';
 import React from "react";
 import Icon from "./Icon";
 
-const DIRECT_MESSAGES = [
-	{
-		id: "SC",
-		name: "Sarah Chen",
-		avatar:
-			"https://lh3.googleusercontent.com/aida-public/AB6AXuAMmwKvAIFVC1YNqsjNngqLpJf50pSHL5jjdG0Mxz_WzwwDgVrMp7kaL4l0sIbzP5WmFxt-itTBGGbDECAoe30sAskyf0GOnG6GKtCT7TIRPaNzaQANRVmyUfyZ9UxtQ87INP2ffSNnmRnmEvtwjMGZMdIUZbZ22K80jIdbIJXFiaLk2Xe9tZ8wDTbRudfMVtwi2iYr4aIaPNuWE6--h17Y48ORHwgH9kIix2D8-fRH0V-23dv3ezmDxOGw_KPWKHTaTUrRYk3de3MC"
-	},
-	{ id: "MK", name: "Marcus Kane", color: "#6bb4ff" }
-];
-
 function isDirectChannel(channel) {
 	return String(channel?.kind || "").toLowerCase() === "dm" || String(channel?.id || "").startsWith("dm:") || String(channel?.name || "").startsWith("@");
 }
@@ -26,6 +16,11 @@ export default function ChannelList({
 	onJoinChannel,
 	onLeaveChannel,
 	joinedChannelIds,
+	workspaceMembers,
+	canManageMembers,
+	canRemoveMembers,
+	onInviteMember,
+	onRemoveMember,
 	variant = "default"
 }) {
 	if (!channels || !channels.length) {
@@ -42,6 +37,7 @@ export default function ChannelList({
 	if (variant === "teams") {
 		const groupChannels = channels.filter((channel) => !isDirectChannel(channel));
 		const dmChannels = channels.filter((channel) => isDirectChannel(channel));
+		const allMembers = Array.isArray(workspaceMembers) ? workspaceMembers : [];
 		const joinedSet = new Set(Array.isArray(joinedChannelIds) ? joinedChannelIds.map((id) => String(id)) : []);
 		const joinedGroups = groupChannels.filter((channel) => joinedSet.has(String(channel.id)));
 		const discoverableGroups = groupChannels.filter((channel) => !joinedSet.has(String(channel.id)));
@@ -67,6 +63,20 @@ export default function ChannelList({
 						<Icon name="add" size={12} />
 					</button>
 				</div>
+
+				{groupChannels.length === 0 ? (
+					<div className="channel-item team-channel-item-muted">
+						<div className="flex-1 min-w-0 text-left flex items-center gap-2">
+							<span className="channel-dot" aria-hidden="true">
+								<Icon name="group" size={12} />
+							</span>
+							<span className="channel-name">No group yet</span>
+						</div>
+						<button type="button" onClick={handleCreateChannel} className="chat-section-action" aria-label="Create first group">
+							<Icon name="add" size={12} />
+						</button>
+					</div>
+				) : null}
 
 				{favoriteChannels.map((channel, index) => {
 					const unread = Number(channelUnread?.[channel.id] || 0);
@@ -137,23 +147,16 @@ export default function ChannelList({
 					</button>
 				</div>
 
-				{[...dmChannels, ...DIRECT_MESSAGES.filter((seed) => !dmChannels.some((channel) => String(channel.name || "").toLowerCase() === `@${String(seed.name || "").toLowerCase()}`))].map((entry) => {
+				{dmChannels.map((entry) => {
 					const dmId = String(entry?.id || "").startsWith("dm:") ? entry.id : `dm:${String(entry.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 					const displayName = String(entry?.name || "Direct message").replace(/^@/, "");
 					const isActive = String(activeChannelId) === String(dmId);
-					const isExistingDm = dmChannels.some((channel) => String(channel.id) === String(dmId));
 					return (
 						<button
 							key={dmId}
 							className={`member-item dm-item ${isActive ? "active" : ""}`}
 							onClick={() => {
-								if (isExistingDm) {
-									onChannelChange(dmId);
-									return;
-								}
-								if (typeof onStartDirectMessage === "function") {
-									onStartDirectMessage({ ...entry, id: dmId, name: displayName });
-								}
+								onChannelChange(dmId);
 							}}
 						>
 							{entry?.avatar ? (
@@ -167,6 +170,49 @@ export default function ChannelList({
 						</button>
 					);
 				})}
+
+				{dmChannels.length === 0 ? (
+					<p className="caption" style={{ padding: "0 8px 8px" }}>
+						No direct messages yet.
+					</p>
+				) : null}
+
+				{allMembers.length > 0 ? (
+					<>
+						<div className="chat-section-header section-spacer">
+							<p className="section-title chat-section-title">Members</p>
+							{canManageMembers ? (
+								<button className="chat-section-action" type="button" aria-label="Invite member" onClick={() => onInviteMember?.()}>
+									<Icon name="add" size={12} />
+								</button>
+							) : null}
+						</div>
+						{allMembers.slice(0, 6).map((member) => {
+							const memberLabel = String(member?.display_name || member?.email || "Member");
+							const memberRole = String(member?.role || "member");
+							const isOnline = Boolean(member?.is_online);
+							const removable = canRemoveMembers && memberRole !== "owner";
+							return (
+								<div key={String(member?.user_id || memberLabel)} className="channel-item team-channel-item team-channel-item-muted">
+									<div className="flex-1 min-w-0 text-left flex items-center gap-2">
+										<span className="channel-dot" aria-hidden="true">
+											<Icon name={isOnline ? "circle" : "remove"} size={10} />
+										</span>
+										<span className="channel-name">{memberLabel}</span>
+									</div>
+									<div className="flex items-center gap-1">
+										<span className="caption" style={{ padding: 0 }}>{memberRole}</span>
+										{removable ? (
+											<button type="button" className="chat-section-action" aria-label={`Remove ${memberLabel}`} onClick={() => onRemoveMember?.(member)}>
+												<Icon name="remove" size={12} />
+											</button>
+										) : null}
+									</div>
+								</div>
+							);
+						})}
+					</>
+				) : null}
 			</div>
 		);
 	}

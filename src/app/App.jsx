@@ -11,11 +11,13 @@ import {
 	createOrganization,
 	decideOrganizationInvitation,
 	decideOrganizationJoinRequest,
+	fetchOrganizationMembers,
 	fetchOrganizationOnboarding,
 	getAuthState,
 	inviteOrganizationMember,
 	loginWithPassword,
 	normalizeApiError,
+	removeOrganizationMember,
 	logoutSession,
 	registerWithPassword,
 	requestOrganizationJoin,
@@ -47,7 +49,7 @@ function applyAccessibilityPreferencesGlobal(rawPreferences) {
 		Tritan: "saturate(0.86) hue-rotate(52deg)"
 	};
 	const colorBlindFilter = colorBlindFilters[colorBlind] || "none";
-	const highContrastFilter = Boolean(preferences?.highContrast) ? "contrast(1.18) saturate(0.92)" : "";
+	const highContrastFilter = preferences?.highContrast ? "contrast(1.18) saturate(0.92)" : "";
 	const combinedFilter = [colorBlindFilter !== "none" ? colorBlindFilter : "", highContrastFilter]
 		.filter(Boolean)
 		.join(" ");
@@ -644,7 +646,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 								<label className="auth-check register-check">
 									<input type="checkbox" checked={agreeTerms} onChange={(event) => setAgreeTerms(event.target.checked)} />
 									<span>
-										I agree to the <a href="#" onClick={(event) => event.preventDefault()}>Terms of Service</a> and <a href="#" onClick={(event) => event.preventDefault()}>Privacy Policy</a>.
+										I agree to the <a href="https://github.com/BorbiAl/spann/blob/main/README.md" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="https://github.com/BorbiAl/spann/blob/main/README.md" target="_blank" rel="noreferrer">Privacy Policy</a>.
 									</span>
 								</label>
 
@@ -900,6 +902,8 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 	const [createName, setCreateName] = useState("");
 	const [inviteEmails, setInviteEmails] = useState("");
 	const [joinMessage, setJoinMessage] = useState("");
+	const [workspaceMembers, setWorkspaceMembers] = useState([]);
+	const [membersLoading, setMembersLoading] = useState(false);
 	const [state, setState] = useState({
 		my_organizations: [],
 		discoverable_organizations: [],
@@ -932,10 +936,16 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 		loadState();
 	}, []);
 
-	function persistWorkspaceId(workspaceId) {
+	function persistWorkspaceId(workspaceId, workspaceMeta = null) {
+		const nextUser = {
+			...(authState?.user || {}),
+			...(workspaceMeta?.role ? { role: workspaceMeta.role } : {}),
+			...(workspaceMeta?.name ? { workspace_name: workspaceMeta.name } : {}),
+		};
 		const nextAuthState = {
 			...(authState || {}),
-			workspaceId: workspaceId || authState?.workspaceId || ""
+			workspaceId: workspaceId || authState?.workspaceId || "",
+			user: nextUser
 		};
 		const saved = setAuthState(nextAuthState, {
 			persist: Boolean(authState?.persist)
@@ -991,7 +1001,10 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 				setInfoText("Organization created successfully.");
 			}
 
-			persistWorkspaceId(workspaceId);
+			persistWorkspaceId(workspaceId, {
+				role: "owner",
+				name: String(organization.name || createName.trim())
+			});
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Could not create organization.");
 			setErrorText(normalized.message || "Could not create organization.");
@@ -1065,12 +1078,68 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 		}
 	}
 
+	async function handleRemoveMember(memberUserId) {
+		if (!managedWorkspaceId || !memberUserId || submitting || !canManageMembers) {
+			return;
+		}
+
+		setSubmitting(true);
+		setErrorText("");
+		setInfoText("");
+		try {
+			await removeOrganizationMember({ workspaceId: managedWorkspaceId, memberUserId });
+			setWorkspaceMembers((current) => current.filter((member) => String(member?.user_id || "") !== String(memberUserId)));
+			setInfoText("Member removed from organization.");
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Could not remove member.");
+			setErrorText(normalized.message || "Could not remove member.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
 	const myOrganizations = Array.isArray(state?.my_organizations) ? state.my_organizations : [];
+	const managedOrganization = myOrganizations.find((item) => {
+		const role = String(item?.role || "member").toLowerCase();
+		return role === "owner" || role === "admin";
+	}) || null;
+	const managedWorkspaceId = String(managedOrganization?.workspace_id || managedOrganization?.id || "");
+	const canManageMembers = String(managedOrganization?.role || "").toLowerCase() === "owner";
 	const discoverableOrganizations = Array.isArray(state?.discoverable_organizations) ? state.discoverable_organizations : [];
 	const pendingInvitations = Array.isArray(state?.pending_invitations) ? state.pending_invitations : [];
 	const pendingJoinRequests = Array.isArray(state?.pending_join_requests) ? state.pending_join_requests : [];
 	const hasOrganization = myOrganizations.length > 0;
 	const canContinueToWorkspace = hasOrganization;
+
+	useEffect(() => {
+		let cancelled = false;
+		async function loadMembers() {
+			if (!managedWorkspaceId) {
+				setWorkspaceMembers([]);
+				return;
+			}
+			setMembersLoading(true);
+			try {
+				const members = await fetchOrganizationMembers({ workspaceId: managedWorkspaceId });
+				if (!cancelled) {
+					setWorkspaceMembers(Array.isArray(members) ? members : []);
+				}
+			} catch {
+				if (!cancelled) {
+					setWorkspaceMembers([]);
+				}
+			} finally {
+				if (!cancelled) {
+					setMembersLoading(false);
+				}
+			}
+		}
+
+		loadMembers();
+		return () => {
+			cancelled = true;
+		};
+	}, [managedWorkspaceId]);
 
 	function handleContinueToWorkspace() {
 		if (!canContinueToWorkspace) {
@@ -1086,7 +1155,11 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 		);
 
 		if (fallbackWorkspaceId && fallbackWorkspaceId !== authState?.workspaceId) {
-			persistWorkspaceId(fallbackWorkspaceId);
+			const selectedOrg = myOrganizations.find((item) => String(item?.workspace_id || item?.id || "") === fallbackWorkspaceId);
+			persistWorkspaceId(fallbackWorkspaceId, {
+				role: String(selectedOrg?.role || "member"),
+				name: String(selectedOrg?.name || "")
+			});
 			return;
 		}
 
@@ -1250,6 +1323,41 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 									</div>
 								))}
 							</div>
+						</div>
+					) : null}
+
+					{!loading && myOrganizations.length === 0 && pendingInvitations.length === 0 && discoverableOrganizations.length === 0 ? (
+						<div className="org-section">
+							<h3 className="org-section-title">No organizations yet</h3>
+							<p className="org-empty">No workspaces are currently available. Create one to continue.</p>
+						</div>
+					) : null}
+
+					{managedWorkspaceId ? (
+						<div className="org-section">
+							<h3 className="org-section-title">Organization members</h3>
+							{membersLoading ? <p className="org-loading">Loading members...</p> : null}
+							{!membersLoading && workspaceMembers.length === 0 ? <p className="org-empty">No members found.</p> : null}
+							{workspaceMembers.map((member) => {
+								const memberName = member?.display_name || member?.email || "Member";
+								const memberRole = String(member?.role || "member");
+								const isSelf = String(member?.user_id || "") === String(authState?.userId || authState?.user?.id || "");
+								return (
+									<div key={String(member?.user_id || memberName)} className="org-list-item">
+										<div>
+											<strong className="org-name">{memberName}</strong>
+											<div className="status-subtext org-meta">{memberRole}</div>
+										</div>
+										{canManageMembers && !isSelf && memberRole !== "owner" ? (
+											<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleRemoveMember(member.user_id)}>
+												Remove
+											</button>
+										) : (
+											<span className="org-role-pill">{isSelf ? "you" : memberRole}</span>
+										)}
+									</div>
+								);
+							})}
 						</div>
 					) : null}
 

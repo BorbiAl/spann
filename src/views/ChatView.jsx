@@ -4,20 +4,6 @@ import Message from "../components/Message";
 import { apiRequestFormData, getAuthState } from "../data/constants";
 import { CHANNELS, INCOMING_AUTHORS, INCOMING_MESSAGE_BANK, incrementReaction } from "../data/constants";
 
-const PRESENCE_MEMBERS = [
-	{
-		id: "sarah",
-		name: "Sarah Chen",
-		avatar:
-			"https://lh3.googleusercontent.com/aida-public/AB6AXuCeX83POcK2ErUQRuh8dLEiZzV2zBzREt2WJ06F2PjbO7eT9obL2mn3MNVweL9NJEUSctvCB5_9w0xkWD_IjeNDBZsWh3LjbBhrt5CYyK1dYy2hEAPPPu5YO0w7obgjjPhyx8BZ7NyWuK6w1nDnSwpycWhj2ty3n9ITfSGoUHDuTTMjz1OsJKRDF5ZSeA7KY-2LUIVsTIt4NQqD5L9Wpnf4Q1SwIbL-SOHN96csvROrp6AlL7dLgcs3fPi2Z2cOT9pZuZv1OgfJZx1U"
-	},
-	{
-		id: "marcus",
-		name: "Marcus Kane",
-		initials: "MK"
-	}
-];
-
 export default function ChatView({
 	activeChannel,
 	channelMood,
@@ -32,11 +18,18 @@ export default function ChatView({
 	setShowNudge,
 	onStartCall,
 	currentUserName,
+	workspaceMembers,
+	onOpenChannelSettings,
+	onOpenSupport,
+	hasGroupChannels,
+	onCreateGroup,
+	canManageMembers,
+	onInviteMember,
 }) {
 	const [inputValue, setInputValue] = useState("");
 	const [isSending, setIsSending] = useState(false);
 	const textareaRef = useRef(null);
-	const [liveFeedEnabled, setLiveFeedEnabled] = useState(true);
+	const [liveFeedEnabled, setLiveFeedEnabled] = useState(false);
 	const [activeTypist, setActiveTypist] = useState("");
 	const [isUserTyping, setIsUserTyping] = useState(false);
 	const [localMessagesByChannel, setLocalMessagesByChannel] = useState({});
@@ -111,12 +104,15 @@ export default function ChatView({
 
 	const sentimentScore = Number(channelMood || CHANNELS.find((channel) => channel.name === activeChannel)?.mood || 65);
 	const sentimentLabel = sentimentScore > 70 ? "Collaborative" : sentimentScore > 45 ? "Neutral" : "Critical";
+	const activeMembers = Array.isArray(workspaceMembers) ? workspaceMembers.filter((member) => Boolean(member?.is_online)) : [];
+	const shownMembers = activeMembers.slice(0, 2);
+	const extraMembers = Math.max(0, activeMembers.length - shownMembers.length);
 
-	const channelMessages = Array.isArray(messages) ? messages : [];
-	const liveMessages = localMessagesByChannel[channelKey] || [];
 	const displayMessages = useMemo(() => {
+		const channelMessages = Array.isArray(messages) ? messages : [];
+		const liveMessages = localMessagesByChannel[channelKey] || [];
 		return [...channelMessages, ...liveMessages].slice(-80);
-	}, [channelMessages, liveMessages]);
+	}, [messages, localMessagesByChannel, channelKey]);
 
 	useEffect(() => {
 		setActiveTypist("");
@@ -868,14 +864,33 @@ export default function ChatView({
 		: `Type a message to #${String(activeChannel || "product-strategy").replace(/^#/, "")}`;
 	const typingLabel = activeTypist || (isUserTyping ? "You" : "");
 
+	if (!hasGroupChannels) {
+		return (
+			<div className="flex-1 min-h-0 h-full flex items-center justify-center bg-surface px-8">
+				<div className="max-w-md rounded-2xl border border-outline-variant/30 bg-surface-container-low p-6 text-center shadow-sm">
+					<h2 className="text-xl font-bold text-on-surface">No group yet</h2>
+					<p className="mt-2 text-sm text-on-surface-variant">Create your first group channel to start team collaboration.</p>
+					<button
+						type="button"
+						onClick={onCreateGroup}
+						className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary hover:brightness-95"
+					>
+						<span className="material-symbols-outlined text-[18px]">group_add</span>
+						<span>Create Group</span>
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 	return (
-		<div className="flex-1 min-h-0 h-full flex flex-col min-w-0 bg-white">
+		<div className="flex-1 min-h-0 h-full flex flex-col min-w-0 bg-surface">
 			{/* Top App Bar */}
-			<header className="h-[60px] flex items-center justify-between px-6 bg-white sticky top-0 z-10 border-b border-black/5">
+			<header className="h-[60px] flex items-center justify-between px-6 bg-surface sticky top-0 z-10 border-b border-outline-variant/20">
 				<div className="flex items-center gap-3">
-					<span className="text-[#0b4b8a] text-[20px] font-medium">#</span>
-					<h2 className="font-bold text-[#1D1D1F] text-[18px] tracking-tight">{String(activeChannel || "product-strategy").replace(/^#/, "")}</h2>
-					<span className="material-symbols-outlined text-[#1D1D1F] opacity-40 text-[18px] cursor-pointer" data-icon="star">
+					<span className="text-primary text-[20px] font-medium">#</span>
+					<h2 className="font-bold text-on-surface text-[18px] tracking-tight">{String(activeChannel || "product-strategy").replace(/^#/, "")}</h2>
+					<span className="material-symbols-outlined text-on-surface-variant opacity-50 text-[18px] cursor-pointer" data-icon="star">
 						star
 					</span>
 				</div>
@@ -884,46 +899,81 @@ export default function ChatView({
 						type="button"
 						onClick={() => setLiveFeedEnabled((current) => !current)}
 						className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-							liveFeedEnabled ? "border-[#0f67b7]/30 text-[#0f67b7] bg-[#e9f3ff]" : "border-black/10 text-[#596272] bg-[#f3f4f6]"
+							liveFeedEnabled ? "border-primary/30 text-primary bg-primary/10" : "border-outline-variant/50 text-on-surface-variant bg-surface-container-low"
 						}`}
 					>
-						{liveFeedEnabled ? "Live feed on" : "Live feed off"}
+						{liveFeedEnabled ? "Simulated feed on" : "Simulated feed off"}
 					</button>
 					<button
 						type="button"
 						onClick={onStartCall}
-						className="text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 border-black/10 text-white bg-[#0f67b7]"
+						className="text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 border-primary/20 text-on-primary bg-primary hover:brightness-95"
 						aria-label="Start call"
 					>
 						<span className="material-symbols-outlined text-[16px]">call</span>
 						<span>Start Call</span>
 					</button>
+					{canManageMembers ? (
+						<button
+							type="button"
+							onClick={onInviteMember}
+							className="text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 border-primary/20 text-primary bg-surface"
+							aria-label="Invite member"
+						>
+							<span className="material-symbols-outlined text-[16px]">person_add</span>
+							<span>Invite</span>
+						</button>
+					) : null}
 					<div className="flex -space-x-2">
-						{PRESENCE_MEMBERS.slice(0, 2).map((member, index) => (
-							<React.Fragment key={member.id}>
-								{member.avatar ? (
+						{shownMembers.map((member) => {
+							const label = String(member?.display_name || member?.email || "Member");
+							const initials = label
+								.split(/\s+/)
+								.filter(Boolean)
+								.slice(0, 2)
+								.map((word) => word[0])
+								.join("")
+								.toUpperCase() || "ME";
+							if (member?.avatar_url) {
+								return (
 									<img
-										className="w-8 h-8 rounded-full border-2 border-white object-cover"
-										src={member.avatar}
-										alt={`${member.name} avatar`}
+										key={String(member?.user_id || label)}
+										className="w-8 h-8 rounded-full border-2 border-surface object-cover"
+										src={member.avatar_url}
+										alt={`${label} avatar`}
 									/>
-								) : (
-									<div className="w-8 h-8 rounded-full border-2 border-white bg-[#E5E5EA] text-[#1D1D1F] text-[10px] flex items-center justify-center font-bold">
-										{member.initials || member.name.slice(0, 2).toUpperCase()}
-									</div>
-								)}
-							</React.Fragment>
-						))}
-						<div className="w-8 h-8 rounded-full border-2 border-white bg-[#E5E5EA] text-[#1D1D1F] text-[11px] flex items-center justify-center font-bold">
-							+12
-						</div>
+								);
+							}
+							return (
+								<div key={String(member?.user_id || label)} className="w-8 h-8 rounded-full border-2 border-surface bg-surface-container-high text-on-surface text-[10px] flex items-center justify-center font-bold">
+									{initials}
+								</div>
+							);
+						})}
+						{extraMembers > 0 ? (
+							<div className="w-8 h-8 rounded-full border-2 border-surface bg-surface-container-high text-on-surface text-[11px] flex items-center justify-center font-bold">
+								+{extraMembers}
+							</div>
+						) : null}
 					</div>
-					<span className="material-symbols-outlined text-[#1D1D1F] opacity-60 text-[22px] cursor-pointer hover:opacity-100 transition-colors" data-icon="help">
+					<button
+						type="button"
+						onClick={onOpenSupport}
+						className="material-symbols-outlined text-on-surface-variant opacity-80 text-[22px] cursor-pointer hover:text-on-surface transition-colors"
+						data-icon="help"
+						aria-label="Open support"
+					>
 						help
-					</span>
-					<span className="material-symbols-outlined text-[#1D1D1F] opacity-60 text-[22px] cursor-pointer hover:opacity-100 transition-colors" data-icon="settings">
+					</button>
+					<button
+						type="button"
+						onClick={onOpenChannelSettings}
+						className="material-symbols-outlined text-on-surface-variant opacity-80 text-[22px] cursor-pointer hover:text-on-surface transition-colors"
+						data-icon="settings"
+						aria-label="Open chat settings"
+					>
 						settings
-					</span>
+					</button>
 				</div>
 			</header>
 
@@ -934,7 +984,7 @@ export default function ChatView({
 					<div className="absolute inset-0 flex items-center">
 						<div className="w-full border-t border-black/5" />
 					</div>
-					<span className="relative px-4 bg-white text-[11px] font-bold text-[#1D1D1F] opacity-60 tracking-widest uppercase">
+					<span className="relative px-4 bg-surface text-[11px] font-bold text-on-surface-variant opacity-80 tracking-widest uppercase">
 						TODAY
 					</span>
 				</div>
@@ -949,16 +999,16 @@ export default function ChatView({
 				))}
 
 				{showNudge ? (
-					<div className="bg-[#E1F0FF] px-4 py-3 flex items-start gap-4 rounded-[8px] w-full max-w-[85%] self-start border-l-4 border-l-[#0f67b7]">
-						<span className="material-symbols-outlined text-[#0f67b7] text-[20px] mt-0.5" data-icon="info">
+					<div className="bg-primary/10 px-4 py-3 flex items-start gap-4 rounded-[8px] w-full max-w-[85%] self-start border-l-4 border-l-primary">
+						<span className="material-symbols-outlined text-primary text-[20px] mt-0.5" data-icon="info">
 							info
 						</span>
 						<div className="flex flex-1 justify-between items-center pr-2">
-							<p className="text-[13px] text-[#003B73] font-medium leading-relaxed">
+							<p className="text-[13px] text-on-surface font-medium leading-relaxed">
 								{nudgeText}
 							</p>
 							<button
-								className="text-[12px] font-bold uppercase tracking-widest text-[#0b4b8a] hover:underline"
+								className="text-[12px] font-bold uppercase tracking-widest text-primary hover:underline"
 								onClick={() => setShowNudge(false)}
 							>
 								DISMISS
@@ -970,11 +1020,11 @@ export default function ChatView({
 				{typingLabel ? (
 					<div className="flex items-center gap-2 px-14 opacity-50 mb-2">
 						<div className="flex gap-1" aria-hidden="true">
-							<span className="w-1 h-1 rounded-full bg-[#1D1D1F] animate-pulse" />
-							<span className="w-1 h-1 rounded-full bg-[#1D1D1F] animate-pulse delay-75" />
-							<span className="w-1 h-1 rounded-full bg-[#1D1D1F] animate-pulse delay-150" />
+							<span className="w-1 h-1 rounded-full bg-on-surface animate-pulse" />
+							<span className="w-1 h-1 rounded-full bg-on-surface animate-pulse delay-75" />
+							<span className="w-1 h-1 rounded-full bg-on-surface animate-pulse delay-150" />
 						</div>
-						<span className="text-[12px] italic text-[#1D1D1F]">{typingLabel} is typing...</span>
+						<span className="text-[12px] italic text-on-surface">{typingLabel} is typing...</span>
 					</div>
 				) : null}
 
@@ -982,7 +1032,7 @@ export default function ChatView({
 					<button
 						type="button"
 						onClick={jumpToLatest}
-						className="sticky bottom-2 self-center bg-[#0f67b7] text-white text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-md hover:bg-[#0b4b8a] transition-colors"
+						className="sticky bottom-2 self-center bg-primary text-on-primary text-[12px] font-semibold px-4 py-1.5 rounded-full shadow-md hover:brightness-95 transition-colors"
 					>
 						Jump to latest
 					</button>
@@ -990,54 +1040,54 @@ export default function ChatView({
 			</div>
 
 			{/* Message Input Area */}
-			<footer className="px-10 pb-8 bg-white shrink-0">
+			<footer className="px-10 pb-8 bg-surface shrink-0">
 				<div className="w-full space-y-3">
 					{/* Sentiment Bar */}
 					<div className="flex items-center gap-4 px-2 w-full max-w-full">
-						<span className="text-[10px] font-bold text-[#1D1D1F] opacity-70 uppercase tracking-widest whitespace-nowrap">
+						<span className="text-[10px] font-bold text-on-surface opacity-70 uppercase tracking-widest whitespace-nowrap">
 							TONE SENTIMENT
 						</span>
-						<div className="flex-1 h-[6px] bg-[#E5E5EA] rounded-full overflow-hidden flex">
+						<div className="flex-1 h-[6px] bg-surface-container-high rounded-full overflow-hidden flex">
 							<div
-								className="h-full bg-[#0f67b7] transition-all duration-500 rounded-full"
+								className="h-full bg-primary transition-all duration-500 rounded-full"
 								style={{ width: `${Math.max(6, Math.min(95, sentimentScore))}%` }}
 							/>
 						</div>
-						<span className="text-[12px] font-bold text-[#0f67b7]">{sentimentLabel}</span>
+						<span className="text-[12px] font-bold text-primary">{sentimentLabel}</span>
 					</div>
 
 					{/* Input Box */}
-					<div className="bg-white rounded-[12px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-[#E5E5EA] p-3 focus-within:ring-2 focus-within:ring-[#0f67b7]/20 transition-all flex flex-col">
+					<div className="bg-surface rounded-[12px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-outline-variant/50 p-3 focus-within:ring-2 focus-within:ring-primary/20 transition-all flex flex-col">
 						<textarea
 							ref={textareaRef}
 							value={inputValue}
 							onChange={handleInputChange}
-							className="w-full border-none focus:outline-none focus:ring-0 text-[14px] text-[#1D1D1F] px-1 bg-transparent resize-none placeholder:text-[#1D1D1F] placeholder:opacity-50"
+							className="w-full border-none focus:outline-none focus:ring-0 text-[14px] text-on-surface px-1 bg-transparent resize-none placeholder:text-on-surface-variant placeholder:opacity-70"
 							placeholder={inputPlaceholder}
 							rows={1}
 							onKeyDown={handleInputKeyDown}
 						/>
 						<div className="flex items-center justify-between mt-6">
 							<div className="flex items-center gap-3 pl-1">
-								<span className="material-symbols-outlined text-[24px] text-[#1D1D1F] opacity-70 hover:opacity-100 cursor-pointer" data-icon="add_circle">add_circle</span>
+								<span className="material-symbols-outlined text-[24px] text-on-surface-variant opacity-80 hover:text-on-surface cursor-pointer" data-icon="add_circle">add_circle</span>
 								<button
 									type="button"
 									onClick={toggleDictation}
-									className={`material-symbols-outlined text-[24px] ${isDictating ? "text-[#0f67b7]" : "text-[#1D1D1F] opacity-70 hover:opacity-100"} cursor-pointer`}
+									className={`material-symbols-outlined text-[24px] ${isDictating ? "text-primary" : "text-on-surface-variant opacity-80 hover:text-on-surface"} cursor-pointer`}
 									aria-label={isDictating ? "Stop dictation" : "Start dictation"}
 								>
 									{isDictating ? "mic" : "mic_none"}
 								</button>
-								<span className="material-symbols-outlined text-[24px] text-[#1D1D1F] opacity-70 hover:opacity-100 cursor-pointer" data-icon="sentiment_satisfied">sentiment_satisfied</span>
-								<span className="material-symbols-outlined text-[24px] text-[#1D1D1F] opacity-70 hover:opacity-100 cursor-pointer" data-icon="alternate_email">alternate_email</span>
+								<span className="material-symbols-outlined text-[24px] text-on-surface-variant opacity-80 hover:text-on-surface cursor-pointer" data-icon="sentiment_satisfied">sentiment_satisfied</span>
+								<span className="material-symbols-outlined text-[24px] text-on-surface-variant opacity-80 hover:text-on-surface cursor-pointer" data-icon="alternate_email">alternate_email</span>
 								
-								<div className="flex items-center gap-3 ml-2 border-l border-black/10 pl-5">
-									<span className="material-symbols-outlined text-[20px] text-[#1D1D1F] opacity-70" data-icon="translate">translate</span>
-									<span className="text-[12px] font-semibold text-[#1D1D1F] opacity-80 uppercase tracking-widest tracking-tighter">TRANSLATE</span>
+								<div className="flex items-center gap-3 ml-2 border-l border-outline-variant/50 pl-5">
+									<span className="material-symbols-outlined text-[20px] text-on-surface-variant opacity-80" data-icon="translate">translate</span>
+									<span className="text-[12px] font-semibold text-on-surface-variant opacity-90 uppercase tracking-widest tracking-tighter">TRANSLATE</span>
 									
 									<button
 										type="button"
-										className={`w-[32px] h-[18px] rounded-full relative cursor-pointer border ${translateEnabled ? 'bg-[#34C759] border-[#34C759]' : 'bg-[#E5E5EA] border-[#D1D1D6]'}`}
+										className={`w-[32px] h-[18px] rounded-full relative cursor-pointer border ${translateEnabled ? 'bg-green-500 border-green-500' : 'bg-surface-container-high border-outline-variant'}`}
 										onClick={() => setTranslateEnabled((current) => !current)}
 										aria-pressed={translateEnabled}
 									>
@@ -1047,7 +1097,7 @@ export default function ChatView({
 							</div>
 
 							<button
-								className={`bg-[#0f67b7] text-white pl-4 pr-3 py-[6px] rounded-[16px] text-[14px] font-semibold flex items-center justify-center gap-1.5 hover:bg-[#0b4b8a] transition-all cursor-pointer shadow-sm ${isSending ? "opacity-75 cursor-wait" : "active:scale-95"}`}
+								className={`bg-primary text-on-primary pl-4 pr-3 py-[6px] rounded-[16px] text-[14px] font-semibold flex items-center justify-center gap-1.5 hover:brightness-95 transition-all cursor-pointer shadow-sm ${isSending ? "opacity-75 cursor-wait" : "active:scale-95"}`}
 								onClick={() => sendMessage()}
 								disabled={isSending}
 								aria-label={isSending ? "Sending message..." : "Send message"}
@@ -1057,10 +1107,10 @@ export default function ChatView({
 								{isSending ? <span className="material-symbols-outlined text-[16px] animate-spin" data-icon="sync">sync</span> : <span className="material-symbols-outlined text-[16px]" data-icon="send">send</span>}
 							</button>
 						</div>
-						{dictationHint ? <p className="mt-2 px-1 text-[11px] text-[#5d6a7a]">{dictationHint}</p> : null}
+						{dictationHint ? <p className="mt-2 px-1 text-[11px] text-on-surface-variant">{dictationHint}</p> : null}
 						{speechDebugEnabled ? (
-							<div className="mt-2 rounded-md border border-[#d7dde7] bg-[#f8fbff] px-2.5 py-2 text-[11px] text-[#2e3f57] leading-relaxed">
-								<div className="font-semibold uppercase tracking-wide text-[10px] text-[#375a86]">Speech Debug</div>
+							<div className="mt-2 rounded-md border border-outline-variant/50 bg-surface-container-low px-2.5 py-2 text-[11px] text-on-surface-variant leading-relaxed">
+								<div className="font-semibold uppercase tracking-wide text-[10px] text-primary">Speech Debug</div>
 								<div>Status: {speechDebug.status || "idle"}</div>
 								<div>Locale: {speechDebug.locale || recognitionLocale}</div>
 								<div>Result count: {speechDebug.resultCount}</div>

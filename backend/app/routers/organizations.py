@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.database import db
@@ -114,6 +114,53 @@ async def invite_user(
         note=payload.note,
     )
     return success_response(invitation, status_code=201)
+
+
+@router.get("/{workspace_id}/members")
+async def list_workspace_members(
+    workspace_id: UUID,
+    request: Request,
+    _rate_limit: None = Depends(public_rate_limit_dependency),
+) -> JSONResponse:
+    """List members for a workspace, including lightweight online status."""
+
+    user_id = UUID(str(request.state.user_id))
+    await db.verify_workspace_access(user_id=user_id, workspace_id=workspace_id, required_role="member")
+    members = await db.list_workspace_members(workspace_id=str(workspace_id))
+    return success_response(members)
+
+
+@router.delete("/{workspace_id}/members/{member_user_id}")
+async def remove_workspace_member(
+    workspace_id: UUID,
+    member_user_id: UUID,
+    request: Request,
+    _rate_limit: None = Depends(public_rate_limit_dependency),
+) -> JSONResponse:
+    """Remove a member from a workspace (owner only)."""
+
+    owner_id = str(request.state.user_id)
+    await db.verify_workspace_access(user_id=UUID(owner_id), workspace_id=workspace_id, required_role="owner")
+
+    if owner_id == str(member_user_id):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "owner_self_remove_forbidden", "message": "Workspace owners cannot remove themselves."},
+        )
+
+    members = await db.list_workspace_members(workspace_id=str(workspace_id))
+    target_member = next((member for member in members if str(member.get("user_id", "")) == str(member_user_id)), None)
+    if target_member is None:
+        raise HTTPException(status_code=404, detail={"code": "member_not_found", "message": "Member not found in workspace."})
+
+    if str(target_member.get("role", "member")).lower() == "owner":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "owner_remove_forbidden", "message": "Owner members cannot be removed from this endpoint."},
+        )
+
+    result = await db.remove_workspace_member(workspace_id=str(workspace_id), member_user_id=str(member_user_id))
+    return success_response(result)
 
 
 @router.post("/join-requests")

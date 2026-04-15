@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import json
 from pathlib import Path
 from secrets import compare_digest
 
@@ -61,6 +62,8 @@ class Settings(BaseSettings):
     celery_result_backend: str = Field(default="redis://valkey:6379/1", alias="CELERY_RESULT_BACKEND")
 
     next_public_api_url: str = Field(default="http://localhost:8000", alias="NEXT_PUBLIC_API_URL")
+    app_download_url: str = Field(default="", alias="APP_DOWNLOAD_URL")
+    public_runtime_config_json: str = Field(default="{}", alias="PUBLIC_RUNTIME_CONFIG_JSON")
 
     @model_validator(mode="after")
     def validate_security_defaults(self) -> "Settings":
@@ -108,6 +111,26 @@ class Settings(BaseSettings):
         if not expected:
             return False
         return compare_digest(candidate, expected)
+
+    @property
+    def public_runtime_config(self) -> dict[str, object]:
+        """Return validated public runtime config exposed to frontend clients."""
+
+        try:
+            raw = json.loads(self.public_runtime_config_json or "{}")
+        except json.JSONDecodeError:
+            raw = {}
+
+        if not isinstance(raw, dict):
+            raw = {}
+
+        payload: dict[str, object] = {
+            "app_download_url": self.app_download_url.strip(),
+            "nav_items": raw.get("nav_items") if isinstance(raw.get("nav_items"), list) else [],
+            "cultures": raw.get("cultures") if isinstance(raw.get("cultures"), list) else [],
+            "feature_toggles": raw.get("feature_toggles") if isinstance(raw.get("feature_toggles"), dict) else {},
+        }
+        return payload
 
 
 @lru_cache(maxsize=1)

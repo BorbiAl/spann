@@ -14,15 +14,14 @@ import SupportView from "../views/SupportView";
 import { useTheme } from "./ThemeProvider";
 import { meshApi } from "../api/mesh";
 import {
-	CHANNELS,
-	DEFAULT_MESSAGES_BY_CHANNEL,
-	DEFAULT_UNREAD_BY_CHANNEL,
-	NAV_ITEMS,
 	apiRequest,
+	fetchOrganizationMembers,
+	fetchPublicRuntimeConfig,
 	getAuthState,
-	incrementReaction,
+	inviteOrganizationMember,
 	loadFromStorage,
 	normalizeApiError,
+	removeOrganizationMember,
 	pushAppNotice
 } from "../data/constants";
 
@@ -35,27 +34,15 @@ function withHash(channelName) {
 }
 
 function toFallbackChannels() {
-	return CHANNELS.map((channel) => ({
-		id: channel.name,
-		name: withHash(channel.name),
-		mood: channel.mood
-	}));
+	return [];
 }
 
 function toFallbackMessages() {
-	const mapped = {};
-	Object.keys(DEFAULT_MESSAGES_BY_CHANNEL).forEach((channelName) => {
-		mapped[channelName] = DEFAULT_MESSAGES_BY_CHANNEL[channelName].map((message) => ({ ...message }));
-	});
-	return mapped;
+	return {};
 }
 
 function toFallbackUnread() {
-	const unread = {};
-	Object.keys(DEFAULT_UNREAD_BY_CHANNEL).forEach((channelName) => {
-		unread[channelName] = Number(DEFAULT_UNREAD_BY_CHANNEL[channelName] || 0);
-	});
-	return unread;
+	return {};
 }
 
 function sanitizeUnreadMap(unreadMap, channelRows) {
@@ -72,11 +59,7 @@ function sanitizeUnreadMap(unreadMap, channelRows) {
 }
 
 function toFallbackMoodByChannel() {
-	const moodMap = {};
-	CHANNELS.forEach((channel) => {
-		moodMap[channel.name] = Number(channel.mood || 65);
-	});
-	return moodMap;
+	return {};
 }
 
 function normalizePulseScore(scoreValue) {
@@ -160,6 +143,16 @@ function formatMessageTime(timestamp) {
 	return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+const DEFAULT_NAV_ITEMS = [
+	{ key: "chat", label: "Chat", icon: "chat", badge: 0 },
+	{ key: "mesh", label: "Mesh", icon: "tower", badge: 0 },
+	{ key: "carbon", label: "Carbon", icon: "leaf", badge: 0 },
+	{ key: "pulse", label: "Pulse", icon: "wave", badge: 0 },
+	{ key: "accessibility", label: "Access", icon: "eye", badge: 0 },
+	{ key: "translator", label: "Translate", icon: "globe", badge: 0 },
+	{ key: "settings", label: "Settings", icon: "settings", badge: 0 }
+];
+
 function toUiMessage(apiMessage) {
 	const reactions = Array.isArray(apiMessage?.reactions)
 		? apiMessage.reactions.map((reaction) => `${reaction.emoji || ""} ${Number(reaction.count) || 0}`.trim())
@@ -181,7 +174,7 @@ function toUiMessage(apiMessage) {
 	};
 }
 
-function SideSection({ activeView }) {
+function SideSection({ activeView, onSectionAction }) {
 	const sectionMap = {
 		mesh: ["Node Coverage", "Signal Handoffs", "Failure Timeline"],
 		carbon: ["Daily Goal", "Weekly Impact", "Rewards"],
@@ -200,7 +193,7 @@ function SideSection({ activeView }) {
 		<div className="sidebar-section">
 			<p className="section-title">Sections</p>
 			{items.map((item, index) => (
-				<button key={item} className={`section-item ${index === 0 ? "active" : ""}`}>
+				<button key={item} onClick={() => onSectionAction?.(item)} className={`section-item ${index === 0 ? "active" : ""}`}>
 					<span className="channel-dot">G��</span>
 					<span className="section-label">{item}</span>
 				</button>
@@ -260,8 +253,9 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, onJoinChannel, onLeaveChannel, joinedChannelIds, jumpRef, collapsed }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, onJoinChannel, onLeaveChannel, joinedChannelIds, jumpRef, collapsed, currentUserName, currentUserInitials, onSectionAction, onlineMembers, workspaceMembers, canManageMembers, canRemoveMembers, onInviteMember, onRemoveMember }) {
 	const [jumpSearch, setJumpSearch] = useState("");
+	const displayedMembers = Array.isArray(onlineMembers) ? onlineMembers.slice(0, 6) : [];
 
 	if (isChatLayout) {
 		if (collapsed) return null;
@@ -305,6 +299,11 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					onJoinChannel={onJoinChannel}
 					onLeaveChannel={onLeaveChannel}
 					joinedChannelIds={joinedChannelIds}
+					workspaceMembers={workspaceMembers}
+					canManageMembers={canManageMembers}
+					canRemoveMembers={canRemoveMembers}
+					onInviteMember={onInviteMember}
+					onRemoveMember={onRemoveMember}
 					variant="teams"
 				/>
 			</aside>
@@ -346,23 +345,39 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					joinedChannelIds={joinedChannelIds}
 				/>
 			) : (
-				<SideSection activeView={activeView} />
+				<SideSection activeView={activeView} onSectionAction={onSectionAction} />
 			)}
 
 			<div className="sidebar-section">
 				<p className="section-title">Online</p>
-				{[
-					{ id: "AK", name: "Alex K", color: "#0f67b7" },
-					{ id: "MG", name: "Maria G", color: "#BF5AF2" },
-					{ id: "JP", name: "Jin Park", color: "#30D158" }
-				].map((person) => (
-					<button key={person.id} className="member-item">
-						<span className="member-avatar" style={{ background: person.color }}>
-							{person.id}
+				{displayedMembers.length === 0 ? (
+					<button className="member-item" type="button">
+						<span className="member-avatar" style={{ background: "#0f67b7" }}>
+							{String(currentUserInitials || "ME").slice(0, 2).toUpperCase()}
 						</span>
-						<span className="member-meta">{person.name}</span>
+						<span className="member-meta">{currentUserName || "Current User"}</span>
 					</button>
-				))}
+				) : (
+					displayedMembers.map((member) => {
+						const label = String(member?.display_name || member?.email || "Member");
+						const initials = label
+							.split(/\s+/)
+							.filter(Boolean)
+							.slice(0, 2)
+							.map((word) => word[0])
+							.join("")
+							.toUpperCase() || "ME";
+						const isOnline = Boolean(member?.is_online);
+						return (
+							<button key={String(member?.user_id || label)} className="member-item" type="button">
+								<span className="member-avatar" style={{ background: isOnline ? "#0f67b7" : "#667085" }}>
+									{initials}
+								</span>
+								<span className="member-meta">{label}</span>
+							</button>
+						);
+					})
+				)}
 			</div>
 		</aside>
 	);
@@ -435,7 +450,7 @@ function ChatNavRail({ activeView, onChange, items }) {
 	);
 }
 
-function ChatUtilityRail() {
+function ChatUtilityRail({ onToolAction, onCollapse }) {
 	const tools = [
 		{ key: "threads", icon: "forum", label: "Threads" },
 		{ key: "mentions", icon: "person_search", label: "Mentions" },
@@ -445,12 +460,12 @@ function ChatUtilityRail() {
 	return (
 		<aside className="chat-utility-rail" aria-label="Chat utility tools">
 			{tools.map((tool) => (
-				<button key={tool.key} className="chat-utility-btn" type="button" aria-label={tool.label}>
+				<button key={tool.key} className="chat-utility-btn" type="button" aria-label={tool.label} onClick={() => onToolAction?.(tool.key)}>
 					<Icon name={tool.icon} size={18} />
 				</button>
 			))}
 			<div className="chat-utility-end">
-				<button className="chat-utility-btn muted" type="button" aria-label="Collapse panel">
+				<button className="chat-utility-btn muted" type="button" aria-label="Collapse panel" onClick={onCollapse}>
 					<Icon name="keyboard_double_arrow_right" size={18} />
 				</button>
 			</div>
@@ -572,10 +587,15 @@ function MainPanel({
 	authState,
 	onLogout,
 	currentUserName,
+	workspaceMembers,
+	hasGroupChannels,
+	onCreateGroup,
+	canManageMembers,
+	onInviteMember,
 }) {
 	function renderView() {
 		if (activeView === "call") {
-			return <CallView activeChannel={activeChannel} onEndCall={() => onViewChange("chat")} />;
+			return <CallView activeChannel={activeChannel} participants={workspaceMembers} onEndCall={() => onViewChange("chat")} />;
 		}
 		if (activeView === "chat") {
 			return (
@@ -591,6 +611,18 @@ function MainPanel({
 					setTranslateEnabled={setTranslateEnabled}
 					showNudge={showNudge}
 					currentUserName={currentUserName}
+					workspaceMembers={workspaceMembers}
+					hasGroupChannels={hasGroupChannels}
+					onCreateGroup={onCreateGroup}
+					canManageMembers={canManageMembers}
+					onInviteMember={onInviteMember}
+					onOpenChannelSettings={() => {
+						document.dispatchEvent(new CustomEvent("spann:goto-settings", {
+							detail: { section: "channels", channelName: activeChannel },
+						}));
+						onViewChange("settings");
+					}}
+					onOpenSupport={() => onViewChange("support")}
 					setShowNudge={setShowNudge}
 					onStartCall={() => onViewChange("call")}
 				/>
@@ -605,6 +637,8 @@ function MainPanel({
 					onRevokeNode={onRevokeMesh}
 					isBusy={meshBusy}
 					errorText={meshError}
+					onOpenSettings={() => onViewChange("settings")}
+					onOpenSupport={() => onViewChange("support")}
 				/>
 			);
 		}
@@ -630,6 +664,8 @@ function MainPanel({
 					onRefreshPulse={onRefreshPulse}
 					isRefreshing={pulseLoading}
 					errorText={pulseError}
+					onOpenSettings={() => onViewChange("settings")}
+					onOpenSupport={() => onViewChange("support")}
 				/>
 			);
 		}
@@ -678,6 +714,103 @@ function MobileSheet({ open, onClose, activeView, activeChannel }) {
 	);
 }
 
+function GroupCreateModal({
+	open,
+	busy,
+	groupName,
+	setGroupName,
+	addAnyone,
+	setAddAnyone,
+	inviteEmails,
+	setInviteEmails,
+	onClose,
+	onSubmit,
+	canInvite,
+}) {
+	if (!open) {
+		return null;
+	}
+
+	return (
+		<div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-[2px] flex items-center justify-center px-4" onClick={onClose}>
+			<section className="w-full max-w-lg rounded-2xl border border-outline-variant/20 bg-surface p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+				<div className="flex items-start justify-between gap-3">
+					<div>
+						<h2 className="text-lg font-bold text-on-surface">Create Group</h2>
+						<p className="mt-1 text-sm text-on-surface-variant">Create a new group channel for this workspace.</p>
+					</div>
+					<button type="button" className="rounded-md p-1 text-on-surface-variant hover:bg-surface-container-high" onClick={onClose} aria-label="Close create group dialog">
+						<span className="material-symbols-outlined text-[20px]">close</span>
+					</button>
+				</div>
+
+				<div className="mt-5 space-y-4">
+					<div>
+						<label htmlFor="group-name" className="block text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Group name</label>
+						<input
+							id="group-name"
+							type="text"
+							value={groupName}
+							onChange={(event) => setGroupName(event.target.value)}
+							placeholder="project-updates"
+							className="mt-1 w-full rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
+							autoFocus
+						/>
+					</div>
+
+					<div className="rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-3">
+						<p className="text-sm font-semibold text-on-surface">Do you want to add anyone?</p>
+						<div className="mt-3 flex items-center gap-3">
+							<button
+								type="button"
+								onClick={() => setAddAnyone(true)}
+								className={`rounded-full px-3 py-1 text-xs font-semibold border ${addAnyone ? "border-primary bg-primary/10 text-primary" : "border-outline-variant/40 text-on-surface-variant"}`}
+							>
+								Yes
+							</button>
+							<button
+								type="button"
+								onClick={() => setAddAnyone(false)}
+								className={`rounded-full px-3 py-1 text-xs font-semibold border ${!addAnyone ? "border-primary bg-primary/10 text-primary" : "border-outline-variant/40 text-on-surface-variant"}`}
+							>
+								No
+							</button>
+						</div>
+
+						{addAnyone ? (
+							<div className="mt-3">
+								<label htmlFor="invite-emails" className="block text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Invite emails (comma-separated)</label>
+								<textarea
+									id="invite-emails"
+									value={inviteEmails}
+									onChange={(event) => setInviteEmails(event.target.value)}
+									placeholder="alex@company.com, maria@company.com"
+									rows={2}
+									disabled={!canInvite}
+									className="mt-1 w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+								/>
+								{!canInvite ? <p className="mt-1 text-[11px] text-on-surface-variant">Only owners/admins can invite members.</p> : null}
+							</div>
+						) : null}
+					</div>
+				</div>
+
+				<div className="mt-6 flex items-center justify-end gap-2">
+					<button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-high">Cancel</button>
+					<button
+						type="button"
+						onClick={onSubmit}
+						disabled={busy || !String(groupName || "").trim()}
+						className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary hover:brightness-95 disabled:opacity-60"
+					>
+						{busy ? "Creating..." : "Create Group"}
+					</button>
+				</div>
+			</section>
+		</div>
+	);
+}
+
 export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const { setForcedTheme } = useTheme();
 	const fallbackChannels = useMemo(() => toFallbackChannels(), []);
@@ -693,9 +826,6 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const [joinedChannelIds, setJoinedChannelIds] = useState(() => loadFromStorage("spann-joined-channel-ids", []));
 	const [myReactionsByMessage, setMyReactionsByMessage] = useState(() => loadFromStorage("spann-my-reactions", {}));
 	const [channelMoodById, setChannelMoodById] = useState(() => toFallbackMoodByChannel());
-	const [pulseChannels, setPulseChannels] = useState(() =>
-		fallbackChannels.map((channel) => ({ id: channel.id, name: channel.name, energy: Number(channel.mood || 60) }))
-	);
 	const [pulseLoading, setPulseLoading] = useState(false);
 	const [pulseError, setPulseError] = useState("");
 	const [carbonLeaderboard, setCarbonLeaderboard] = useState([]);
@@ -717,7 +847,14 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		})
 	);
 	const [backendConnected, setBackendConnected] = useState(false);
+	const [runtimeNavItems, setRuntimeNavItems] = useState(DEFAULT_NAV_ITEMS);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [workspaceMembers, setWorkspaceMembers] = useState([]);
+	const [groupModalOpen, setGroupModalOpen] = useState(false);
+	const [groupNameInput, setGroupNameInput] = useState("");
+	const [groupAddAnyone, setGroupAddAnyone] = useState(false);
+	const [groupInviteEmails, setGroupInviteEmails] = useState("");
+	const [groupCreateBusy, setGroupCreateBusy] = useState(false);
 	const prefsLoadedRef = useRef(false);
 	const jumpInputRef = useRef(null);
 
@@ -750,32 +887,59 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	).trim();
 	const userRole = String(liveAuth?.user?.role || "Member").trim() || "Member";
 	const userAvatar = String(liveAuth?.user?.avatar_url || liveAuth?.user?.avatar || "").trim();
-	const userInitials = userName
+function initialsFromLabel(label) {
+	const raw = String(label || "").trim();
+	if (!raw) {
+		return "ME";
+	}
+
+	const withoutDomain = raw.includes("@") ? raw.split("@")[0] : raw;
+	const tokens = withoutDomain
+		.replace(/[._-]+/g, " ")
 		.split(/\s+/)
-		.filter(Boolean)
-		.slice(0, 2)
-		.map((word) => word[0])
-		.join("")
-		.toUpperCase() || "ME";
+		.filter(Boolean);
+
+	if (tokens.length >= 2) {
+		return `${tokens[0][0] || ""}${tokens[tokens.length - 1][0] || ""}`.toUpperCase();
+	}
+
+	const first = tokens[0] || withoutDomain;
+	return first.slice(0, 2).toUpperCase();
+}
+	const userInitials = initialsFromLabel(userName);
+		const [pulseChannels, setPulseChannels] = useState(() =>
+			fallbackChannels.map((channel) => ({ id: channel.id, name: channel.name, energy: null, hasData: false }))
+		);
+	const onlineMembers = useMemo(
+		() => (Array.isArray(workspaceMembers) ? workspaceMembers.filter((member) => Boolean(member?.is_online)) : []),
+		[workspaceMembers]
+	);
+	const normalizedRole = String(userRole || "member").toLowerCase();
+	const canManageMembers = normalizedRole === "owner" || normalizedRole === "admin";
+	const canRemoveMembers = normalizedRole === "owner";
 
 	const activeChannel = useMemo(() => {
 		const found = channels.find((channel) => String(channel.id) === String(activeChannelId));
-		return found ? found.name : channels[0]?.name || "#general";
+		return found ? found.name : channels[0]?.name || "No channel";
 	}, [channels, activeChannelId]);
 
 	const activeMood = Number(channelMoodById[activeChannelId] || 65);
 	const currentMessages = messagesByChannel[activeChannelId] || [];
 	const micActive = Boolean(accessibilityPrefs.micJoined);
+	const hasGroupChannels = useMemo(
+		() => channels.some((channel) => !isDirectChannel(channel)),
+		[channels]
+	);
 
 	const navItems = useMemo(() => {
 		const totalChatUnread = channels.reduce((sum, channel) => sum + (Number(channelUnread?.[channel.id]) || 0), 0);
-		return NAV_ITEMS.map((item) => {
+		return runtimeNavItems.map((item) => {
 			if (item.key === "chat") {
 				return { ...item, badge: totalChatUnread };
 			}
 			return item;
 		});
-	}, [channelUnread, channels]);
+	}, [channelUnread, channels, runtimeNavItems]);
 
 	const sidebarItems = useMemo(() => navItems.filter((item) => item.key !== "settings"), [navItems]);
 	const sidebarIconByKey = {
@@ -925,7 +1089,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			Tritan: "saturate(0.86) hue-rotate(52deg)"
 		};
 		const colorBlindFilter = colorBlindFilters[colorBlind] || "none";
-		const highContrastFilter = Boolean(accessibilityPrefs?.highContrast) ? "contrast(1.18) saturate(0.92)" : "";
+		const highContrastFilter = accessibilityPrefs?.highContrast ? "contrast(1.18) saturate(0.92)" : "";
 		const combinedFilter = [colorBlindFilter !== "none" ? colorBlindFilter : "", highContrastFilter]
 			.filter(Boolean)
 			.join(" ");
@@ -975,6 +1139,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 
 	async function refreshPulseData(channelRows) {
 		if (!Array.isArray(channelRows) || channelRows.length === 0) {
+						setPulseChannels([]);
 			return false;
 		}
 
@@ -987,7 +1152,8 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						return {
 							id: channel.id,
 							name: channel.name,
-							energy: Number(channelMoodById[channel.id] || 60)
+							energy: null,
+							hasData: false
 						};
 					}
 
@@ -997,13 +1163,15 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						return {
 							id: channel.id,
 							name: channel.name,
-							energy: normalizePulseScore(snapshot.score)
+							energy: Number.isFinite(Number(snapshot.score)) ? normalizePulseScore(snapshot.score) : null,
+							hasData: Number.isFinite(Number(snapshot.score))
 						};
 					} catch (error) {
 						return {
 							id: channel.id,
 							name: channel.name,
-							energy: Number(channelMoodById[channel.id] || 60)
+							energy: null,
+							hasData: false
 						};
 					}
 				})
@@ -1012,7 +1180,9 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			setPulseChannels(snapshots);
 			const moodMap = {};
 			snapshots.forEach((snapshot) => {
-				moodMap[snapshot.id] = snapshot.energy;
+				if (Number.isFinite(Number(snapshot.energy))) {
+					moodMap[snapshot.id] = Number(snapshot.energy);
+				}
 			});
 			setChannelMoodById((current) => ({ ...current, ...moodMap }));
 			return true;
@@ -1041,6 +1211,23 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				return;
 			}
 			setCarbonError(normalized.message);
+		}
+	}
+
+	async function refreshWorkspaceMembers() {
+		if (!workspaceId) {
+			setWorkspaceMembers([]);
+			return;
+		}
+
+		try {
+			const members = await fetchOrganizationMembers({ workspaceId });
+			setWorkspaceMembers(Array.isArray(members) ? members : []);
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to load workspace members");
+			if (normalized.status === 401 && onSessionExpired) {
+				onSessionExpired();
+			}
 		}
 	}
 
@@ -1081,6 +1268,38 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	useEffect(() => {
+		let cancelled = false;
+
+		async function loadRuntimeConfig() {
+			try {
+				const payload = await fetchPublicRuntimeConfig();
+				const items = Array.isArray(payload?.nav_items)
+					? payload.nav_items
+							.map((item) => ({
+								key: String(item?.key || "").trim(),
+								label: String(item?.label || "").trim(),
+								icon: String(item?.icon || "").trim(),
+								badge: Number(item?.badge || 0)
+							}))
+							.filter((item) => item.key && item.label)
+					: [];
+
+				if (!cancelled && items.length > 0) {
+					setRuntimeNavItems(items);
+				}
+			} catch {
+				// Keep default nav items if public runtime config is unavailable.
+			}
+		}
+
+		loadRuntimeConfig();
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
 		if (!workspaceId) {
 			setBackendConnected(false);
 			if (onSessionExpired) {
@@ -1099,14 +1318,11 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				}
 
 				const fetchedChannels = Array.isArray(payload?.data) ? payload.data : [];
-				const mappedChannels =
-					fetchedChannels.length > 0
-						? fetchedChannels.map((row) => ({
-								id: String(row.id),
-								name: withHash(row.name),
-								mood: 60
-						  }))
-						: fallbackChannels;
+				const mappedChannels = fetchedChannels.map((row) => ({
+					id: String(row.id),
+					name: withHash(row.name),
+					mood: 60
+				}));
 
 				setChannels((current) => {
 					const localOnlyChannels = (current || []).filter((channel) => !isUuidLike(channel?.id));
@@ -1128,6 +1344,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 					loadChannelMessages(nextChannelId),
 					refreshPulseData(mappedChannels),
 					refreshCarbonLeaderboard(),
+					refreshWorkspaceMembers(),
 					refreshMeshNodes(),
 					loadPreferences()
 				]);
@@ -1239,24 +1456,46 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	}
 
 	function handleCreateChannel() {
-		const raw = typeof window !== "undefined" ? window.prompt("Create a channel name", "project-updates") : "";
-		const normalized = withHash(raw || "").toLowerCase();
-		if (!normalized || normalized === "#channel") {
+		setGroupNameInput("project-updates");
+		setGroupAddAnyone(false);
+		setGroupInviteEmails("");
+		setGroupModalOpen(true);
+	}
+
+	async function handleSubmitCreateGroup() {
+		if (!backendConnected || !workspaceId) {
+			pushAppNotice("Channel creation requires a live backend connection.", "error");
 			return;
 		}
 
-		setChannels((current) => {
-			if (current.some((channel) => String(channel.name).toLowerCase() === normalized)) {
-				pushAppNotice("That channel already exists.", "info");
-				return current;
-			}
+		const normalized = withHash(groupNameInput || "").toLowerCase();
+		if (!normalized || normalized === "#channel") {
+			pushAppNotice("Please provide a valid group name.", "error");
+			return;
+		}
 
+		setGroupCreateBusy(true);
+		try {
+			const payload = await apiRequest("/channels", {
+				method: "POST",
+				body: JSON.stringify({
+					workspace_id: workspaceId,
+					name: normalized.replace(/^#/, "")
+				})
+			});
+
+			const row = payload?.data || {};
 			const nextChannel = {
-				id: normalized,
-				name: normalized,
+				id: String(row.id),
+				name: withHash(row.name || normalized),
 				mood: 60
 			};
-
+			setChannels((current) => {
+				if (current.some((channel) => String(channel.id) === nextChannel.id)) {
+					return current;
+				}
+				return [...current, nextChannel];
+			});
 			setMessagesByChannel((messageState) => ({
 				...messageState,
 				[nextChannel.id]: []
@@ -1265,17 +1504,102 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				...unreadState,
 				[nextChannel.id]: 0
 			}));
-			setChannelMoodById((moodState) => ({
-				...moodState,
-				[nextChannel.id]: 60
-			}));
-			setPulseChannels((pulseState) => [...pulseState, { id: nextChannel.id, name: nextChannel.name, energy: 60 }]);
+
+			if (groupAddAnyone && canManageMembers) {
+				const emailList = String(groupInviteEmails || "")
+					.split(",")
+					.map((entry) => entry.trim().toLowerCase())
+					.filter(Boolean);
+
+				if (emailList.length) {
+					const inviteResults = await Promise.allSettled(
+						emailList.map((email) => inviteOrganizationMember({
+							workspaceId,
+							email,
+							note: `Invitation sent while creating ${nextChannel.name}`,
+						}))
+					);
+					const successCount = inviteResults.filter((result) => result.status === "fulfilled").length;
+					if (successCount > 0) {
+						pushAppNotice(`${successCount} invitation${successCount === 1 ? "" : "s"} sent.`, "success");
+					}
+				}
+			}
+
+			setGroupModalOpen(false);
 			setActiveView("chat");
 			setActiveChannelId(nextChannel.id);
-			pushAppNotice(`Channel ${nextChannel.name} created.`, "success");
+			pushAppNotice(`Group ${nextChannel.name} created.`, "success");
+		} catch (error) {
+			const normalizedError = normalizeApiError(error, "Unable to create channel");
+			pushAppNotice(normalizedError.message || "Unable to create channel.", "error");
+		} finally {
+			setGroupCreateBusy(false);
+		}
+	}
 
-			return [...current, nextChannel];
-		});
+	async function handleInviteMember() {
+		if (!workspaceId || !canManageMembers) {
+			pushAppNotice("Only workspace owners or admins can invite members.", "error");
+			return;
+		}
+
+		const rawEmail = typeof window !== "undefined" ? window.prompt("Invite member by email", "") : "";
+		const email = String(rawEmail || "").trim().toLowerCase();
+		if (!email) {
+			return;
+		}
+
+		try {
+			await inviteOrganizationMember({
+				workspaceId,
+				email,
+				note: `Invitation sent from chat by ${userName}`,
+			});
+			pushAppNotice(`Invitation sent to ${email}.`, "success");
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to invite member");
+			pushAppNotice(normalized.message || "Unable to invite member.", "error");
+		}
+	}
+
+	async function handleRemoveMember(member) {
+		if (!workspaceId || !canRemoveMembers) {
+			pushAppNotice("Only workspace owners can remove members.", "error");
+			return;
+		}
+
+		const memberUserId = String(member?.user_id || "");
+		const memberName = String(member?.display_name || member?.email || "member");
+		if (!memberUserId) {
+			return;
+		}
+
+		if (memberUserId === currentUserId) {
+			pushAppNotice("Owners cannot remove themselves.", "info");
+			return;
+		}
+
+		if (String(member?.role || "member").toLowerCase() === "owner") {
+			pushAppNotice("Owner members cannot be removed from chat controls.", "info");
+			return;
+		}
+
+		const approved = typeof window !== "undefined"
+			? window.confirm(`Remove ${memberName} from this workspace?`)
+			: true;
+		if (!approved) {
+			return;
+		}
+
+		try {
+			await removeOrganizationMember({ workspaceId, memberUserId });
+			await refreshWorkspaceMembers();
+			pushAppNotice(`${memberName} removed from workspace.`, "success");
+		} catch (error) {
+			const normalized = normalizeApiError(error, "Unable to remove member");
+			pushAppNotice(normalized.message || "Unable to remove member.", "error");
+		}
 	}
 
 	function handleStartDirectMessage(person) {
@@ -1416,6 +1740,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 						...current,
 						[channelId]: [...(current[channelId] || []), toUiMessage(apiMessage)]
 					}));
+					refreshWorkspaceMembers();
 					pushAppNotice("Message sent.", "success");
 				}
 				return;
@@ -1429,27 +1754,12 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			}
 		}
 
-		const now = new Date();
-		const formatted = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-		const draft = {
-			id: Date.now() + Math.floor(Math.random() * 1000),
-			user: "You",
-			initials: "YU",
-			color: "#0f67b7",
-			time: formatted,
-			text: String(text || "").trim(),
-			translatedText: translatedEnglishText || null,
-			origin: fromVoice ? "voice" : "text",
-			reactions: ["G�� 1"],
-			translated: wasAutoTranslated,
-			lang: wasAutoTranslated ? `${sourceLocale || "auto"} -> en-US` : undefined
-		};
-
-		setMessagesByChannel((current) => ({
-			...current,
-			[channelId]: [...(current[channelId] || []), draft]
-		}));
-		pushAppNotice(usedLocalFallback ? "Message saved locally." : "Message sent.", usedLocalFallback ? "info" : "success");
+		pushAppNotice(
+			usedLocalFallback
+				? "Message could not be sent. Backend connection is required."
+				: "Message could not be sent.",
+			"error"
+		);
 	}
 
 	async function handleReactMessage(channelId, messageId, emoji) {
@@ -1503,23 +1813,12 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 			}
 		}
 
-		setMessagesByChannel((current) => ({
-			...current,
-			[channelId]: (current[channelId] || []).map((message) => {
-				if (String(message.id) !== String(messageId)) {
-					return message;
-				}
-				return {
-					...message,
-					reactions: incrementReaction(message.reactions || [], emoji)
-				};
-			})
-		}));
-		setMyReactionsByMessage((current) => ({
-			...current,
-			[messageKey]: [...(current[messageKey] || []), emojiKey]
-		}));
-		pushAppNotice(usedLocalFallback ? "Reaction saved locally." : "Reaction added.", usedLocalFallback ? "info" : "success");
+		pushAppNotice(
+			usedLocalFallback
+				? "Reaction could not be saved. Backend connection is required."
+				: "Reaction could not be saved.",
+			"error"
+		);
 	}
 
 	async function handleLogCarbon(action) {
@@ -1539,6 +1838,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 				})
 			});
 			await refreshCarbonLeaderboard();
+			await refreshWorkspaceMembers();
 			pushAppNotice(action?.note || "Carbon log saved.", "success");
 		} catch (error) {
 			const normalized = normalizeApiError(error, "Unable to save carbon log");
@@ -1615,6 +1915,31 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		}
 
 		setContextOpen((current) => !current);
+	}
+
+	function handleUtilityAction(toolKey) {
+		const key = String(toolKey || "");
+		if (key === "threads") {
+			setContextOpen(true);
+			pushAppNotice("Opened conversation context.", "info");
+			return;
+		}
+
+		if (key === "mentions") {
+			setContextOpen(true);
+			pushAppNotice("Mentions summary is shown in context panel.", "info");
+			return;
+		}
+
+		if (key === "files") {
+			setActiveView("support");
+			pushAppNotice("File browser is opening in Support tools.", "info");
+		}
+	}
+
+	function handleSectionAction(sectionName) {
+		setContextOpen(true);
+		pushAppNotice(`${sectionName} details opened in context panel.`, "info");
 	}
 
 	return (
@@ -1708,6 +2033,15 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 								joinedChannelIds={joinedChannelIds}
 								jumpRef={jumpInputRef}
 								collapsed={sidebarCollapsed}
+								currentUserName={userName}
+								currentUserInitials={userInitials}
+								onlineMembers={onlineMembers}
+								workspaceMembers={workspaceMembers}
+								canManageMembers={canManageMembers}
+								canRemoveMembers={canRemoveMembers}
+								onInviteMember={handleInviteMember}
+								onRemoveMember={handleRemoveMember}
+								onSectionAction={handleSectionAction}
 								isChatLayout
 							/>
 						) : null}
@@ -1754,13 +2088,31 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 									authState={liveAuth}
 									onLogout={onLogout}
 									currentUserName={liveAuth?.user?.display_name || liveAuth?.user?.name || ""}
+									workspaceMembers={workspaceMembers}
+									hasGroupChannels={hasGroupChannels}
+									onCreateGroup={handleCreateChannel}
+									canManageMembers={canManageMembers}
+									onInviteMember={handleInviteMember}
 						/>
 						</div>
 
-						{activeView === "chat" ? <ChatUtilityRail /> : null}
+						{activeView === "chat" ? <ChatUtilityRail onToolAction={handleUtilityAction} onCollapse={() => setSidebarCollapsed((current) => !current)} /> : null}
 					</main>
 				</div>
 			</div>
+			<GroupCreateModal
+				open={groupModalOpen}
+				busy={groupCreateBusy}
+				groupName={groupNameInput}
+				setGroupName={setGroupNameInput}
+				addAnyone={groupAddAnyone}
+				setAddAnyone={setGroupAddAnyone}
+				inviteEmails={groupInviteEmails}
+				setInviteEmails={setGroupInviteEmails}
+				onClose={() => !groupCreateBusy && setGroupModalOpen(false)}
+				onSubmit={handleSubmitCreateGroup}
+				canInvite={canManageMembers}
+			/>
 		</div>
 	);
 }

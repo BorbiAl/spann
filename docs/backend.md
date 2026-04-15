@@ -39,6 +39,7 @@ Router modules:
 - [backend/app/routers/pulse.py](backend/app/routers/pulse.py)
 - [backend/app/routers/users.py](backend/app/routers/users.py)
 - [backend/app/routers/mesh.py](backend/app/routers/mesh.py)
+- [backend/app/routers/runtime_config.py](backend/app/routers/runtime_config.py)
 
 ## Runtime Modes
 ### Standard mode
@@ -117,6 +118,10 @@ Route buckets:
 
 ### Translation
 - `POST /translate`
+- `POST /speech-to-text`
+
+### Runtime Config
+- `GET /config/public`
 
 ### Carbon
 - `GET /carbon/leaderboard`
@@ -172,6 +177,18 @@ Important environment variables:
 - `ALLOWED_ORIGINS`
 - `TEST_MODE`
 - `AUTH_FALLBACK_ENABLED`
+- `APP_DOWNLOAD_URL`
+- `PUBLIC_RUNTIME_CONFIG_JSON`
+
+`/translate` response contract includes:
+- `literal`
+- `cultural`
+- `explanation`
+- `tags`
+- `sentiment_score`
+- `sentiment_label`
+
+On provider failures, `/translate` now degrades gracefully with a safe fallback payload instead of returning 5xx.
 
 Production startup/validation protections:
 - `TEST_MODE` must be `false`

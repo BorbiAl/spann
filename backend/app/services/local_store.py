@@ -26,6 +26,7 @@ PERSONAL_EMAIL_DOMAINS = {
     "mail.com",
     "gmx.com",
     "yandex.com",
+    "abv.bg",
 }
 
 
