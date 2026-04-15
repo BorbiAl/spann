@@ -6,10 +6,27 @@ const AVATAR_BY_USER = {
         You: "https://lh3.googleusercontent.com/aida-public/AB6AXuC-W7Lq62hLSa66mScaPRkNxYrXux1-O_BA0LtVUf4MmdzQhKGN0aBfyCraiHW8pFClCoGBAMJzXf14usRgIjOWJVYAw-nBaU6fv4N_fLXAWQcAszlAj8QsBhIceVTVEmBpu9QlcKEP8us2FejQWs9ngkLQFZy7WQJSRD76xnkchS0A1TSm-9ehgXQya-1V5o3K-rTgvtJTRD5Zn_gDzVnznPCtQyBIezxrDrwPZJH3DS7e9kSEgD8WruyKAUboW42bHLviBNRqgcQm"
 };
 
-export default function Message({ message, index, onReaction }) {
+export default function Message({ message, index, onReaction, onReference, onEdit, onDelete, currentUserName, currentUserId }) {
         const reactions = Array.isArray(message.reactions) ? message.reactions : [];
-        const isSelf = String(message.user || "").trim().toLowerCase() === "you";
+        const normalizedUser = String(message.user || "").trim().toLowerCase();
+        const normalizedCurrentUser = String(currentUserName || "").trim().toLowerCase();
+        const isSelf =
+                normalizedUser === "you" ||
+                (currentUserId && String(message?.userId || "") === String(currentUserId)) ||
+                (normalizedCurrentUser && normalizedUser === normalizedCurrentUser);
         const avatarUrl = AVATAR_BY_USER[message.user] || null;
+        const canEdit = Boolean(onEdit && message?.id);
+        const canDelete = Boolean(onDelete && message?.id);
+        const rawSentimentScore = Number(message?.sentimentScore);
+        const hasSentimentScore = Number.isFinite(rawSentimentScore);
+        const sentimentScore = hasSentimentScore ? Math.max(0, Math.min(100, Math.round(rawSentimentScore))) : null;
+        const sentimentLabel = !hasSentimentScore
+                ? ""
+                : sentimentScore >= 70
+                        ? "Collaborative"
+                        : sentimentScore >= 45
+                                ? "Neutral"
+                                : "Critical";
 
         return (
                 <div className={`group flex gap-4 ${isSelf ? "flex-row-reverse" : "w-full max-w-[85%]"}`}>
@@ -46,6 +63,11 @@ export default function Message({ message, index, onReaction }) {
                                                 onDoubleClick={() => onReaction(message.id, "👍")}
                                 >
                                         <p className="text-[14px] leading-[1.45]">{message.text}</p>
+                                                {hasSentimentScore ? (
+                                                                <p className={`mt-2 text-[11px] font-semibold ${isSelf ? "text-white/90" : "text-[#425466]"}`}>
+                                                                                Tone: {sentimentLabel} ({sentimentScore}%)
+                                                                </p>
+                                                ) : null}
                                                 {message.translatedText ? (
                                                                 <div className={`mt-2 pt-2 border-t ${isSelf ? "border-white/30" : "border-black/10"}`}>
                                                                         <p className={`text-[12px] italic ${isSelf ? "text-white/90" : "text-[#425466]"}`}>
@@ -59,6 +81,38 @@ export default function Message({ message, index, onReaction }) {
                                                                 <span className="cursor-pointer hover:scale-125 transition-transform text-sm" onClick={() => onReaction(message.id, "🔥")} title="Fire">🔥</span>
                                                 </div>
                                         )}
+                                </div>
+
+                                <div className={`flex flex-wrap gap-2 mt-2 ${isSelf ? "justify-end" : "justify-start"}`}>
+                                        <button
+                                                type="button"
+                                                className="inline-flex items-center rounded-full border border-[#cdd5df] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#344054] hover:bg-[#f8fafc]"
+                                                onClick={() => onReference?.(message)}
+                                        >
+                                                Reply
+                                        </button>
+                                        {canEdit ? (
+                                                <>
+                                                        <button
+                                                                type="button"
+                                                                className="inline-flex items-center rounded-full border border-[#b2ddff] bg-[#eff8ff] px-2.5 py-1 text-[11px] font-semibold text-[#175cd3] hover:bg-[#d1e9ff]"
+                                                                onClick={() => onEdit?.(message)}
+                                                        >
+                                                                Edit
+                                                        </button>
+                                                </>
+                                        ) : null}
+                                        {canDelete ? (
+                                                <>
+                                                        <button
+                                                                type="button"
+                                                                className="inline-flex items-center rounded-full border border-[#fecdca] bg-[#fef3f2] px-2.5 py-1 text-[11px] font-semibold text-[#b42318] hover:bg-[#fee4e2]"
+                                                                onClick={() => onDelete?.(message)}
+                                                        >
+                                                                Unsend
+                                                        </button>
+                                                </>
+                                        ) : null}
                                 </div>
 
                                 <div className={`flex gap-1 mt-1 ${isSelf ? "justify-end" : "justify-start pl-1"}`}>

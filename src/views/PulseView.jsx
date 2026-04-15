@@ -4,7 +4,18 @@ import React, { useMemo } from "react";
 export default function PulseView({ channelEnergy, micActive, onMicToggle, onRefreshPulse, isRefreshing, errorText, onOpenSettings, onOpenSupport }) {
 	const channels = useMemo(() => {
 		if (Array.isArray(channelEnergy) && channelEnergy.length > 0) {
-			return channelEnergy.map(c => ({ ...c, label: c.energy > 80 ? "Positive" : c.energy > 50 ? "Neutral" : "Alert" }));
+			return channelEnergy.map((channel) => {
+				const energy = Number(channel?.energy || 0);
+				const fallbackLabel = energy >= 70 ? "Collaborative" : energy >= 45 ? "Neutral" : "Critical";
+				const backendLabel = String(channel?.label || "").trim();
+				const normalizedBackendLabel = backendLabel
+					? backendLabel.charAt(0).toUpperCase() + backendLabel.slice(1).toLowerCase()
+					: "";
+				return {
+					...channel,
+					label: normalizedBackendLabel || fallbackLabel
+				};
+			});
 		}
 
 		return [];
@@ -12,7 +23,7 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 
 	const averageEnergy = useMemo(() => {
 		if (!channels.length) {
-			return 0;
+			return 50;
 		}
 		const sum = channels.reduce((acc, channel) => acc + Number(channel.energy || 0), 0);
 		return Math.round(sum / channels.length);
@@ -48,6 +59,13 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 			return "No active channels yet. Join conversations to generate analytics.";
 		}
 		return `Activity is highest in ${sorted.join(" and ")}.`;
+	}, [channels]);
+
+	const activeNowCount = useMemo(() => {
+		if (!channels.length) {
+			return 0;
+		}
+		return channels.filter((channel) => Boolean(channel?.hasData) || Number.isFinite(Number(channel?.energy))).length;
 	}, [channels]);
 
 	return (
@@ -94,7 +112,7 @@ export default function PulseView({ channelEnergy, micActive, onMicToggle, onRef
 									</div>
 									<button onClick={onRefreshPulse} disabled={isRefreshing} className="flex items-center gap-2 bg-surface-container-lowest px-3 py-1.5 rounded-full shadow-sm hover:opacity-80 transition-opacity">
 										<div className={`w-2 h-2 rounded-full bg-tertiary ${isRefreshing ? "animate-spin" : "animate-pulse"}`}></div>
-										<span className="text-xs font-medium">{isRefreshing ? "Refreshing..." : "6 Active Now"}</span>
+										<span className="text-xs font-medium">{isRefreshing ? "Refreshing..." : `${activeNowCount} Active now`}</span>
 									</button>
 								</div>
 								{errorText ? (

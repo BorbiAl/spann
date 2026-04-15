@@ -2328,9 +2328,9 @@
     .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
       width: 100%;
       min-width: 0;
-      padding: clamp(20px, 3vw, 34px);
+      padding: clamp(22px, 3.2vw, 36px);
       display: grid;
-      gap: 14px;
+      gap: 16px;
       background:
         radial-gradient(110% 120% at 0% 0%, rgba(15, 103, 183, 0.12) 0%, rgba(15, 103, 183, 0) 56%),
         radial-gradient(120% 120% at 100% 0%, rgba(14, 165, 164, 0.1) 0%, rgba(14, 165, 164, 0) 52%),
@@ -2348,7 +2348,7 @@
 
     .auth-shell.auth-mode-register.org-onboarding-shell .auth-head p {
       font-size: 16px;
-      line-height: 1.45;
+      line-height: 1.55;
       color: #334155;
       max-width: 52ch;
     }
@@ -2361,6 +2361,38 @@
       background: #e8edf5;
       border: 1px solid #d6deea;
       width: fit-content;
+    }
+
+    .org-overview-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .org-overview-card {
+      border-radius: 14px;
+      border: 1px solid #d4deeb;
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.95) 0%, rgba(234, 242, 250, 0.84) 100%);
+      padding: 10px 12px;
+      display: grid;
+      gap: 2px;
+      min-height: 74px;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+    }
+
+    .org-overview-value {
+      margin: 0;
+      font-size: 1.3rem;
+      line-height: 1;
+      font-weight: 700;
+      color: #0f67b7;
+    }
+
+    .org-overview-label {
+      margin: 0;
+      font-size: 0.78rem;
+      color: #475569;
+      letter-spacing: 0.01em;
     }
 
     .org-mode-btn {
@@ -2395,8 +2427,24 @@
     .org-panel {
       border: 1px solid #d7e0ec;
       border-radius: 16px;
-      padding: 14px;
+      padding: 16px;
       background: #eef3f9;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+    }
+
+    .org-panel-note {
+      margin: 0;
+      color: #334155;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      max-width: 68ch;
+    }
+
+    .org-input-help {
+      margin-top: 6px;
+      color: #475569;
+      font-size: 0.78rem;
+      line-height: 1.45;
     }
 
     .auth-shell.auth-mode-register.org-onboarding-shell .org-panel .auth-input {
@@ -2421,8 +2469,18 @@
       gap: 10px;
       border: 1px solid #cfd9e6;
       border-radius: 14px;
-      padding: 11px 12px;
+      padding: 12px 13px;
       background: #ffffff;
+      transition: border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .org-list-item:hover {
+      border-color: #b9c8de;
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+    }
+
+    .org-item-main {
+      min-width: 0;
     }
 
     .org-name {
@@ -2434,6 +2492,14 @@
     .org-meta {
       margin-top: 2px;
       font-size: 0.8rem;
+    }
+
+    .org-description {
+      margin: 6px 0 0;
+      color: #334155;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      max-width: 64ch;
     }
 
     .org-empty {
@@ -2513,6 +2579,20 @@
       border-color: #2a3a54;
     }
 
+    :root[data-theme="dark"] .org-overview-card {
+      border-color: #2f415f;
+      background: linear-gradient(160deg, rgba(19, 31, 49, 0.95) 0%, rgba(16, 24, 39, 0.95) 100%);
+      box-shadow: 0 8px 20px rgba(2, 6, 23, 0.3);
+    }
+
+    :root[data-theme="dark"] .org-overview-value {
+      color: #7dc3ff;
+    }
+
+    :root[data-theme="dark"] .org-overview-label {
+      color: #b8c5d9;
+    }
+
     :root[data-theme="dark"] .org-mode-btn {
       color: #c5d3e9;
     }
@@ -2525,6 +2605,13 @@
     :root[data-theme="dark"] .org-panel {
       border-color: #2a3a54;
       background: #162237;
+      box-shadow: inset 0 1px 0 rgba(129, 151, 186, 0.12);
+    }
+
+    :root[data-theme="dark"] .org-panel-note,
+    :root[data-theme="dark"] .org-input-help,
+    :root[data-theme="dark"] .org-description {
+      color: #b8c5d9;
     }
 
     :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-panel .auth-input {
@@ -2536,6 +2623,11 @@
     :root[data-theme="dark"] .org-list-item {
       border-color: #30425f;
       background: #0f1729;
+    }
+
+    :root[data-theme="dark"] .org-list-item:hover {
+      border-color: #3d5478;
+      box-shadow: 0 8px 16px rgba(2, 6, 23, 0.32);
     }
 
     :root[data-theme="dark"] .org-name,
@@ -2593,6 +2685,10 @@
         flex-direction: column;
       }
 
+      .org-overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .org-item-actions {
         width: 100%;
       }
@@ -2612,6 +2708,18 @@
       .auth-shell.auth-mode-register .auth-head p,
       .auth-shell.auth-mode-register .auth-text-link.inline {
         font-size: 24px;
+      }
+
+      .org-overview-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .org-mode-switch {
+        width: 100%;
+      }
+
+      .org-mode-btn {
+        flex: 1;
       }
     }
 
