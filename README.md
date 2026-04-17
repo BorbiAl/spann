@@ -129,6 +129,10 @@ npm install -g eas-cli
 
 ## Quick Start
 
+For running two devices on the same local network (two accounts in one workspace), see:
+
+- [Two-device setup guide](docs/two-device-setup.md)
+
 1. Clone the repository.
 
 ```bash

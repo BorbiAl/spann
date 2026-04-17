@@ -59,7 +59,16 @@ def _build_refresh_token() -> tuple[str, str]:
 async def login(payload: LoginRequest, request: Request, _rate_limit: None = Depends(auth_rate_limit_dependency)) -> JSONResponse:
     """Authenticate credentials and issue a rotated token pair."""
 
-    auth_result = await db.authenticate_user(payload.email, payload.password)
+    try:
+        auth_result = await db.authenticate_user(payload.email, payload.password)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        return error_response(
+            status_code=exc.status_code,
+            code=str(detail.get("code", "auth_login_failed")),
+            message=str(detail.get("message", "Unable to log in.")),
+        )
+
     if auth_result is None:
         return error_response(status_code=401, code="INVALID_CREDENTIALS", message="Email or password is incorrect.")
 

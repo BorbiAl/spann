@@ -81,6 +81,12 @@ export default function AccessibilityView({ preferences, onChangePreference, sav
 		Protan: "saturate(0.85) hue-rotate(18deg)",
 		Tritan: "saturate(0.85) hue-rotate(58deg)"
 	};
+	const previewScale = Math.max(0.88, Math.min(1.5, fontSize / 15));
+	const colorBlindFilter = colorBlindFilters[colorBlind] || "none";
+	const highContrastFilter = highContrast ? "contrast(1.18) saturate(0.92)" : "";
+	const previewFilter = [colorBlindFilter !== "none" ? colorBlindFilter : "", highContrastFilter]
+		.filter(Boolean)
+		.join(" ") || "none";
 
 	const previewTitle = simplified
 		? "Design updates are easier to understand."
@@ -241,7 +247,7 @@ export default function AccessibilityView({ preferences, onChangePreference, sav
 						<div className="lg:sticky lg:top-6 space-y-6">
 							<div
 								className="bg-surface-container-lowest rounded-2xl shadow-xl shadow-on-surface/5 overflow-hidden border border-outline-variant/10"
-								style={{ filter: colorBlindFilters[colorBlind] }}
+								style={{ filter: previewFilter }}
 							>
 								<div className="bg-gradient-to-br from-primary to-primary-container p-4 flex items-center gap-3">
 									<div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white">
@@ -249,7 +255,14 @@ export default function AccessibilityView({ preferences, onChangePreference, sav
 									</div>
 									<span className="text-white font-medium text-sm">Live Preview</span>
 								</div>
-								<div className="p-8 space-y-6">
+								<div className="p-8 space-y-6" style={{ fontSize: `${Math.round(previewScale * 100)}%` }}>
+									<div className="flex flex-wrap gap-2">
+										{dyslexia ? <span className="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary">Dyslexia Font</span> : null}
+										{highContrast ? <span className="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary">High Contrast</span> : null}
+										{simplified ? <span className="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary">Simplified Language</span> : null}
+										{tts ? <span className="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary">TTS On</span> : null}
+										{colorBlind !== "Normal" ? <span className="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-primary/10 text-primary">{colorBlind}</span> : null}
+									</div>
 									<div className="flex items-start gap-4">
 										<div className="w-12 h-12 rounded-full overflow-hidden bg-surface-container flex-shrink-0">
 											<img
@@ -263,7 +276,13 @@ export default function AccessibilityView({ preferences, onChangePreference, sav
 											<h4 className="text-xl font-bold leading-snug" style={{ fontFamily: dyslexia ? "OpenDyslexic, Inter, sans-serif" : "Inter, sans-serif" }}>
 												{previewTitle}
 											</h4>
-											<p className="text-base leading-relaxed text-on-surface-variant" style={{ fontWeight: highContrast ? 600 : 400 }}>
+											<p
+												className="text-base leading-relaxed text-on-surface-variant"
+												style={{
+													fontWeight: highContrast ? 650 : 400,
+													fontFamily: dyslexia ? "OpenDyslexic, Inter, sans-serif" : "Inter, sans-serif",
+												}}
+											>
 												{previewBody}
 											</p>
 										</div>

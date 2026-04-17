@@ -151,8 +151,11 @@ services:
     container_name: spann-mesh-daemon
     env_file:
       - .env
-    expose:
-      - "7070"
+    environment:
+      MESH_DAEMON_BIND: 0.0.0.0
+      MESH_DAEMON_PORT: "7070"
+    ports:
+      - "7070:7070"
     restart: unless-stopped
     deploy:
       resources:

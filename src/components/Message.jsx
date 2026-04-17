@@ -1,11 +1,6 @@
 import React from "react";
 import { parseReactionValue } from "../data/constants";
 
-const AVATAR_BY_USER = {
-        "Sarah Chen": "https://lh3.googleusercontent.com/aida-public/AB6AXuCeX83POcK2ErUQRuh8dLEiZzV2zBzREt2WJ06F2PjbO7eT9obL2mn3MNVweL9NJEUSctvCB5_9w0xkWD_IjeNDBZsWh3LjbBhrt5CYyK1dYy2hEAPPPu5YO0w7obgjjPhyx8BZ7NyWuK6w1nDnSwpycWhj2ty3n9ITfSGoUHDuTTMjz1OsJKRDF5ZSeA7KY-2LUIVsTIt4NQqD5L9Wpnf4Q1SwIbL-SOHN96csvROrp6AlL7dLgcs3fPi2Z2cOT9pZuZv1OgfJZx1U",
-        You: "https://lh3.googleusercontent.com/aida-public/AB6AXuC-W7Lq62hLSa66mScaPRkNxYrXux1-O_BA0LtVUf4MmdzQhKGN0aBfyCraiHW8pFClCoGBAMJzXf14usRgIjOWJVYAw-nBaU6fv4N_fLXAWQcAszlAj8QsBhIceVTVEmBpu9QlcKEP8us2FejQWs9ngkLQFZy7WQJSRD76xnkchS0A1TSm-9ehgXQya-1V5o3K-rTgvtJTRD5Zn_gDzVnznPCtQyBIezxrDrwPZJH3DS7e9kSEgD8WruyKAUboW42bHLviBNRqgcQm"
-};
-
 export default function Message({ message, index, onReaction, onReference, onEdit, onDelete, currentUserName, currentUserId }) {
         const reactions = Array.isArray(message.reactions) ? message.reactions : [];
         const normalizedUser = String(message.user || "").trim().toLowerCase();
@@ -14,7 +9,7 @@ export default function Message({ message, index, onReaction, onReference, onEdi
                 normalizedUser === "you" ||
                 (currentUserId && String(message?.userId || "") === String(currentUserId)) ||
                 (normalizedCurrentUser && normalizedUser === normalizedCurrentUser);
-        const avatarUrl = AVATAR_BY_USER[message.user] || null;
+        const avatarUrl = String(message?.avatarUrl || message?.avatar_url || "").trim() || null;
         const canEdit = Boolean(onEdit && message?.id);
         const canDelete = Boolean(onDelete && message?.id);
         const rawSentimentScore = Number(message?.sentimentScore);

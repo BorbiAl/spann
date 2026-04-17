@@ -1,12 +1,47 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { apiRequestFormData, getAuthState } from "../data/constants";
 
 export default function CallView({ activeChannel, participants = [], onEndCall }) {
 	const [micActive, setMicActive] = useState(true);
 	const [videoActive, setVideoActive] = useState(false);
 	const [deafened, setDeafened] = useState(false);
 	const [callDuration, setCallDuration] = useState(0);
+	const [micLevel, setMicLevel] = useState(0);
 	const [statusNote, setStatusNote] = useState("");
 	const [showOptions, setShowOptions] = useState(false);
+	const [captionsEnabled, setCaptionsEnabled] = useState(false);
+	const [captionStatus, setCaptionStatus] = useState("idle");
+	const [captionError, setCaptionError] = useState("");
+	const [interimCaption, setInterimCaption] = useState("");
+	const [captions, setCaptions] = useState([]);
+
+	const recognitionRef = useRef(null);
+	const mediaRecorderRef = useRef(null);
+	const mediaStreamRef = useRef(null);
+	const micMonitorStreamRef = useRef(null);
+	const micAnalyserRef = useRef(null);
+	const micAudioContextRef = useRef(null);
+	const micSourceRef = useRef(null);
+	const micFrameRef = useRef(null);
+	const captionQueueRef = useRef([]);
+	const isTranscribingRef = useRef(false);
+	const captionsEnabledRef = useRef(false);
+
+	const hasSpeechRecognition =
+		typeof window !== "undefined" &&
+		Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+	const hasMediaRecorder = typeof window !== "undefined" && typeof window.MediaRecorder !== "undefined";
+	const preferRecorderCaptions =
+		typeof navigator !== "undefined" && String(navigator.userAgent || "").toLowerCase().includes("electron");
+	const captionLocale = useMemo(() => {
+		const raw = typeof navigator !== "undefined" ? navigator.language : "en-US";
+		try {
+			const normalized = Intl.getCanonicalLocales(raw);
+			return normalized?.[0] || "en-US";
+		} catch {
+			return "en-US";
+		}
+	}, []);
 
 	useEffect(() => {
 		const timer = setInterval(() => {
@@ -14,6 +49,156 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 		}, 1000);
 		return () => clearInterval(timer);
 	}, []);
+
+	useEffect(() => {
+		captionsEnabledRef.current = captionsEnabled;
+	}, [captionsEnabled]);
+
+	useEffect(() => {
+		return () => {
+			if (recognitionRef.current) {
+				recognitionRef.current.onresult = null;
+				recognitionRef.current.onerror = null;
+				recognitionRef.current.onend = null;
+				try {
+					recognitionRef.current.stop();
+				} catch {
+					// no-op
+				}
+				recognitionRef.current = null;
+			}
+
+			if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+				try {
+					mediaRecorderRef.current.stop();
+				} catch {
+					// no-op
+				}
+			}
+			mediaRecorderRef.current = null;
+
+			if (mediaStreamRef.current) {
+				mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+				mediaStreamRef.current = null;
+			}
+
+			if (micFrameRef.current) {
+				cancelAnimationFrame(micFrameRef.current);
+				micFrameRef.current = null;
+			}
+
+			if (micSourceRef.current) {
+				try {
+					micSourceRef.current.disconnect();
+				} catch {
+					// no-op
+				}
+				micSourceRef.current = null;
+			}
+
+			if (micAnalyserRef.current) {
+				try {
+					micAnalyserRef.current.disconnect();
+				} catch {
+					// no-op
+				}
+				micAnalyserRef.current = null;
+			}
+
+			if (micMonitorStreamRef.current) {
+				micMonitorStreamRef.current.getTracks().forEach((track) => track.stop());
+				micMonitorStreamRef.current = null;
+			}
+
+			if (micAudioContextRef.current) {
+				try {
+					micAudioContextRef.current.close();
+				} catch {
+					// no-op
+				}
+				micAudioContextRef.current = null;
+			}
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!micActive) {
+			setMicLevel(0);
+			if (micMonitorStreamRef.current) {
+				micMonitorStreamRef.current.getTracks().forEach((track) => {
+					track.enabled = false;
+				});
+			}
+			return;
+		}
+
+		async function startMicMonitoring() {
+			if (typeof window === "undefined" || typeof navigator === "undefined") {
+				return;
+			}
+
+			if (!navigator.mediaDevices?.getUserMedia) {
+				return;
+			}
+
+			if (!micMonitorStreamRef.current) {
+				const stream = await requestMicrophoneStream();
+				micMonitorStreamRef.current = stream;
+			}
+
+			micMonitorStreamRef.current.getTracks().forEach((track) => {
+				track.enabled = true;
+			});
+
+			if (micAnalyserRef.current) {
+				return;
+			}
+
+			const AudioContextImpl = window.AudioContext || window.webkitAudioContext;
+			if (!AudioContextImpl) {
+				return;
+			}
+
+			const audioContext = new AudioContextImpl();
+			const analyser = audioContext.createAnalyser();
+			analyser.fftSize = 1024;
+			analyser.smoothingTimeConstant = 0.8;
+
+			const source = audioContext.createMediaStreamSource(micMonitorStreamRef.current);
+			source.connect(analyser);
+
+			micAudioContextRef.current = audioContext;
+			micAnalyserRef.current = analyser;
+			micSourceRef.current = source;
+
+			const sampleBuffer = new Uint8Array(analyser.fftSize);
+
+			const tick = () => {
+				if (!micAnalyserRef.current || !micActive) {
+					setMicLevel(0);
+					micFrameRef.current = null;
+					return;
+				}
+
+				micAnalyserRef.current.getByteTimeDomainData(sampleBuffer);
+				let sumSquares = 0;
+				for (let i = 0; i < sampleBuffer.length; i += 1) {
+					const normalized = (sampleBuffer[i] - 128) / 128;
+					sumSquares += normalized * normalized;
+				}
+				const rms = Math.sqrt(sumSquares / sampleBuffer.length);
+				const nextLevel = Math.max(0, Math.min(100, Math.round(rms * 180)));
+				setMicLevel(nextLevel);
+				micFrameRef.current = requestAnimationFrame(tick);
+			};
+
+			micFrameRef.current = requestAnimationFrame(tick);
+		}
+
+		startMicMonitoring().catch(() => {
+			setMicLevel(0);
+		});
+	}, [micActive]);
 
 	const formatDuration = (seconds) => {
 		const m = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -48,6 +233,252 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 
 	const shownParticipants = normalizedParticipants.filter((member) => member.online).slice(0, 4);
 	const extraParticipants = Math.max(0, normalizedParticipants.filter((member) => member.online).length - shownParticipants.length);
+
+	function appendCaption(text, speaker = "You") {
+		const clean = String(text || "").trim();
+		if (!clean) {
+			return;
+		}
+		setCaptions((current) => {
+			const next = [
+				...current,
+				{
+					id: `cap-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+					speaker,
+					text: clean,
+					time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+				},
+			];
+			return next.slice(-32);
+		});
+	}
+
+	function clearCaptionResources() {
+		if (recognitionRef.current) {
+			recognitionRef.current.onresult = null;
+			recognitionRef.current.onerror = null;
+			recognitionRef.current.onend = null;
+			try {
+				recognitionRef.current.stop();
+			} catch {
+				// no-op
+			}
+			recognitionRef.current = null;
+		}
+
+		if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+			try {
+				mediaRecorderRef.current.stop();
+			} catch {
+				// no-op
+			}
+		}
+		mediaRecorderRef.current = null;
+
+		if (mediaStreamRef.current) {
+			mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+			mediaStreamRef.current = null;
+		}
+	}
+
+	function stopCaptionCapture() {
+		setCaptionsEnabled(false);
+		setCaptionStatus("idle");
+		setInterimCaption("");
+		clearCaptionResources();
+	}
+
+	async function transcribeChunk(blob) {
+		if (!blob || blob.size < 256) {
+			return;
+		}
+
+		const formData = new FormData();
+		const extension = String(blob.type || "").includes("ogg") ? "ogg" : "webm";
+		formData.append("audio", blob, `caption.${extension}`);
+		formData.append("locale", captionLocale);
+
+		const hasToken = Boolean(getAuthState()?.accessToken);
+		const payload = await apiRequestFormData("/speech-to-text", {
+			method: "POST",
+			body: formData,
+			allowAuthFailOpen: true,
+			...(hasToken ? {} : { auth: false }),
+		});
+
+		const text = String(payload?.data?.text || payload?.text || "").trim();
+		if (text) {
+			appendCaption(text, "You");
+		}
+	}
+
+	async function processCaptionQueue() {
+		if (isTranscribingRef.current) {
+			return;
+		}
+		isTranscribingRef.current = true;
+		try {
+			while (captionQueueRef.current.length > 0 && captionsEnabledRef.current) {
+				const blob = captionQueueRef.current.shift();
+				try {
+					await transcribeChunk(blob);
+				} catch (error) {
+					const message = String(error?.message || "").toLowerCase();
+					if (message.includes("failed to fetch") || message.includes("network") || message.includes("aborted")) {
+						setCaptionError("Network error while uploading audio for captions. Check API/backend connectivity.");
+					} else {
+						setCaptionError("Live caption transcription is temporarily unavailable.");
+					}
+				}
+			}
+		} finally {
+			isTranscribingRef.current = false;
+		}
+	}
+
+	async function requestMicrophoneStream() {
+		if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+			throw new Error("getUserMedia unavailable");
+		}
+
+		return navigator.mediaDevices.getUserMedia({
+			audio: {
+				echoCancellation: true,
+				noiseSuppression: true,
+				autoGainControl: true,
+			},
+		});
+	}
+
+	async function startBrowserSpeechCaptions() {
+		const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+		const recognition = new SpeechRecognition();
+		recognition.lang = captionLocale;
+		recognition.interimResults = true;
+		recognition.continuous = true;
+		recognition.maxAlternatives = 1;
+
+		recognition.onresult = (event) => {
+			let nextInterim = "";
+			for (let i = event.resultIndex; i < event.results.length; i += 1) {
+				const result = event.results[i];
+				const transcript = String(result?.[0]?.transcript || "").trim();
+				if (!transcript) {
+					continue;
+				}
+				if (result.isFinal) {
+					appendCaption(transcript, "You");
+				} else {
+					nextInterim = transcript;
+				}
+			}
+			setInterimCaption(nextInterim);
+		};
+
+		recognition.onerror = (event) => {
+			const code = String(event?.error || "").toLowerCase();
+			if ((code === "network" || code === "service-not-allowed") && hasMediaRecorder) {
+				setCaptionError("");
+				setCaptionStatus("starting");
+				startRecorderFallbackCaptions()
+					.then(() => {
+						showTemporaryNote("Captions switched to backend transcription.");
+					})
+					.catch(() => {
+						setCaptionError("Caption service error.");
+						setCaptionStatus("error");
+					});
+				return;
+			}
+
+			setCaptionError(code ? `Caption error: ${code}` : "Caption service error.");
+			setCaptionStatus("error");
+		};
+
+		recognition.onend = () => {
+			if (captionsEnabledRef.current) {
+				try {
+					recognition.start();
+					setCaptionStatus("listening");
+				} catch {
+					setCaptionStatus("error");
+				}
+			}
+		};
+
+		recognitionRef.current = recognition;
+		recognition.start();
+		setCaptionStatus("listening");
+	}
+
+	async function startRecorderFallbackCaptions() {
+		const stream = await requestMicrophoneStream();
+		const preferredMimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+		const mimeType = preferredMimeTypes.find((candidate) => {
+			return typeof window.MediaRecorder?.isTypeSupported === "function" && window.MediaRecorder.isTypeSupported(candidate);
+		});
+
+		const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+		mediaStreamRef.current = stream;
+		mediaRecorderRef.current = recorder;
+
+		recorder.ondataavailable = (event) => {
+			if (event.data && event.data.size > 0) {
+				captionQueueRef.current.push(event.data);
+				processCaptionQueue().catch(() => undefined);
+			}
+		};
+
+		recorder.onerror = () => {
+			setCaptionError("Audio recording failed for captions.");
+			setCaptionStatus("error");
+		};
+
+		recorder.start(2500);
+		setCaptionStatus("listening");
+	}
+
+	async function handleToggleCaptions() {
+		if (captionsEnabled) {
+			stopCaptionCapture();
+			showTemporaryNote("Live captions turned off.");
+			return;
+		}
+
+		setCaptionError("");
+		setInterimCaption("");
+		setCaptionsEnabled(true);
+		setCaptionStatus("starting");
+
+		try {
+			if (preferRecorderCaptions && hasMediaRecorder) {
+				await startRecorderFallbackCaptions();
+				showTemporaryNote("Live captions enabled (backend transcription).");
+				return;
+			}
+
+			if (hasSpeechRecognition) {
+				await startBrowserSpeechCaptions();
+				showTemporaryNote("Live captions enabled.");
+				return;
+			}
+
+			if (hasMediaRecorder) {
+				await startRecorderFallbackCaptions();
+				showTemporaryNote("Live captions enabled (backend transcription).");
+				return;
+			}
+
+			setCaptionStatus("error");
+			setCaptionError("This runtime does not support live speech capture.");
+			setCaptionsEnabled(false);
+		} catch {
+			setCaptionStatus("error");
+			setCaptionError("Could not start live captions. Check microphone permissions.");
+			setCaptionsEnabled(false);
+			clearCaptionResources();
+		}
+	}
 
 	function showTemporaryNote(message) {
 		setStatusNote(String(message || ""));
@@ -120,6 +551,15 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 								<span className="text-[13px] font-medium text-on-surface-variant">
 									{formatDuration(callDuration)} • Connected
 								</span>
+								<div className="flex items-center gap-2 rounded-full bg-surface-container-high px-2 py-1" aria-label="Microphone level">
+									<span className="text-[11px] font-semibold text-on-surface-variant">{micActive ? `Mic ${micLevel}%` : "Mic muted"}</span>
+									<div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-container-highest">
+										<div
+											className="h-full rounded-full bg-primary transition-[width] duration-100"
+											style={{ width: `${micActive ? micLevel : 0}%` }}
+										/>
+									</div>
+								</div>
 								<div className="discord-voice-bars" aria-hidden="true">
 									<span />
 									<span />
@@ -201,6 +641,32 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 							</div>
 						))}
 					</div>
+					<section className="mt-5 rounded-2xl border border-outline-variant/25 bg-surface px-4 py-3">
+						<div className="flex items-center justify-between gap-3 mb-2">
+							<div className="flex items-center gap-2">
+								<span className="material-symbols-outlined text-[18px] text-primary">closed_caption</span>
+								<p className="text-sm font-semibold text-on-surface">Live Captions</p>
+							</div>
+							<span className={`text-[11px] font-semibold uppercase tracking-wide ${captionStatus === "listening" ? "text-primary" : "text-on-surface-variant"}`}>
+								{captionStatus === "listening" ? "Listening" : captionStatus === "starting" ? "Starting" : captionStatus === "error" ? "Error" : "Idle"}
+							</span>
+						</div>
+						<div className="max-h-36 overflow-y-auto pr-1 space-y-1.5">
+							{captions.length === 0 ? (
+								<p className="text-xs text-on-surface-variant">Turn on captions to transcribe speech during this call.</p>
+							) : (
+								captions.map((line) => (
+									<div key={line.id} className="text-xs text-on-surface leading-relaxed">
+										<span className="font-semibold text-primary">{line.speaker}</span>
+										<span className="text-on-surface-variant"> [{line.time}]</span>
+										<span>{` ${line.text}`}</span>
+									</div>
+								))
+							)}
+							{interimCaption ? <p className="text-xs italic text-on-surface-variant">You: {interimCaption}</p> : null}
+						</div>
+						{captionError ? <p className="mt-2 text-[11px] text-error">{captionError}</p> : null}
+					</section>
 				</div>
 
 				{/* Call Controls Footer */}
@@ -245,6 +711,18 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 						<span className="material-symbols-outlined text-[24px]">
 							{deafened ? "hearing_disabled" : "hearing"}
 						</span>
+					</button>
+
+					<button
+						onClick={handleToggleCaptions}
+						className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
+							captionsEnabled
+								? "bg-primary/10 text-primary hover:bg-primary/20"
+								: "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
+						}`}
+						title={captionsEnabled ? "Turn Off Captions" : "Turn On Captions"}
+					>
+						<span className="material-symbols-outlined text-[24px]">closed_caption</span>
 					</button>
 
 					<div className="w-px h-8 bg-outline-variant/60 mx-2"></div>

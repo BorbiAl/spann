@@ -698,6 +698,8 @@
       border-radius: 50%;
       display: grid;
       place-items: center;
+      object-fit: cover;
+      overflow: hidden;
       color: #fff;
       font-size: 12px;
       font-weight: 600;

@@ -2305,62 +2305,67 @@
 
     .org-onboarding-shell {
       min-height: 100vh;
+      min-height: 100dvh;
       display: grid;
-      place-items: center;
-      padding: clamp(18px, 3.5vw, 32px);
+      place-items: start center;
+      padding: clamp(10px, 2.2vw, 20px);
     }
 
     .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-card {
       width: min(980px, 100%);
       max-width: 980px;
-      border-radius: 18px;
+      max-height: calc(100dvh - clamp(20px, 4vw, 34px));
+      border-radius: 28px;
       overflow: hidden;
-      display: block;
+      display: flex;
+      flex-direction: column;
       grid-template-columns: none;
       min-height: 0;
-      border: 1px solid #d8dee8;
-      background: #f8fafc;
-      box-shadow: 0 20px 52px rgba(15, 23, 42, 0.14);
-      -webkit-backdrop-filter: none;
-      backdrop-filter: none;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.95) 100%);
+      box-shadow: 0 30px 70px rgba(15, 23, 42, 0.14);
+      -webkit-backdrop-filter: blur(22px) saturate(1.1);
+      backdrop-filter: blur(22px) saturate(1.1);
     }
 
     .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
       width: 100%;
       min-width: 0;
-      padding: clamp(22px, 3.2vw, 36px);
+      padding: clamp(16px, 2.4vw, 26px);
       display: grid;
-      gap: 16px;
+      gap: 12px;
+      overflow: auto;
       background:
-        radial-gradient(110% 120% at 0% 0%, rgba(15, 103, 183, 0.12) 0%, rgba(15, 103, 183, 0) 56%),
-        radial-gradient(120% 120% at 100% 0%, rgba(14, 165, 164, 0.1) 0%, rgba(14, 165, 164, 0) 52%),
-        #f8fafc;
+        radial-gradient(110% 120% at 0% 0%, rgba(112, 150, 209, 0.24) 0%, rgba(112, 150, 209, 0) 56%),
+        radial-gradient(120% 120% at 100% 0%, rgba(186, 214, 235, 0.34) 0%, rgba(186, 214, 235, 0) 52%),
+        #f5f7fb;
     }
 
     .auth-shell.auth-mode-register.org-onboarding-shell .auth-head h2 {
-      font-size: clamp(34px, 4.8vw, 52px);
+      font-size: clamp(28px, 3.8vw, 40px);
       line-height: 1.06;
       letter-spacing: -0.03em;
       color: #111827;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       max-width: 14ch;
     }
 
     .auth-shell.auth-mode-register.org-onboarding-shell .auth-head p {
-      font-size: 16px;
-      line-height: 1.55;
+      font-size: 14px;
+      line-height: 1.4;
       color: #334155;
       max-width: 52ch;
     }
 
     .org-mode-switch {
       display: inline-flex;
-      gap: 8px;
-      padding: 6px;
+      gap: 6px;
+      padding: 5px;
       border-radius: 999px;
-      background: #e8edf5;
-      border: 1px solid #d6deea;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(203, 213, 225, 0.95);
       width: fit-content;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
     }
 
     .org-overview-grid {
@@ -2398,13 +2403,13 @@
     .org-mode-btn {
       border: 0;
       border-radius: 999px;
-      padding: 9px 16px;
+      padding: 8px 15px;
       font-size: 0.9rem;
       font-weight: 600;
       color: #475569;
       background: transparent;
       cursor: pointer;
-      transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+      transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease;
     }
 
     .org-mode-btn:hover {
@@ -2413,9 +2418,123 @@
     }
 
     .org-mode-btn.active {
-      color: #ffffff;
-      background: linear-gradient(135deg, #0f67b7 0%, #0b5aa0 100%);
-      box-shadow: 0 8px 20px rgba(15, 103, 183, 0.34);
+      color: #0f172a;
+      background: #ffffff;
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+    }
+
+    .org-content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .org-primary-column,
+    .org-secondary-column {
+      min-width: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .org-primary-panel,
+    .org-section,
+    .org-empty-state {
+      border: 1px solid rgba(201, 211, 224, 0.86);
+      border-radius: 20px;
+      background: linear-gradient(165deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 248, 252, 0.96) 100%);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+      padding: 12px;
+    }
+
+    .org-create-windows,
+    .org-join-window {
+      display: grid;
+      gap: 10px;
+    }
+
+    .org-create-windows {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+
+    .org-window {
+      border: 1px solid rgba(209, 219, 231, 0.9);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(247, 250, 253, 0.98) 100%);
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .org-window-title {
+      margin: 0;
+      font-size: 0.98rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      color: #0f172a;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .org-window-step {
+      border-radius: 999px;
+      border: 1px solid rgba(15, 103, 183, 0.25);
+      background: rgba(15, 103, 183, 0.08);
+      color: #0f67b7;
+      font-size: 0.73rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 4px 9px;
+      text-transform: uppercase;
+    }
+
+    .org-primary-panel .auth-field {
+      gap: 6px;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .org-primary-panel .auth-input {
+      border: 1px solid rgba(193, 205, 222, 0.95);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      color: #0f172a;
+      min-height: 44px;
+      transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .org-primary-panel textarea.auth-input {
+      min-height: 84px;
+      resize: vertical;
+    }
+
+    .auth-shell.auth-mode-register.org-onboarding-shell .org-primary-panel .auth-input:focus {
+      border-color: rgba(15, 103, 183, 0.5);
+      box-shadow: 0 0 0 3px rgba(15, 103, 183, 0.14);
+      background: #ffffff;
+    }
+
+    .org-create-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 0;
+      grid-column: 1 / -1;
+    }
+
+    .org-create-submit {
+      min-width: 220px;
+      border-radius: 13px;
+      border: 1px solid rgba(15, 103, 183, 0.18);
+      box-shadow: 0 12px 24px rgba(15, 103, 183, 0.26);
+      background: linear-gradient(180deg, #1f79cd 0%, #0f67b7 100%);
+    }
+
+    .org-create-submit:hover {
+      filter: brightness(1.04);
+      transform: translateY(-1px);
     }
 
     .org-loading {
@@ -2435,16 +2554,16 @@
     .org-panel-note {
       margin: 0;
       color: #334155;
-      font-size: 0.9rem;
-      line-height: 1.5;
+      font-size: 0.84rem;
+      line-height: 1.35;
       max-width: 68ch;
     }
 
     .org-input-help {
-      margin-top: 6px;
+      margin-top: 4px;
       color: #475569;
-      font-size: 0.78rem;
-      line-height: 1.45;
+      font-size: 0.74rem;
+      line-height: 1.3;
     }
 
     .auth-shell.auth-mode-register.org-onboarding-shell .org-panel .auth-input {
@@ -2467,16 +2586,16 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      border: 1px solid #cfd9e6;
+      border: 1px solid #d3dce8;
       border-radius: 14px;
-      padding: 12px 13px;
-      background: #ffffff;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.9);
       transition: border-color 180ms ease, box-shadow 180ms ease;
     }
 
     .org-list-item:hover {
-      border-color: #b9c8de;
-      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+      border-color: #becfe5;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
     }
 
     .org-item-main {
@@ -2509,7 +2628,7 @@
     }
 
     .org-section {
-      margin-top: 8px;
+      margin-top: 0;
       display: grid;
       gap: 8px;
     }
@@ -2550,9 +2669,9 @@
     }
 
     :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-card {
-      border-color: #253145;
-      background: #101827;
-      box-shadow: 0 18px 48px rgba(2, 6, 23, 0.55);
+      border-color: rgba(71, 85, 105, 0.5);
+      background: linear-gradient(165deg, rgba(15, 23, 42, 0.88) 0%, rgba(2, 6, 23, 0.9) 100%);
+      box-shadow: 0 22px 52px rgba(2, 6, 23, 0.58);
     }
 
     :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
@@ -2575,8 +2694,8 @@
     }
 
     :root[data-theme="dark"] .org-mode-switch {
-      background: #182335;
-      border-color: #2a3a54;
+      background: rgba(15, 23, 42, 0.72);
+      border-color: #334155;
     }
 
     :root[data-theme="dark"] .org-overview-card {
@@ -2602,6 +2721,55 @@
       background: #24344f;
     }
 
+    :root[data-theme="dark"] .org-mode-btn.active {
+      color: #e2ecff;
+      background: #23324a;
+      box-shadow: 0 8px 18px rgba(2, 6, 23, 0.35);
+    }
+
+    :root[data-theme="dark"] .org-primary-panel,
+    :root[data-theme="dark"] .org-section,
+    :root[data-theme="dark"] .org-empty-state {
+      border-color: rgba(61, 84, 120, 0.85);
+      background: linear-gradient(170deg, rgba(15, 23, 41, 0.9) 0%, rgba(11, 17, 30, 0.92) 100%);
+      box-shadow: 0 18px 34px rgba(2, 6, 23, 0.35);
+    }
+
+    :root[data-theme="dark"] .org-window {
+      border-color: #2f415f;
+      background: linear-gradient(170deg, rgba(19, 31, 49, 0.95) 0%, rgba(16, 24, 39, 0.95) 100%);
+    }
+
+    :root[data-theme="dark"] .org-window-title,
+    :root[data-theme="dark"] .org-section-title,
+    :root[data-theme="dark"] .org-name {
+      color: #f8fafc;
+    }
+
+    :root[data-theme="dark"] .org-window-step {
+      border-color: rgba(125, 195, 255, 0.34);
+      background: rgba(125, 195, 255, 0.12);
+      color: #9cd1ff;
+    }
+
+    :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-primary-panel .auth-input {
+      border-color: #30425f;
+      background: #0f1729;
+      color: #eff6ff;
+    }
+
+    :root[data-theme="dark"] .auth-shell.auth-mode-register.org-onboarding-shell .org-primary-panel .auth-input:focus {
+      border-color: #4c76b8;
+      box-shadow: 0 0 0 3px rgba(76, 118, 184, 0.25);
+      background: #101b30;
+    }
+
+    :root[data-theme="dark"] .org-create-submit {
+      border-color: rgba(125, 195, 255, 0.24);
+      background: linear-gradient(180deg, #2767a8 0%, #174a7e 100%);
+      box-shadow: 0 14px 24px rgba(2, 6, 23, 0.35);
+    }
+
     :root[data-theme="dark"] .org-panel {
       border-color: #2a3a54;
       background: #162237;
@@ -2622,17 +2790,12 @@
 
     :root[data-theme="dark"] .org-list-item {
       border-color: #30425f;
-      background: #0f1729;
+      background: rgba(15, 23, 41, 0.92);
     }
 
     :root[data-theme="dark"] .org-list-item:hover {
       border-color: #3d5478;
       box-shadow: 0 8px 16px rgba(2, 6, 23, 0.32);
-    }
-
-    :root[data-theme="dark"] .org-name,
-    :root[data-theme="dark"] .org-section-title {
-      color: #f8fafc;
     }
 
     @media (max-width: 900px) {
@@ -2670,10 +2833,27 @@
 
       .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-card {
         width: min(860px, calc(100% - 20px));
+        max-height: none;
       }
 
       .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
         padding: 22px;
+      }
+
+      .org-content-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .org-create-windows {
+        grid-template-columns: 1fr;
+      }
+
+      .org-create-actions {
+        justify-content: stretch;
+      }
+
+      .org-create-submit {
+        width: 100%;
       }
 
       .auth-shell.auth-mode-register.org-onboarding-shell .auth-head h2 {
@@ -2720,6 +2900,25 @@
 
       .org-mode-btn {
         flex: 1;
+      }
+
+      .org-window {
+        padding: 11px;
+      }
+
+      .org-window-title {
+        font-size: 0.92rem;
+      }
+    }
+
+    @media (max-height: 860px) and (min-width: 901px) {
+      .auth-shell.auth-mode-register.org-onboarding-shell .org-onboarding-main {
+        padding: 14px;
+        gap: 10px;
+      }
+
+      .auth-shell.auth-mode-register.org-onboarding-shell .auth-head h2 {
+        font-size: clamp(24px, 3.2vw, 34px);
       }
     }
 

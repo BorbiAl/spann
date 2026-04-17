@@ -9,18 +9,11 @@ from app.schemas.translate import TranslateRequest
 from app.services.groq_client import groq_client
 
 LITERAL_SYSTEM_PROMPT = (
-    "You are a word-for-word literal translator. Return ONLY JSON with no markdown:\n"
+    "You are a strict literal translator. Return ONLY JSON with no markdown:\n"
     "{\n"
-    '  "literal": "word-for-word literal translation in target_locale"\n'
+    '  "literal": "literal translation in target_locale"\n'
     "}\n"
-    "Rules:\n"
-    "- Translate each word individually from source_locale to target_locale.\n"
-    "- Preserve the exact source word order as closely as the target script allows.\n"
-    "- Do NOT interpret idioms — translate the words as written (e.g. 'break a leg' → translate 'break', 'a', 'leg' literally).\n"
-    "- Do NOT make the result sound natural or grammatically correct in the target language.\n"
-    "- Do NOT adapt tone, register, or cultural meaning.\n"
-    "- Do NOT paraphrase or substitute synonyms for naturalness.\n"
-    "- The output will intentionally read as awkward or foreign — that is correct."
+    "Never explain. Never add notes. Never return any extra keys."
 )
 
 CULTURAL_SYSTEM_PROMPT = (
@@ -66,6 +59,70 @@ def _pick_value(payload: dict[str, str], *keys: str) -> str:
     return ""
 
 
+def _build_literal_user_prompt(payload: TranslateRequest, *, enforce_non_source: bool = False) -> str:
+    """Build explicit literal-translation prompt with no hidden-meaning adaptation."""
+
+    extra_rule = (
+        "\nAdditional rule: if source_locale and target_locale differ, the output MUST NOT equal the original phrase."
+        if enforce_non_source
+        else ""
+    )
+    return (
+        "Translate this:\n"
+        f"{payload.phrase}\n\n"
+        "Into this locale:\n"
+        f"{payload.target_locale}\n\n"
+        "Source locale:\n"
+        f"{payload.source_locale}\n\n"
+        "Instruction:\n"
+        "Translate literally without implementing hidden meaning. Keep the words and language rules aligned with the source structure as much as possible.\n"
+        "Do not adapt culture, tone, idioms, or intent. Do not paraphrase."
+        f"{extra_rule}\n\n"
+        "Return ONLY JSON: {\"literal\":\"...\"}"
+    )
+
+
+async def _translate_literal(payload: TranslateRequest) -> str:
+    """Call Groq for strict literal translation and validate output."""
+
+    source_lang = _base_locale(payload.source_locale)
+    target_lang = _base_locale(payload.target_locale)
+    source_text = str(payload.phrase).strip()
+
+    first_raw = await groq_client.chat(
+        [
+            {"role": "system", "content": LITERAL_SYSTEM_PROMPT},
+            {"role": "user", "content": _build_literal_user_prompt(payload)},
+        ],
+        temperature=0.0,
+        max_tokens=220,
+        task_type="translation",
+    )
+    first_parsed = _extract_json(first_raw)
+    literal = _pick_value(first_parsed, "literal", "literal_translation", "translation")
+
+    if not literal or (source_lang != target_lang and literal.casefold() == source_text.casefold()):
+        retry_raw = await groq_client.chat(
+            [
+                {"role": "system", "content": LITERAL_SYSTEM_PROMPT},
+                {"role": "user", "content": _build_literal_user_prompt(payload, enforce_non_source=True)},
+            ],
+            temperature=0.0,
+            max_tokens=220,
+            task_type="translation",
+        )
+        retry_parsed = _extract_json(retry_raw)
+        literal = _pick_value(retry_parsed, "literal", "literal_translation", "translation")
+
+    if not literal:
+        raise ValueError("literal_missing")
+
+    if source_lang != target_lang and literal.casefold() == source_text.casefold():
+        raise ValueError("literal_not_translated")
+
+    return literal
+
+
 async def translate_culturally(payload: TranslateRequest) -> dict[str, str]:
     """Generate literal and culturally adapted translations from AI output."""
 
@@ -86,48 +143,7 @@ async def translate_culturally(payload: TranslateRequest) -> dict[str, str]:
         tone=payload.workplace_tone,
     )
 
-    literal_raw = await groq_client.chat(
-        [
-            {"role": "system", "content": LITERAL_SYSTEM_PROMPT},
-            {"role": "user", "content": base_prompt},
-        ],
-        temperature=0.0,
-        max_tokens=200,
-        task_type="translation",
-    )
-
-    literal_parsed = _extract_json(literal_raw)
-    literal = _pick_value(literal_parsed, "literal", "literal_translation", "translation")
-
-    source_lang = _base_locale(payload.source_locale)
-    target_lang = _base_locale(payload.target_locale)
-    source_text = str(payload.phrase).strip()
-    same_as_source = literal.casefold() == source_text.casefold()
-
-    if not literal or (source_lang != target_lang and same_as_source):
-        retry_prompt = (
-            "Previous output was invalid. "
-            "Translate each word individually (word-for-word) from source_locale to target_locale and return ONLY JSON {\"literal\":\"...\"}. "
-            "Never return the original source phrase when source and target locales differ. "
-            f"phrase={payload.phrase}, source_locale={payload.source_locale}, target_locale={payload.target_locale}"
-        )
-        literal_retry_raw = await groq_client.chat(
-            [
-                {"role": "system", "content": LITERAL_SYSTEM_PROMPT},
-                {"role": "user", "content": retry_prompt},
-            ],
-            temperature=0.0,
-            max_tokens=200,
-            task_type="translation",
-        )
-        literal_retry_parsed = _extract_json(literal_retry_raw)
-        literal = _pick_value(literal_retry_parsed, "literal", "literal_translation", "translation")
-
-    if not literal:
-        raise ValueError("literal_missing")
-
-    if source_lang != target_lang and literal.casefold() == source_text.casefold():
-        raise ValueError("literal_not_translated")
+    literal = await _translate_literal(payload)
 
     cultural_raw = await groq_client.chat(
         [

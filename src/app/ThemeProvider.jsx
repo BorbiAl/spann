@@ -9,7 +9,7 @@ export function useTheme() {
 export default function ThemeProvider({ children }) {
 	const [theme, setTheme] = useState(() => {
 		const saved = localStorage.getItem("spann-theme");
-		if (saved === "dark" || saved === "light") {
+		if (saved === "dark" || saved === "light" || saved === "system") {
 			return saved;
 		}
 
@@ -19,7 +19,28 @@ export default function ThemeProvider({ children }) {
 		return "light";
 	});
 	const [forcedTheme, setForcedTheme] = useState(null);
-	const resolvedTheme = forcedTheme || theme;
+	const [systemTheme, setSystemTheme] = useState(() => {
+		if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+			return "dark";
+		}
+		return "light";
+	});
+	const resolvedTheme = forcedTheme || (theme === "system" ? systemTheme : theme);
+
+	useEffect(() => {
+		if (typeof window === "undefined" || !window.matchMedia) {
+			return undefined;
+		}
+
+		const media = window.matchMedia("(prefers-color-scheme: dark)");
+		const onChange = (event) => {
+			setSystemTheme(event.matches ? "dark" : "light");
+		};
+
+		setSystemTheme(media.matches ? "dark" : "light");
+		media.addEventListener("change", onChange);
+		return () => media.removeEventListener("change", onChange);
+	}, []);
 
 	useEffect(() => {
 		document.documentElement.setAttribute("data-theme", resolvedTheme);

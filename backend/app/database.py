@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import httpx
 import logging
 import re
 import time
@@ -277,6 +278,11 @@ class DatabaseClient:
     def _is_email_exists_error(exc: Any) -> bool:
         text = str(exc).lower()
         return "already registered" in text or "already exists" in text or "email_exists" in text
+
+    @staticmethod
+    def _is_email_not_confirmed_error(exc: Any) -> bool:
+        text = str(exc).lower()
+        return "email not confirmed" in text or "email_not_confirmed" in text
 
     @staticmethod
     def _extract_auth_error_text(payload: Any) -> str:
@@ -1617,7 +1623,7 @@ class DatabaseClient:
             await self.verify_workspace_access(
                 user_id=UUID(safe_reviewer_id),
                 workspace_id=UUID(str(row.get("workspace_id", ""))),
-                required_role="owner",
+                required_role="admin",
             )
 
             next_status = "approved" if normalized_decision == "approve" else "rejected"
@@ -1652,7 +1658,7 @@ class DatabaseClient:
         await self.verify_workspace_access(
             user_id=UUID(safe_reviewer_id),
             workspace_id=UUID(str(row.get("workspace_id", ""))),
-            required_role="owner",
+            required_role="admin",
         )
 
         next_status = "approved" if normalized_decision == "approve" else "rejected"
@@ -1688,14 +1694,42 @@ class DatabaseClient:
         normalized_email = self._sanitize_text(email.lower(), max_len=320)
 
         try:
-            auth_response = await auth_client.auth.sign_in_with_password(
-                {"email": normalized_email, "password": password}
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("auth_login_failed", extra={"email": normalized_email, "error": str(exc)})
-            if settings.auth_fallback_enabled:
-                return local_store.authenticate_user(email=normalized_email, password=password)
-            return None
+            auth_response: Any | None = None
+            for attempt in range(2):
+                try:
+                    auth_response = await auth_client.auth.sign_in_with_password(
+                        {"email": normalized_email, "password": password}
+                    )
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("auth_login_failed", extra={"email": normalized_email, "error": str(exc)})
+                    if self._is_email_not_confirmed_error(exc):
+                        can_auto_confirm = (not settings.auth_require_email_confirmation) and bool(settings.supabase_service_key)
+                        if can_auto_confirm and attempt == 0:
+                            confirmed = await self._confirm_user_email(normalized_email)
+                            if confirmed:
+                                continue
+                        raise HTTPException(
+                            status_code=403,
+                            detail={
+                                "code": "email_not_confirmed",
+                                "message": "Email is not confirmed. Confirm your email before logging in.",
+                            },
+                        ) from exc
+                    if self._is_rate_limited_error(exc):
+                        raise HTTPException(
+                            status_code=429,
+                            detail={
+                                "code": "too_many_requests",
+                                "message": "Too many login attempts right now. Please wait a minute and try again.",
+                            },
+                        ) from exc
+                    if settings.auth_fallback_enabled:
+                        return local_store.authenticate_user(email=normalized_email, password=password)
+                    return None
+
+            if auth_response is None:
+                return None
         finally:
             await self._close_async_client_safely(auth_client)
 
@@ -1727,6 +1761,80 @@ class DatabaseClient:
             "user": {"id": user.id, "email": user.email or normalized_email, "display_name": display_name},
             "supabase_access_token": getattr(session, "access_token", None),
         }
+
+    async def _confirm_user_email(self, email: str) -> bool:
+        """Confirm a Supabase auth user email via admin API when SMTP is unavailable."""
+
+        service_key = (settings.supabase_service_key or "").strip()
+        if not service_key:
+            return False
+
+        base_url = settings.supabase_url.rstrip("/")
+        normalized_email = self._sanitize_text(email.lower(), max_len=320)
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                page = 1
+                user_id: str | None = None
+
+                while page <= 10 and user_id is None:
+                    list_response = await client.get(
+                        f"{base_url}/auth/v1/admin/users",
+                        headers=headers,
+                        params={"page": page, "per_page": 200},
+                    )
+                    if list_response.status_code >= 400:
+                        logger.warning(
+                            "auth_auto_confirm_list_failed",
+                            extra={"email": normalized_email, "status": list_response.status_code},
+                        )
+                        return False
+
+                    payload = list_response.json()
+                    users = payload.get("users") if isinstance(payload, dict) else None
+                    if not isinstance(users, list) or not users:
+                        break
+
+                    for item in users:
+                        if not isinstance(item, dict):
+                            continue
+                        item_email = str(item.get("email") or "").strip().lower()
+                        if item_email != normalized_email:
+                            continue
+                        candidate_id = str(item.get("id") or "").strip()
+                        if candidate_id:
+                            user_id = candidate_id
+                            break
+
+                    if len(users) < 200:
+                        break
+                    page += 1
+
+                if not user_id:
+                    return False
+
+                update_response = await client.put(
+                    f"{base_url}/auth/v1/admin/users/{user_id}",
+                    headers=headers,
+                    json={"email_confirm": True},
+                )
+                if update_response.status_code >= 400:
+                    logger.warning(
+                        "auth_auto_confirm_update_failed",
+                        extra={"email": normalized_email, "status": update_response.status_code},
+                    )
+                    return False
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("auth_auto_confirm_failed", extra={"email": normalized_email, "error": str(exc)})
+            return False
+
+        logger.info("auth_auto_confirmed", extra={"email": normalized_email})
+        return True
 
     async def send_magic_link(self, email: str) -> None:
         """Send a Supabase magic-link login email."""

@@ -1,5 +1,7 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import './Layout.css';
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ChannelList from "../components/ChannelList";
 import Icon from "../components/Icon";
 import ChatView from "../views/ChatView";
@@ -11,7 +13,13 @@ import TranslatorView from "../views/TranslatorView";
 import SettingsView from "../views/SettingsView";
 import CallView from "../views/CallView";
 import SupportView from "../views/SupportView";
-import { useTheme } from "./ThemeProvider";
+import {
+	ACCESSIBILITY_PREFS_EVENT,
+	ACCESSIBILITY_PREFS_KEY,
+	applyAccessibilityPreferencesGlobal,
+	loadAccessibilityPreferencesGlobal,
+	persistAccessibilityPreferencesGlobal,
+} from "./accessibility";
 import { meshApi } from "../api/mesh";
 import {
 	apiRequest,
@@ -77,9 +85,6 @@ function isUuidLike(value) {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
 }
 
-function hasCyrillicText(value) {
-	return /[\u0400-\u04FF]/.test(String(value || ""));
-}
 
 function detectSourceLanguage(text) {
 	const value = String(text || "").trim();
@@ -177,6 +182,7 @@ function toUiMessage(apiMessage) {
 		id: String(apiMessage?.id || Date.now()),
 		userId: String(apiMessage?.user_id || apiMessage?.user?.id || ""),
 		user: String(apiMessage?.user?.name || "Member"),
+		avatarUrl: String(apiMessage?.user?.avatar_url || apiMessage?.user?.avatar || "").trim(),
 		initials: String(apiMessage?.user?.initials || "US"),
 		color: String(apiMessage?.user?.color || "#0f67b7"),
 		createdAt: String(apiMessage?.created_at || ""),
@@ -380,6 +386,7 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					displayedMembers.map((member) => {
 						const label = String(member?.display_name || member?.email || "Member");
 						const roleLabel = formatWorkspaceRole(member);
+						const avatarUrl = String(member?.avatar_url || member?.avatar || "").trim();
 						const initials = label
 							.split(/\s+/)
 							.filter(Boolean)
@@ -390,9 +397,17 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 						const isOnline = Boolean(member?.is_online);
 						return (
 							<button key={String(member?.user_id || label)} className="member-item" type="button">
-								<span className="member-avatar" style={{ background: isOnline ? "#0f67b7" : "#667085" }}>
-									{initials}
-								</span>
+								{avatarUrl ? (
+									<img
+										className="member-avatar"
+										src={avatarUrl}
+										alt={`${label} avatar`}
+									/>
+								) : (
+									<span className="member-avatar" style={{ background: isOnline ? "#0f67b7" : "#667085" }}>
+										{initials}
+									</span>
+								)}
 								<span className="member-meta">{`${label} · ${roleLabel}`}</span>
 							</button>
 						);
@@ -403,72 +418,6 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 	);
 }
 
-function ChatNavRail({ activeView, onChange, items }) {
-	const railLabels = {
-		chat: "Chat",
-		mesh: "Network",
-		carbon: "Carbon",
-		pulse: "Analytics",
-		accessibility: "Accessibility",
-		translator: "Translate"
-	};
-
-	const railIcons = {
-		chat: "chat",
-		mesh: "lan",
-		carbon: "eco",
-		pulse: "insert_chart",
-		accessibility: "accessibility_new",
-		translator: "translate"
-	};
-
-	return (
-		<aside className="chat-nav-rail" aria-label="Workspace navigation">
-			<div className="chat-nav-brand">
-				<div className="chat-nav-brand-logo">S</div>
-				<div>
-					<p className="chat-nav-brand-title">Workspace</p>
-					<p className="chat-nav-brand-sub">Premium Connectivity</p>
-				</div>
-			</div>
-
-			<nav className="chat-nav-list" aria-label="Primary navigation">
-				{items.map((item) => (
-					<button
-						key={item.key}
-						className={`chat-nav-item ${activeView === item.key ? "active" : ""}`}
-						onClick={() => onChange(item.key)}
-					>
-						<Icon name={railIcons[item.key] || item.icon} size={16} />
-						<span>{railLabels[item.key] || item.label}</span>
-					</button>
-				))}
-			</nav>
-
-			<div className="chat-nav-foot">
-				<button className="chat-nav-item muted" type="button">
-					<Icon name="settings" size={16} />
-					<span>Settings</span>
-				</button>
-				<button className="chat-nav-item muted" type="button">
-					<Icon name="contact_support" size={16} />
-					<span>Support</span>
-				</button>
-				<div className="chat-nav-user">
-					<img
-						className="chat-nav-user-avatar"
-						src="https://lh3.googleusercontent.com/aida-public/AB6AXuBB87Yxv06GHwMcjD11mHkEaMwMQt3vaTkpqpUWgZvcNvPE0eOoc4OVF6PQIfl-gj8UPDfdg1VtV2ZEjlZJCJmRw7vDzxFmy1HNAPVkT5ZWXDb4WpZOZOB3zCKpx7wIOvGNx7TMVCCVO1hJO0Sfl9l1jZP7eGDHAQZ1SsX2IQST7lmvJ69IF3Afq0BSXSchgYdwirZ46jJyX3sNw0uVgrcWHFMu_K0KKjn3GLSDByFh7e149m_C-Wme1UacI-3uZXNuYyP3Nm0Egofr"
-						alt="Alex River avatar"
-					/>
-					<div>
-						<p className="chat-nav-user-name">Alex River</p>
-						<p className="chat-nav-user-status">Online</p>
-					</div>
-				</div>
-			</div>
-		</aside>
-	);
-}
 
 function ChatUtilityRail({ onToolAction, onCollapse }) {
 	const tools = [
@@ -493,84 +442,8 @@ function ChatUtilityRail({ onToolAction, onCollapse }) {
 	);
 }
 
-function IconRail({ activeView, onChange, items }) {
-	return (
-		<nav className="icon-rail" aria-label="Primary navigation">
-			<div className="logo-chip">SP</div>
-			{items.map((item) => (
-				<button
-					key={item.key}
-					className={`rail-item ${activeView === item.key ? "active" : ""}`}
-					onClick={() => onChange(item.key)}
-					aria-label={item.label}
-				>
-					<Icon name={item.icon} size={19} />
-					<span className="rail-tooltip">{item.label}</span>
-					{item.badge > 0 ? <span className="notif-badge">{item.badge}</span> : null}
-				</button>
-			))}
-			<div className="rail-bottom">VK</div>
-		</nav>
-	);
-}
 
-function BottomTabBar({ activeView, onChange, items }) {
-	return (
-		<div className="bottom-tab-bar" role="tablist" aria-label="Mobile navigation">
-			{items.map((item) => (
-				<button
-					key={item.key}
-					className={`tab-btn ${activeView === item.key ? "active" : ""}`}
-					onClick={() => onChange(item.key)}
-					aria-label={item.label}
-				>
-					<Icon name={item.icon} size={18} />
-					<span>{item.label}</span>
-					{item.badge > 0 ? <span className="notif-badge">{item.badge}</span> : null}
-				</button>
-			))}
-		</div>
-	);
-}
 
-function WorkspaceHeaderBar({ activeView, onToggleContext, onLogout }) {
-	const { theme, toggleTheme } = useTheme();
-	const titleMap = {
-		chat: "Team Chat",
-		mesh: "Mesh Network",
-		carbon: "Carbon Tracker",
-		pulse: "Crowd Pulse",
-		accessibility: "Accessibility Panel",
-		translator: "Cultural Translator",
-		settings: "Settings",
-		support: "Support"
-	};
-
-	return (
-		<section className="workspace-headerbar glass">
-			<div className="workspace-header-title">
-				<h2>{titleMap[activeView] || "Workspace"}</h2>
-				<p>Premium connectivity workspace</p>
-			</div>
-			<div className="workspace-header-search" aria-hidden="true">
-				<Icon name="search" size={14} />
-				<span>Search workspace...</span>
-			</div>
-			<div className="workspace-header-actions">
-				<button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
-					<Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
-					<span>{theme === "dark" ? "Light" : "Dark"}</span>
-				</button>
-				<button className="header-btn" onClick={onToggleContext} aria-label="Toggle context panel">
-					<Icon name="panel" size={18} />
-				</button>
-				<button className="header-btn" onClick={onLogout} aria-label="Logout">
-					<Icon name="logout" size={18} />
-				</button>
-			</div>
-		</section>
-	);
-}
 
 function MainPanel({
 	activeView,
@@ -600,6 +473,8 @@ function MainPanel({
 	carbonSaving,
 	carbonError,
 	currentUserId,
+	workspaceId,
+	canEditOfficeLocation,
 	meshNodes,
 	onRefreshMesh,
 	onRegisterMesh,
@@ -679,6 +554,8 @@ function MainPanel({
 				<CarbonView
 					leaderboard={carbonLeaderboard}
 					currentUserId={currentUserId}
+					workspaceId={workspaceId}
+					canEditOfficeLocation={canEditOfficeLocation}
 					onLogAction={onLogCarbon}
 					isSubmitting={carbonSaving}
 					errorText={carbonError}
@@ -732,22 +609,6 @@ function MainPanel({
 	return renderView();
 }
 
-function MobileSheet({ open, onClose, activeView, activeChannel }) {
-	return (
-		<div className={`mobile-sheet-overlay ${open ? "open" : ""}`} onClick={onClose}>
-			<section className="mobile-sheet" onClick={(event) => event.stopPropagation()}>
-				<div className="sheet-handle" />
-				<div className="sheet-head">
-					<p className="sheet-title">Context Panel</p>
-					<button className="tiny-btn" onClick={onClose} aria-label="Close sheet">
-						<Icon name="close" size={14} />
-					</button>
-				</div>
-				<ContextContent activeView={activeView} activeChannel={activeChannel} />
-			</section>
-		</div>
-	);
-}
 
 function GroupCreateModal({
 	open,
@@ -847,7 +708,6 @@ function GroupCreateModal({
 }
 
 export default function Layout({ authState, onLogout, onSessionExpired }) {
-	const { setForcedTheme } = useTheme();
 	const fallbackChannels = useMemo(() => toFallbackChannels(), []);
 	const [activeView, setActiveView] = useState(() => loadFromStorage("spann-active-view", "chat"));
 	const [channels, setChannels] = useState(fallbackChannels);
@@ -871,17 +731,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const [meshBusy, setMeshBusy] = useState(false);
 	const [meshError, setMeshError] = useState("");
 	const [accessibilitySaveState, setAccessibilitySaveState] = useState("idle");
-	const [accessibilityPrefs, setAccessibilityPrefs] = useState(() =>
-		loadFromStorage("spann-accessibility-preferences", {
-			dyslexia: false,
-			highContrast: false,
-			simplified: false,
-			tts: false,
-			fontSize: 15,
-			colorBlind: "Normal",
-			micJoined: false
-		})
-	);
+	const [accessibilityPrefs, setAccessibilityPrefs] = useState(() => loadAccessibilityPreferencesGlobal());
 	const [backendConnected, setBackendConnected] = useState(false);
 	const [runtimeNavItems, setRuntimeNavItems] = useState(DEFAULT_NAV_ITEMS);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1107,55 +957,40 @@ function initialsFromLabel(label) {
 	}, [starredChannelIds]);
 
 	useEffect(() => {
-		setForcedTheme("light");
+		persistAccessibilityPreferencesGlobal(accessibilityPrefs);
+	}, [accessibilityPrefs]);
+
+	useEffect(() => {
+		applyAccessibilityPreferencesGlobal(accessibilityPrefs);
+	}, [accessibilityPrefs]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") {
+			return undefined;
+		}
+
+		function syncPrefsFromStorage() {
+			setAccessibilityPrefs((current) => {
+				const next = loadAccessibilityPreferencesGlobal();
+				return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+			});
+		}
+
+		function handleStorage(event) {
+			if (event?.key && event.key !== ACCESSIBILITY_PREFS_KEY) {
+				return;
+			}
+			syncPrefsFromStorage();
+		}
+
+		window.addEventListener(ACCESSIBILITY_PREFS_EVENT, syncPrefsFromStorage);
+		window.addEventListener("storage", handleStorage);
 
 		return () => {
-			setForcedTheme(null);
+			window.removeEventListener(ACCESSIBILITY_PREFS_EVENT, syncPrefsFromStorage);
+			window.removeEventListener("storage", handleStorage);
 		};
-	}, [activeView, setForcedTheme]);
-
-	useEffect(() => {
-		localStorage.setItem("spann-accessibility-preferences", JSON.stringify(accessibilityPrefs));
-		if (typeof window !== "undefined") {
-			window.dispatchEvent(new CustomEvent("spann-accessibility-updated"));
-		}
-	}, [accessibilityPrefs]);
-
-	useEffect(() => {
-		if (typeof document === "undefined") {
-			return;
-		}
-
-		const root = document.documentElement;
-		const body = document.body;
-		const fontSize = Math.max(13, Math.min(22, Number(accessibilityPrefs?.fontSize || 15)));
-		const colorBlind = String(accessibilityPrefs?.colorBlind || "Normal");
-
-		const colorBlindFilters = {
-			Normal: "none",
-			Deuter: "saturate(0.92) hue-rotate(-12deg)",
-			Protan: "saturate(0.86) hue-rotate(16deg)",
-			Tritan: "saturate(0.86) hue-rotate(52deg)"
-		};
-		const colorBlindFilter = colorBlindFilters[colorBlind] || "none";
-		const highContrastFilter = accessibilityPrefs?.highContrast ? "contrast(1.18) saturate(0.92)" : "";
-		const combinedFilter = [colorBlindFilter !== "none" ? colorBlindFilter : "", highContrastFilter]
-			.filter(Boolean)
-			.join(" ");
-		const textScale = Math.max(0.88, Math.min(1.5, fontSize / 15));
-
-		root.style.setProperty("--body-size", `${fontSize}px`);
-		root.style.setProperty("--a11y-text-scale", String(textScale));
-		root.style.setProperty("--a11y-color-filter", combinedFilter || "none");
-		root.style.fontSize = `${Math.round(textScale * 100)}%`;
-
-		body.classList.toggle("a11y-dyslexia", Boolean(accessibilityPrefs?.dyslexia));
-		body.classList.toggle("a11y-high-contrast", Boolean(accessibilityPrefs?.highContrast));
-		body.classList.toggle("a11y-simplified", Boolean(accessibilityPrefs?.simplified));
-		body.classList.toggle("a11y-cognitive-reading", Boolean(accessibilityPrefs?.simplified));
-		body.classList.toggle("a11y-colorblind", colorBlind !== "Normal");
-		body.classList.toggle("a11y-tts", Boolean(accessibilityPrefs?.tts));
-	}, [accessibilityPrefs]);
+	}, []);
 
 	async function loadChannelMessages(channelId) {
 		if (!channelId) {
@@ -1428,6 +1263,19 @@ function initialsFromLabel(label) {
 		}
 		loadChannelMessages(activeChannelId);
 	}, [activeView, activeChannelId, backendConnected]);
+
+	useEffect(() => {
+		if (!backendConnected || !workspaceId || !activeChannelId) {
+			return;
+		}
+
+		const pollHandle = setInterval(() => {
+			loadChannelMessages(activeChannelId);
+			refreshWorkspaceMembers();
+		}, 4000);
+
+		return () => clearInterval(pollHandle);
+	}, [backendConnected, workspaceId, activeChannelId]);
 
 	useEffect(() => {
 		if (!prefsLoadedRef.current || !backendConnected) {
@@ -1843,22 +1691,30 @@ function initialsFromLabel(label) {
 			return;
 		}
 
-		let outboundText = String(text || "");
+		const trimmedText = String(text || "").trim();
+		if (!trimmedText) {
+			pushAppNotice("Message cannot be empty.", "error");
+			return;
+		}
+
 		let sourceLocale = translated ? "en-US" : null;
-		let wasAutoTranslated = false;
 		let translatedEnglishText = "";
 		const fromVoice = String(sendOptions?.origin || "").toLowerCase() === "voice";
 		const voiceSourceLocale = String(sendOptions?.sourceLocale || "").trim();
 		const shouldUseAiAdaptation = translated || fromVoice || Boolean(sendOptions?.autoDetectLanguage) || Boolean(sendOptions?.applyCulturalMeaning);
 		const detected = detectSourceLanguage(text);
 
-		if (shouldUseAiAdaptation && (!detected.isEnglish || fromVoice)) {
+		if (!backendConnected && shouldUseAiAdaptation) {
+			pushAppNotice("Offline mesh mode: sending original text without translation.", "info");
+		}
+
+		if (backendConnected && shouldUseAiAdaptation && (!detected.isEnglish || fromVoice)) {
 			try {
 				const channelTone = String(channels.find((channel) => String(channel.id) === String(channelId))?.tone || "neutral");
 				const translationPayload = await apiRequest("/translate", {
 					method: "POST",
 					body: JSON.stringify({
-						phrase: text,
+						phrase: trimmedText,
 						source_locale: fromVoice ? "auto" : (detected.locale || voiceSourceLocale || "auto"),
 						target_locale: "en-US",
 						source_culture: fromVoice ? "auto" : (detected.culture || "Global"),
@@ -1874,7 +1730,6 @@ function initialsFromLabel(label) {
 				if (culturallyAdapted) {
 					translatedEnglishText = culturallyAdapted;
 					sourceLocale = fromVoice ? (voiceSourceLocale || "auto") : detected.locale;
-					wasAutoTranslated = true;
 					const localeLabel = fromVoice ? (voiceSourceLocale || "auto") : detected.locale;
 					pushAppNotice(`Translated from ${localeLabel} to English with cultural adaptation.`, "info");
 				}
@@ -1895,7 +1750,7 @@ function initialsFromLabel(label) {
 					method: "POST",
 					body: JSON.stringify({
 						channel_id: channelId,
-						text: String(text || "").trim(),
+						text: trimmedText,
 						text_translated: translatedEnglishText || undefined,
 						source_locale: sourceLocale
 					})
@@ -1921,12 +1776,50 @@ function initialsFromLabel(label) {
 			}
 		}
 
-		pushAppNotice(
-			usedLocalFallback
-				? "Message could not be sent. Backend connection is required."
-				: "Message could not be sent.",
-			"error"
-		);
+		try {
+			const meshResult = await meshApi.sendLocalMessage({
+				channelId: String(channelId),
+				text: trimmedText,
+				ttl: 6
+			});
+
+			const createdAt = new Date().toISOString();
+			setMessagesByChannel((current) => ({
+				...current,
+				[channelId]: [
+					...(current[channelId] || []),
+					{
+						id: `live-${String(meshResult?.id || Date.now())}`,
+						userId: currentUserId || "local-user",
+						user: userName || "You",
+						avatarUrl: userAvatar,
+						initials: userInitials,
+						color: "#0f67b7",
+						createdAt,
+						time: formatMessageTime(createdAt),
+						text: trimmedText,
+						translatedText: null,
+						sentimentScore: null,
+						reactions: [],
+						translated: false,
+						lang: undefined,
+						meshOrigin: true
+					}
+				]
+			}));
+
+			pushAppNotice("Sent over nearby mesh (offline mode). Translation and cloud features are paused.", "success");
+			return;
+		} catch (meshError) {
+			const meshNormalized = normalizeApiError(meshError, "Unable to deliver over local mesh");
+			pushAppNotice(
+				usedLocalFallback
+					? `Message could not be sent. Backend is offline and mesh delivery failed: ${meshNormalized.message}`
+					: `Message could not be sent. Mesh delivery failed: ${meshNormalized.message}`,
+				"error"
+			);
+			return;
+		}
 	}
 
 	async function handleReactMessage(channelId, messageId, emoji) {
@@ -2165,14 +2058,6 @@ function initialsFromLabel(label) {
 		pushAppNotice(success ? "Nodes refreshed." : "Unable to refresh nodes.", success ? "success" : "error");
 	}
 
-	function handleContextAction() {
-		if (typeof window !== "undefined" && window.matchMedia("(max-width: 1140px)").matches) {
-			setMobileSheetOpen(true);
-			return;
-		}
-
-		setContextOpen((current) => !current);
-	}
 
 	function handleUtilityAction(toolKey) {
 		const key = String(toolKey || "");
@@ -2347,6 +2232,8 @@ function initialsFromLabel(label) {
 								carbonSaving={carbonSaving}
 								carbonError={carbonError}
 								currentUserId={currentUserId}
+								workspaceId={workspaceId}
+								canEditOfficeLocation={canManageMembers}
 								meshNodes={meshNodes}
 								onRefreshMesh={handleRefreshMeshAction}
 								onRegisterMesh={handleRegisterMeshNode}

@@ -478,18 +478,19 @@ function ProfileSection({ authState }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AppearanceSection({ accessibilityPrefs, onChangeAccessibility }) {
-	const { theme, toggleTheme } = useTheme();
+	const { theme, setTheme } = useTheme();
 
-	const themeMode = theme === "dark" ? "dark" : "light";
+	const themeMode = theme === "dark" || theme === "light" || theme === "system" ? theme : "light";
 	const fontSize = Number(accessibilityPrefs?.fontSize || 15);
 
 	function applyTheme(mode) {
-		if (mode === "system") return;
-		if ((mode === "dark") !== (theme === "dark")) toggleTheme();
+		if (mode === "dark" || mode === "light" || mode === "system") {
+			setTheme(mode);
+		}
 	}
 
 	function ThemeChoice({ value, label, preview }) {
-		const active = themeMode === value || (value === "system" && false);
+		const active = themeMode === value;
 		return (
 			<button
 				type="button"

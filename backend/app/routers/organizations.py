@@ -186,7 +186,7 @@ async def list_join_requests(
     request: Request,
     _rate_limit: None = Depends(public_rate_limit_dependency),
 ) -> JSONResponse:
-    """List pending join requests for an owner-managed organization."""
+    """List pending join requests for an owner/admin-managed organization."""
 
     user_id = UUID(str(request.state.user_id))
     await db.verify_workspace_access(user_id=user_id, workspace_id=workspace_id, required_role="owner")

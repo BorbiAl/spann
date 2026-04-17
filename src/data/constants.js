@@ -247,7 +247,7 @@ async function fetchWithProxyFallback(path, requestInit) {
 		return response;
 	}
 
-	response = await fetch(`${nativeDefaultApiBase}${normalizedPath}`, requestInit);
+	response = await fetch(`${nativeConfiguredApiBase}${normalizedPath}`, requestInit);
 	return response;
 }
 

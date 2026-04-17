@@ -1,8 +1,15 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import './App.css';
 import React, { useEffect, useRef, useState } from "react";
 import Layout from "./Layout";
 import ThemeProvider from "./ThemeProvider";
 import { useTheme } from "./ThemeProvider";
+import {
+	ACCESSIBILITY_PREFS_EVENT,
+	ACCESSIBILITY_PREFS_KEY,
+	applyAccessibilityPreferencesGlobal,
+	loadAccessibilityPreferencesGlobal,
+} from "./accessibility";
 import Icon from "../components/Icon";
 import {
 	APP_NOTICE_EVENT_NAME,
@@ -27,57 +34,51 @@ import {
 const ENTRY_STAGE_KEY = "spann-entry-stage";
 const APP_DOWNLOAD_URL = "https://github.com/BorbiAl/spann/releases";
 const SAVED_CREDENTIALS_KEY = "spann-saved-credentials";
-const ACCESSIBILITY_PREFS_KEY = "spann-accessibility-preferences";
-const ACCESSIBILITY_PREFS_EVENT = "spann-accessibility-updated";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function applyAccessibilityPreferencesGlobal(rawPreferences) {
-	if (typeof document === "undefined") {
+async function loadCredentialFromBrowser() {
+	if (typeof window === "undefined" || !navigator?.credentials?.get) {
+		return null;
+	}
+
+	try {
+		const credential = await navigator.credentials.get({
+			password: true,
+			mediation: "optional"
+		});
+		if (!credential || credential.type !== "password") {
+			return null;
+		}
+
+		return {
+			email: String(credential.id || "").trim(),
+			password: String(credential.password || "")
+		};
+	} catch {
+		return null;
+	}
+}
+
+async function saveCredentialToBrowser({ email, password }) {
+	if (typeof window === "undefined" || !window.PasswordCredential || !navigator?.credentials?.store) {
 		return;
 	}
 
-	const preferences = rawPreferences && typeof rawPreferences === "object" ? rawPreferences : {};
-	const root = document.documentElement;
-	const body = document.body;
-	const fontSize = Math.max(13, Math.min(22, Number(preferences?.fontSize || 15)));
-	const colorBlind = String(preferences?.colorBlind || "Normal");
+	const normalizedEmail = String(email || "").trim();
+	const rawPassword = String(password || "");
+	if (!normalizedEmail || !rawPassword) {
+		return;
+	}
 
-	const colorBlindFilters = {
-		Normal: "none",
-		Deuter: "saturate(0.92) hue-rotate(-12deg)",
-		Protan: "saturate(0.86) hue-rotate(16deg)",
-		Tritan: "saturate(0.86) hue-rotate(52deg)"
-	};
-	const colorBlindFilter = colorBlindFilters[colorBlind] || "none";
-	const highContrastFilter = preferences?.highContrast ? "contrast(1.18) saturate(0.92)" : "";
-	const combinedFilter = [colorBlindFilter !== "none" ? colorBlindFilter : "", highContrastFilter]
-		.filter(Boolean)
-		.join(" ");
-
-	const textScale = Math.max(0.88, Math.min(1.5, fontSize / 15));
-	root.style.setProperty("--body-size", `${fontSize}px`);
-	root.style.setProperty("--a11y-text-scale", String(textScale));
-	root.style.setProperty("--a11y-color-filter", combinedFilter || "none");
-	root.style.fontSize = `${Math.round(textScale * 100)}%`;
-
-	body.classList.toggle("a11y-dyslexia", Boolean(preferences?.dyslexia));
-	body.classList.toggle("a11y-high-contrast", Boolean(preferences?.highContrast));
-	body.classList.toggle("a11y-simplified", Boolean(preferences?.simplified));
-	body.classList.toggle("a11y-cognitive-reading", Boolean(preferences?.simplified));
-	body.classList.toggle("a11y-colorblind", colorBlind !== "Normal");
-	body.classList.toggle("a11y-tts", Boolean(preferences?.tts));
-}
-
-function loadAccessibilityPreferencesGlobal() {
 	try {
-		const raw = localStorage.getItem(ACCESSIBILITY_PREFS_KEY);
-		if (!raw) {
-			return {};
-		}
-		const parsed = JSON.parse(raw);
-		return parsed && typeof parsed === "object" ? parsed : {};
+		const credential = new window.PasswordCredential({
+			id: normalizedEmail,
+			password: rawPassword,
+			name: normalizedEmail
+		});
+		await navigator.credentials.store(credential);
 	} catch {
-		return {};
+		// Ignore if browser blocks credential store or does not support it in this context.
 	}
 }
 
@@ -136,34 +137,6 @@ function evaluatePasswordStrength(rawPassword) {
 	return { score, label: "Very strong", tone: "very-strong", suggestions: [] };
 }
 
-function generateStrongPassword() {
-	const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-	const lowercase = "abcdefghijkmnopqrstuvwxyz";
-	const digits = "23456789";
-	const symbols = "!@#$%^&*()_+-=[]{}?";
-	const all = uppercase + lowercase + digits + symbols;
-
-	const required = [
-		uppercase[Math.floor(Math.random() * uppercase.length)],
-		lowercase[Math.floor(Math.random() * lowercase.length)],
-		digits[Math.floor(Math.random() * digits.length)],
-		symbols[Math.floor(Math.random() * symbols.length)]
-	];
-
-	const targetLength = 14;
-	while (required.length < targetLength) {
-		required.push(all[Math.floor(Math.random() * all.length)]);
-	}
-
-	for (let i = required.length - 1; i > 0; i -= 1) {
-		const swapIndex = Math.floor(Math.random() * (i + 1));
-		const temp = required[i];
-		required[i] = required[swapIndex];
-		required[swapIndex] = temp;
-	}
-
-	return required.join("");
-}
 
 function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
 	return (
@@ -215,7 +188,7 @@ function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
 	);
 }
 
-function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
+function AuthScreen({ onAuthenticated, defaultEmail }) {
 	const [mode, setMode] = useState("login");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState(defaultEmail || "");
@@ -286,6 +259,18 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 	useEffect(() => {
 		const saved = localStorage.getItem(SAVED_CREDENTIALS_KEY);
 		if (!saved) {
+			loadCredentialFromBrowser().then((credential) => {
+				if (!credential) {
+					return;
+				}
+				if (credential.email) {
+					setEmail(credential.email);
+					setRememberEmail(true);
+				}
+				if (credential.password) {
+					setPassword(credential.password);
+				}
+			});
 			return;
 		}
 
@@ -298,6 +283,19 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 		} catch (error) {
 			localStorage.removeItem(SAVED_CREDENTIALS_KEY);
 		}
+
+		loadCredentialFromBrowser().then((credential) => {
+			if (!credential) {
+				return;
+			}
+			if (credential.email) {
+				setEmail(credential.email);
+				setRememberEmail(true);
+			}
+			if (credential.password) {
+				setPassword(credential.password);
+			}
+		});
 	}, []);
 
 	useEffect(() => {
@@ -319,11 +317,6 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 
 		if (mode === "register" && !name.trim()) {
 			setErrorText("Name is required to create a new account.");
-			return;
-		}
-
-		if (mode === "register" && passwordStrength.score < 3) {
-			setErrorText("Please choose a stronger password before creating your account.");
 			return;
 		}
 
@@ -371,6 +364,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 						email: email.trim()
 					})
 				);
+				await saveCredentialToBrowser({ email: email.trim(), password });
 			} else {
 				localStorage.removeItem(SAVED_CREDENTIALS_KEY);
 			}
@@ -425,6 +419,9 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 
 	return (
 		<div className={`auth-shell auth-mode-${mode}`}>
+			<div className="auth-theme-toggle-wrap">
+				<EntryThemeToggle />
+			</div>
 			{errorText ? (
 				<div className="auth-banner error" role="alert" aria-live="assertive">
 					<span className="auth-banner-leading" aria-hidden="true">!</span>
@@ -519,6 +516,8 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 									<input
 										type="text"
 										className="auth-input"
+										autoComplete="name"
+										name="name"
 										value={name}
 										onChange={(event) => setName(event.target.value)}
 										placeholder="John Doe"
@@ -531,6 +530,8 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 									<input
 										type="email"
 										className="auth-input"
+										autoComplete="username"
+										name="email"
 										value={email}
 										onChange={(event) => setEmail(event.target.value)}
 										placeholder="name@company.com"
@@ -568,6 +569,8 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 											<input
 												type={showRegisterPasswords ? "text" : "password"}
 												className="auth-input"
+													autoComplete="new-password"
+													name="new-password"
 												value={password}
 												onChange={(event) => setPassword(event.target.value)}
 												placeholder="••••••••"
@@ -601,6 +604,8 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 											<input
 												type={showRegisterPasswords ? "text" : "password"}
 												className="auth-input"
+													autoComplete="new-password"
+													name="confirm-password"
 												value={confirmPassword}
 												onChange={(event) => setConfirmPassword(event.target.value)}
 												placeholder="••••••••"
@@ -671,6 +676,8 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 								<input
 									type="text"
 									className="auth-input"
+									autoComplete="username"
+									name="username"
 									value={email}
 									onChange={(event) => setEmail(event.target.value)}
 									placeholder="Email, phone, or Skype"
@@ -679,6 +686,8 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 								<input
 									type="password"
 									className="auth-input"
+									autoComplete="current-password"
+									name="password"
 									value={password}
 									onChange={(event) => setPassword(event.target.value)}
 									placeholder="Password"
@@ -724,7 +733,7 @@ function AuthScreen({ onBack, onAuthenticated, defaultEmail }) {
 				<div className="auth-login-footer">
 					<span>Terms of use</span>
 					<span>Privacy &amp; cookies</span>
-					<span>© 2024 Spann</span>
+					<span>© 2026 Spann</span>
 				</div>
 			) : null}
 		</div>
@@ -1110,12 +1119,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 	const pendingJoinRequests = Array.isArray(state?.pending_join_requests) ? state.pending_join_requests : [];
 	const hasOrganization = myOrganizations.length > 0;
 	const canContinueToWorkspace = hasOrganization;
-	const overviewItems = [
-		{ id: "orgs", label: "Your organizations", value: myOrganizations.length },
-		{ id: "invites", label: "Invitations", value: pendingInvitations.length },
-		{ id: "discoverable", label: "Public organizations", value: discoverableOrganizations.length },
-		{ id: "requests", label: "Join requests", value: pendingJoinRequests.length },
-	];
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1174,11 +1177,14 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 
 	return (
 		<div className="auth-shell auth-mode-register org-onboarding-shell">
+			<div className="auth-theme-toggle-wrap">
+				<EntryThemeToggle />
+			</div>
 			<section className="auth-card register org-onboarding-card">
 				<div className="auth-main org-onboarding-main">
 					<div className="auth-head">
 						<h2>Create an organization or join one</h2>
-						<p>Set up your team space before entering the workspace. All onboarding details stay visible below so you can manage access in one place.</p>
+						<p>Set up your team space in a minimal two-step flow, then continue to workspace.</p>
 					</div>
 
 					<div className="org-mode-switch" role="tablist" aria-label="Organization setup mode">
@@ -1202,15 +1208,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 						</button>
 					</div>
 
-					<div className="org-overview-grid" aria-label="Organization onboarding summary">
-						{overviewItems.map((item) => (
-							<div key={item.id} className="org-overview-card">
-								<p className="org-overview-value">{item.value}</p>
-								<p className="org-overview-label">{item.label}</p>
-							</div>
-						))}
-					</div>
-
 					{errorText ? (
 						<div className="auth-banner error" role="alert" aria-live="assertive">
 							<span>{errorText}</span>
@@ -1230,169 +1227,192 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 
 					{loading ? <p className="org-loading">Loading organization options...</p> : null}
 
-					{!loading && mode === "create" ? (
-						<form className="auth-form org-panel" onSubmit={handleCreateOrganization}>
-							<p className="org-panel-note">Create a private organization and optionally invite teammates now.</p>
-							<label className="auth-field">
-								<span>Organization name</span>
-								<input
-									type="text"
-									className="auth-input"
-									value={createName}
-									onChange={(event) => setCreateName(event.target.value)}
-									placeholder="Acme Engineering"
-									required
-								/>
-							</label>
-							<label className="auth-field">
-								<span>Invite emails (comma or newline separated)</span>
-								<textarea
-									className="auth-input"
-									value={inviteEmails}
-									onChange={(event) => setInviteEmails(event.target.value)}
-									placeholder="teammate1@company.com, teammate2@company.com"
-									rows={4}
-								/>
-								<span className="org-input-help">Invalid emails are ignored so remaining invites can still be sent.</span>
-							</label>
-							<button type="submit" className="accent-btn auth-submit" disabled={submitting}>
-								{submitting ? "Creating..." : "Create organization"}
-							</button>
-						</form>
-					) : null}
+					<div className="org-content-grid">
+						<div className="org-primary-column">
+							{!loading && mode === "create" ? (
+								<form className="auth-form org-primary-panel org-create-windows" onSubmit={handleCreateOrganization}>
+									<section className="org-window" aria-label="Create organization window">
+										<h3 className="org-window-title">
+											<span className="org-window-step" aria-hidden="true">Step 1</span>
+											Organization details
+										</h3>
+										<p className="org-panel-note">Name your space. You can update branding later in settings.</p>
+										<label className="auth-field">
+											<span>Organization name</span>
+											<input
+												type="text"
+												className="auth-input"
+												value={createName}
+												onChange={(event) => setCreateName(event.target.value)}
+												placeholder="Acme Engineering"
+												required
+											/>
+										</label>
+									</section>
 
-					{!loading && mode === "join" ? (
-						<div className="auth-form org-panel">
-							<p className="org-panel-note">Request access to a public organization. Owners can approve or reject your request.</p>
-							<label className="auth-field">
-								<span>Optional message to owner</span>
-								<textarea
-									className="auth-input"
-									value={joinMessage}
-									onChange={(event) => setJoinMessage(event.target.value)}
-									placeholder="Hi, I work with your team and need access to this workspace."
-									rows={3}
-								/>
-							</label>
-							<div className="org-list">
-								{discoverableOrganizations.length === 0 ? <p className="org-empty">No public organizations available right now.</p> : null}
-								{discoverableOrganizations.map((organization) => (
-									<div key={organization.id} className="org-list-item">
-										<div className="org-item-main">
-											<strong className="org-name">{organization.name}</strong>
-											<div className="status-subtext org-meta">{organization.slug || "public"}</div>
-											{organization?.description ? <p className="org-description">{organization.description}</p> : null}
-										</div>
-										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
-											Request to join
+									<section className="org-window" aria-label="Organization invitations window">
+										<h3 className="org-window-title">
+											<span className="org-window-step" aria-hidden="true">Step 2</span>
+											Invite members
+										</h3>
+										<p className="org-panel-note">Add teammates now, or leave this blank and invite from settings any time.</p>
+										<label className="auth-field">
+											<span>Invite emails (comma or newline separated)</span>
+											<textarea
+												className="auth-input"
+												value={inviteEmails}
+												onChange={(event) => setInviteEmails(event.target.value)}
+												placeholder="teammate1@company.com, teammate2@company.com"
+												rows={5}
+											/>
+											<span className="org-input-help">Invalid emails are ignored so valid invites can still be sent.</span>
+										</label>
+									</section>
+
+									<div className="org-create-actions">
+										<button type="submit" className="accent-btn auth-submit org-create-submit" disabled={submitting}>
+											{submitting ? "Creating..." : "Create organization"}
 										</button>
 									</div>
-								))}
-							</div>
-						</div>
-					) : null}
+								</form>
+							) : null}
 
-					{pendingInvitations.length > 0 ? (
-						<div className="org-section">
-							<h3 className="org-section-title">Invitations</h3>
-							{pendingInvitations.map((invitation) => (
-								<div key={invitation.id} className="org-list-item">
-									<div>
-										<strong className="org-name">{invitation.workspace_name || "Organization"}</strong>
-										<div className="status-subtext org-meta">{invitation.email}</div>
-									</div>
-									<div className="auth-inline-row org-item-actions">
-										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "accept", invitation.workspace_id)}>Accept</button>
-										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "reject", invitation.workspace_id)}>Reject</button>
-									</div>
-								</div>
-							))}
-						</div>
-					) : null}
-
-					{pendingJoinRequests.length > 0 ? (
-						<div className="org-section">
-							<h3 className="org-section-title">Pending join requests</h3>
-							{pendingJoinRequests.map((requestItem) => (
-								<div key={requestItem.id} className="org-list-item">
-									<div>
-										<strong className="org-name">{requestItem.requester_display_name || requestItem.requester_email || "User"}</strong>
-										<div className="status-subtext org-meta">{requestItem.workspace_name || "Organization"}</div>
-									</div>
-									<div className="auth-inline-row org-item-actions">
-										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "approve")}>Approve</button>
-										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "reject")}>Reject</button>
+							{!loading && mode === "join" ? (
+								<div className="auth-form org-primary-panel org-join-window">
+									<p className="org-panel-note">Request access to a public organization. Owners can approve or reject your request.</p>
+									<label className="auth-field">
+										<span>Optional message to owner</span>
+										<textarea
+											className="auth-input"
+											value={joinMessage}
+											onChange={(event) => setJoinMessage(event.target.value)}
+											placeholder="Hi, I work with your team and need access to this workspace."
+											rows={3}
+										/>
+									</label>
+									<div className="org-list">
+										{discoverableOrganizations.length === 0 ? <p className="org-empty">No public organizations available right now.</p> : null}
+										{discoverableOrganizations.map((organization) => (
+											<div key={organization.id} className="org-list-item">
+												<div className="org-item-main">
+													<strong className="org-name">{organization.name}</strong>
+													<div className="status-subtext org-meta">{organization.slug || "public"}</div>
+													{organization?.description ? <p className="org-description">{organization.description}</p> : null}
+												</div>
+												<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
+													Request to join
+												</button>
+											</div>
+										))}
 									</div>
 								</div>
-							))}
-						</div>
-					) : null}
+							) : null}
 
-					{myOrganizations.length > 0 ? (
-						<div className="org-section">
-							<h3 className="org-section-title">Your organizations</h3>
-							<div className="org-list">
-								{myOrganizations.map((item) => (
-									<div key={item.id || item.workspace_id || item.slug || item.name} className="org-list-item">
-										<div>
-											<strong className="org-name">{item.name || "Organization"}</strong>
-											<div className="status-subtext org-meta">{item.slug || "private"}</div>
+							{!loading && myOrganizations.length === 0 && pendingInvitations.length === 0 && discoverableOrganizations.length === 0 ? (
+								<div className="org-section org-empty-state">
+									<h3 className="org-section-title">No organizations yet</h3>
+									<p className="org-empty">No workspaces are currently available. Create one to continue.</p>
+								</div>
+							) : null}
+						</div>
+
+						<aside className="org-secondary-column">
+							{pendingInvitations.length > 0 ? (
+								<div className="org-section">
+									<h3 className="org-section-title">Invitations</h3>
+									{pendingInvitations.map((invitation) => (
+										<div key={invitation.id} className="org-list-item">
+											<div>
+												<strong className="org-name">{invitation.workspace_name || "Organization"}</strong>
+												<div className="status-subtext org-meta">{invitation.email}</div>
+											</div>
+											<div className="auth-inline-row org-item-actions">
+												<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "accept", invitation.workspace_id)}>Accept</button>
+												<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleInvitationDecision(invitation.id, "reject", invitation.workspace_id)}>Reject</button>
+											</div>
 										</div>
-										<span className="org-role-pill">{item.role || "member"}</span>
+									))}
+								</div>
+							) : null}
+
+							{pendingJoinRequests.length > 0 ? (
+								<div className="org-section">
+									<h3 className="org-section-title">Pending join requests</h3>
+									{pendingJoinRequests.map((requestItem) => (
+										<div key={requestItem.id} className="org-list-item">
+											<div>
+												<strong className="org-name">{requestItem.requester_display_name || requestItem.requester_email || "User"}</strong>
+												<div className="status-subtext org-meta">{requestItem.workspace_name || "Organization"}</div>
+											</div>
+											<div className="auth-inline-row org-item-actions">
+												<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "approve")}>Approve</button>
+												<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinDecision(requestItem.id, "reject")}>Reject</button>
+											</div>
+										</div>
+									))}
+								</div>
+							) : null}
+
+							{myOrganizations.length > 0 ? (
+								<div className="org-section">
+									<h3 className="org-section-title">Your organizations</h3>
+									<div className="org-list">
+										{myOrganizations.map((item) => (
+											<div key={item.id || item.workspace_id || item.slug || item.name} className="org-list-item">
+												<div>
+													<strong className="org-name">{item.name || "Organization"}</strong>
+													<div className="status-subtext org-meta">{item.slug || "private"}</div>
+												</div>
+												<span className="org-role-pill">{item.role || "member"}</span>
+											</div>
+										))}
 									</div>
-								))}
+								</div>
+							) : null}
+
+							{managedWorkspaceId ? (
+								<div className="org-section">
+									<h3 className="org-section-title">Organization members</h3>
+									{membersLoading ? <p className="org-loading">Loading members...</p> : null}
+									{!membersLoading && workspaceMembers.length === 0 ? <p className="org-empty">No members found.</p> : null}
+									{workspaceMembers.map((member) => {
+										const memberName = member?.display_name || member?.email || "Member";
+										const memberRole = String(member?.role || "member");
+										const isSelf = String(member?.user_id || "") === String(authState?.userId || authState?.user?.id || "");
+										return (
+											<div key={String(member?.user_id || memberName)} className="org-list-item">
+												<div>
+													<strong className="org-name">{memberName}</strong>
+													<div className="status-subtext org-meta">{memberRole}</div>
+												</div>
+												{canManageMembers && !isSelf && memberRole !== "owner" ? (
+													<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleRemoveMember(member.user_id)}>
+														Remove
+													</button>
+												) : (
+													<span className="org-role-pill">{isSelf ? "you" : memberRole}</span>
+												)}
+											</div>
+										);
+									})}
+								</div>
+							) : null}
+
+							<div className="org-footer-card">
+								<button type="button" className="auth-text-link inline" onClick={onLogout}>Sign out</button>
+								{canContinueToWorkspace ? (
+									<button
+										type="button"
+										className="accent-btn auth-submit"
+										onClick={handleContinueToWorkspace}
+									>
+										Continue to workspace
+									</button>
+								) : (
+									<p className="org-continue-hint">Create or join an organization to continue.</p>
+								)}
 							</div>
-						</div>
-					) : null}
-
-					{!loading && myOrganizations.length === 0 && pendingInvitations.length === 0 && discoverableOrganizations.length === 0 ? (
-						<div className="org-section">
-							<h3 className="org-section-title">No organizations yet</h3>
-							<p className="org-empty">No workspaces are currently available. Create one to continue.</p>
-						</div>
-					) : null}
-
-					{managedWorkspaceId ? (
-						<div className="org-section">
-							<h3 className="org-section-title">Organization members</h3>
-							{membersLoading ? <p className="org-loading">Loading members...</p> : null}
-							{!membersLoading && workspaceMembers.length === 0 ? <p className="org-empty">No members found.</p> : null}
-							{workspaceMembers.map((member) => {
-								const memberName = member?.display_name || member?.email || "Member";
-								const memberRole = String(member?.role || "member");
-								const isSelf = String(member?.user_id || "") === String(authState?.userId || authState?.user?.id || "");
-								return (
-									<div key={String(member?.user_id || memberName)} className="org-list-item">
-										<div>
-											<strong className="org-name">{memberName}</strong>
-											<div className="status-subtext org-meta">{memberRole}</div>
-										</div>
-										{canManageMembers && !isSelf && memberRole !== "owner" ? (
-											<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleRemoveMember(member.user_id)}>
-												Remove
-											</button>
-										) : (
-											<span className="org-role-pill">{isSelf ? "you" : memberRole}</span>
-										)}
-									</div>
-								);
-							})}
-						</div>
-					) : null}
-
-					<div className="auth-inline-row org-footer-actions">
-						<button type="button" className="auth-text-link inline" onClick={onLogout}>Sign out</button>
-						{canContinueToWorkspace ? (
-							<button
-								type="button"
-								className="accent-btn auth-submit"
-								onClick={handleContinueToWorkspace}
-							>
-								Continue to workspace
-							</button>
-						) : (
-							<p className="org-continue-hint">Create or join an organization to continue.</p>
-						)}
+						</aside>
 					</div>
 				</div>
 			</section>

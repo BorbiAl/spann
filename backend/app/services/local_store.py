@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from hashlib import sha256
+import hashlib
+import hmac
+from secrets import token_hex
 from typing import Any
 from uuid import uuid4
 
@@ -73,7 +75,29 @@ class LocalStore:
 
     @staticmethod
     def _hash_password(password: str) -> str:
-        return sha256(password.encode("utf-8")).hexdigest()
+        iterations = 260_000
+        salt = token_hex(16)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations).hex()
+        return f"pbkdf2_sha256${iterations}${salt}${digest}"
+
+    @staticmethod
+    def _verify_password(password: str, stored_hash: str) -> bool:
+        value = str(stored_hash or "")
+        if value.startswith("pbkdf2_sha256$"):
+            parts = value.split("$", 3)
+            if len(parts) != 4:
+                return False
+            _, iterations_raw, salt, expected = parts
+            try:
+                iterations = int(iterations_raw)
+            except ValueError:
+                return False
+            actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations).hex()
+            return hmac.compare_digest(actual, expected)
+
+        # Backward-compatible verification for old sha256-only fallback records.
+        legacy = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        return hmac.compare_digest(legacy, value)
 
     @staticmethod
     def _initials(name: str) -> str:
@@ -173,7 +197,7 @@ class LocalStore:
         user = self.users_by_email.get(normalized_email)
         if user is None:
             return None
-        if user.password_hash != self._hash_password(password):
+        if not self._verify_password(password, user.password_hash):
             return None
 
         workspace_id = self.get_default_workspace_for_user(user.id)

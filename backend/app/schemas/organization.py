@@ -35,7 +35,7 @@ class OrganizationJoinRequestCreate(BaseModel):
 
 
 class JoinRequestDecisionRequest(BaseModel):
-    """Payload for owner approval or rejection of join requests."""
+    """Payload for owner/admin approval or rejection of join requests."""
 
     model_config = ConfigDict(extra="forbid")
 

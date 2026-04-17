@@ -1,0 +1,25 @@
+{
+  "name": "@spann/discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@discordjs/rest": "^2.4.0",
+    "@spann/shared": "*",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.4.5"
+  }
+}

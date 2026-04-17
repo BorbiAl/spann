@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "../components/Icon";
 import Message from "../components/Message";

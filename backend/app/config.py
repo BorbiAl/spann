@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     env: str = "development"
     test_mode: bool = Field(default=False, alias="TEST_MODE")
     auth_fallback_enabled: bool = Field(default=False, alias="AUTH_FALLBACK_ENABLED")
+    auth_require_email_confirmation: bool = Field(default=False, alias="AUTH_REQUIRE_EMAIL_CONFIRMATION")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")

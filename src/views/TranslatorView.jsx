@@ -70,6 +70,55 @@ function buildCultureFallback(targetCulture, originalText) {
 	return `[${targetCulture}] ${phrase}`;
 }
 
+function estimateSentimentFromText(value) {
+	const text = String(value || '').toLowerCase();
+	if (!text.trim()) {
+		return 50;
+	}
+
+	const positive = [
+		'thanks', 'thank you', 'great', 'good', 'excellent', 'awesome', 'appreciate', 'success', 'well done',
+		'благодаря', 'успех', 'чудесно', 'страхотно', 'добре',
+		'merci', 'gracias', 'danke', 'boa sorte', 'congrats'
+	];
+	const negative = [
+		'urgent', 'asap', 'problem', 'issue', 'blocked', 'angry', 'hate', 'bad', 'frustrated',
+		'спешно', 'проблем', 'грешка', 'лошо', 'ядосан',
+		'erreur', 'malo', 'schlecht'
+	];
+
+	let score = 50;
+	for (const token of positive) {
+		if (text.includes(token)) {
+			score += 8;
+		}
+	}
+	for (const token of negative) {
+		if (text.includes(token)) {
+			score -= 8;
+		}
+	}
+
+	if (text.includes('!')) {
+		score += 2;
+	}
+	if (text.includes('?')) {
+		score -= 1;
+	}
+
+	return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function sentimentLabelFromScore(score) {
+	if (score >= 70) {
+		return 'Positive';
+	}
+	if (score >= 45) {
+		return 'Neutral';
+	}
+	return 'Direct';
+}
+
 async function requestLegacyAdaptation(trimmed, sourceCulture, targetCulture) {
 	const payload = await apiRequest('/translator/adapt', {
 		method: 'POST',
@@ -283,10 +332,11 @@ export default function TranslatorView() {
 				setStatusNote('Primary translator returned partial output. Please retry.');
 			}
 			const nextTags = Array.isArray(data.tags) && data.tags.length > 0 ? data.tags : ['translation'];
-			const nextSentiment = Number.isFinite(data.sentiment_score)
-				? Math.min(100, Math.max(0, Number(data.sentiment_score)))
-				: 50;
-			const nextLabel = data.sentiment_label || 'Neutral';
+			const parsedSentiment = Number(data.sentiment_score);
+			const nextSentiment = Number.isFinite(parsedSentiment)
+				? Math.min(100, Math.max(0, parsedSentiment))
+				: estimateSentimentFromText(nextCultural || nextLiteral);
+			const nextLabel = String(data.sentiment_label || sentimentLabelFromScore(nextSentiment));
 
 			setResult({
 				literal: String(nextLiteral),
@@ -500,6 +550,7 @@ export default function TranslatorView() {
 					<div className="bg-surface-container-low p-4 rounded-xl">
 						<div className="flex justify-between items-center mb-2">
 							<span className="text-[10px] font-bold uppercase text-on-surface-variant">Sentiment &amp; Politeness Spectrum</span>
+							<span className="text-[11px] font-semibold text-primary">{Math.round(Number(result?.sentiment || 50))}%</span>
 						</div>
 						<div className="h-2 w-full bg-surface-container-high rounded-full overflow-hidden flex">
 							<div className="h-full bg-primary" style={{ width: `${Number(result?.sentiment || 50)}%` }} />
