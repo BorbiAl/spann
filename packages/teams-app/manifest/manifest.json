@@ -1,0 +1,114 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "{{TEAMS_APP_ID}}",
+  "developer": {
+    "name": "Spann",
+    "websiteUrl": "https://spann.app",
+    "privacyUrl": "https://spann.app/privacy",
+    "termsOfUseUrl": "https://spann.app/terms"
+  },
+  "name": {
+    "short": "Spann",
+    "full": "Spann Accessibility"
+  },
+  "description": {
+    "short": "AI-powered accessibility for Microsoft Teams",
+    "full": "Spann makes Microsoft Teams fully accessible for people with visual, auditory, motor, cognitive, dyslexic, and anxiety/autism-spectrum disabilities. It simplifies messages, generates captions, detects aggressive tone, and flags missing alt text — all powered by AI."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#0f172a",
+
+  "bots": [
+    {
+      "botId": "{{TEAMS_BOT_APP_ID}}",
+      "scopes": [
+        "personal",
+        "team",
+        "groupchat"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal"],
+          "commands": [
+            {
+              "title": "setup",
+              "description": "Open your accessibility settings"
+            },
+            {
+              "title": "help",
+              "description": "Show what Spann can do"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "staticTabs": [
+    {
+      "entityId": "spann-settings",
+      "name": "Accessibility Settings",
+      "contentUrl": "{{TEAMS_TAB_URL}}/tab/settings",
+      "websiteUrl": "{{TEAMS_TAB_URL}}/tab/settings",
+      "scopes": ["personal"]
+    }
+  ],
+
+  "composeExtensions": [
+    {
+      "botId": "{{TEAMS_BOT_APP_ID}}",
+      "commands": [
+        {
+          "id": "makeAccessible",
+          "type": "action",
+          "title": "Spann: Make Accessible",
+          "description": "Analyse and simplify this message for accessibility",
+          "context": ["message"],
+          "fetchTask": true,
+          "parameters": []
+        }
+      ]
+    }
+  ],
+
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+
+  "webApplicationInfo": {
+    "id": "{{TEAMS_BOT_APP_ID}}",
+    "resource": "https://graph.microsoft.com"
+  },
+
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "name": "ChannelMessage.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "TeamMember.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "TeamsActivity.Send.User",
+          "type": "Application"
+        }
+      ]
+    }
+  },
+
+  "validDomains": [
+    "{{TEAMS_TAB_DOMAIN}}",
+    "token.botframework.com"
+  ]
+}
