@@ -1,17 +1,9 @@
 import './ChannelList.css';
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Icon from "./Icon";
 
 function isDirectChannel(channel) {
 	return String(channel?.kind || "").toLowerCase() === "dm" || String(channel?.id || "").startsWith("dm:") || String(channel?.name || "").startsWith("@");
-}
-
-function formatWorkspaceRole(member) {
-	const rawRole = String(member?.role || member?.workspace_role || member?.member_role || "member").trim().toLowerCase();
-	if (!rawRole) {
-		return "Member";
-	}
-	return rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
 }
 
 export default function ChannelList({
@@ -23,10 +15,7 @@ export default function ChannelList({
 	onStartDirectMessage,
 	onJoinChannel,
 	onLeaveChannel,
-	onEditChannel,
 	joinedChannelIds,
-	starredChannelIds,
-	onToggleChannelStar,
 	workspaceMembers,
 	canManageMembers,
 	canRemoveMembers,
@@ -34,36 +23,6 @@ export default function ChannelList({
 	onRemoveMember,
 	variant = "default"
 }) {
-	const [groupContextMenu, setGroupContextMenu] = useState(null);
-
-	useEffect(() => {
-		if (!groupContextMenu) {
-			return undefined;
-		}
-
-		function closeMenu() {
-			setGroupContextMenu(null);
-		}
-
-		function onKeyDown(event) {
-			if (event.key === "Escape") {
-				setGroupContextMenu(null);
-			}
-		}
-
-		window.addEventListener("click", closeMenu);
-		window.addEventListener("scroll", closeMenu, true);
-		window.addEventListener("resize", closeMenu);
-		window.addEventListener("keydown", onKeyDown);
-
-		return () => {
-			window.removeEventListener("click", closeMenu);
-			window.removeEventListener("scroll", closeMenu, true);
-			window.removeEventListener("resize", closeMenu);
-			window.removeEventListener("keydown", onKeyDown);
-		};
-	}, [groupContextMenu]);
-
 	if (!channels || !channels.length) {
 		return (
 			<div className="sidebar-section">
@@ -80,46 +39,9 @@ export default function ChannelList({
 		const dmChannels = channels.filter((channel) => isDirectChannel(channel));
 		const allMembers = Array.isArray(workspaceMembers) ? workspaceMembers : [];
 		const joinedSet = new Set(Array.isArray(joinedChannelIds) ? joinedChannelIds.map((id) => String(id)) : []);
-		const starredSet = new Set(Array.isArray(starredChannelIds) ? starredChannelIds.map((id) => String(id)) : []);
 		const joinedGroups = groupChannels.filter((channel) => joinedSet.has(String(channel.id)));
-		const starredGroups = joinedGroups.filter((channel) => starredSet.has(String(channel.id)));
-		const regularJoinedGroups = joinedGroups.filter((channel) => !starredSet.has(String(channel.id)));
 		const discoverableGroups = groupChannels.filter((channel) => !joinedSet.has(String(channel.id)));
-		const canCreateChannels = typeof onCreateChannel === "function";
-		const canJoinGroups = typeof onJoinChannel === "function";
-		const canLeaveGroups = typeof onLeaveChannel === "function";
-		const ownerCanManageChannels = Boolean(canManageMembers);
-		const contextChannel = groupChannels.find((channel) => String(channel.id) === String(groupContextMenu?.channelId || "")) || null;
-		const contextIsStarred = Boolean(contextChannel && starredSet.has(String(contextChannel.id)));
-
-		function handleGroupContextMenu(event, channel) {
-			event.preventDefault();
-			event.stopPropagation();
-			setGroupContextMenu({
-				x: event.clientX,
-				y: event.clientY,
-				channelId: String(channel?.id || ""),
-			});
-		}
-
-		function handleContextAction(action) {
-			if (!contextChannel) {
-				setGroupContextMenu(null);
-				return;
-			}
-
-			const channelId = contextChannel.id;
-			if (action === "star") {
-				onToggleChannelStar?.(channelId);
-			}
-			if (action === "rename" && ownerCanManageChannels) {
-				onEditChannel?.(channelId);
-			}
-			if (action === "delete") {
-				onLeaveChannel?.(channelId);
-			}
-			setGroupContextMenu(null);
-		}
+		const favoriteChannels = joinedGroups.slice(0, 6);
 
 		function handleCreateChannel() {
 			if (typeof onCreateChannel === "function") {
@@ -135,71 +57,12 @@ export default function ChannelList({
 
 		return (
 			<div className="sidebar-section teams-channel-list">
-				<div className="channel-view-intro">
-					<p className="channel-view-title">Workspace Channels</p>
-					<p className="channel-view-meta">{joinedGroups.length} joined • {groupChannels.length} groups</p>
-				</div>
-				{starredGroups.length > 0 ? (
-					<>
-						<div className="chat-section-header">
-							<p className="section-title chat-section-title">Starred</p>
-						</div>
-						{starredGroups.slice(0, 6).map((channel) => {
-							const unread = Number(channelUnread?.[channel.id] || 0);
-							const isActive = activeChannelId === channel.id;
-							return (
-								<div key={`starred-${channel.id}`} className={`channel-item team-channel-item ${isActive ? "active" : ""}`} onContextMenu={(event) => handleGroupContextMenu(event, channel)}>
-									<button type="button" className="flex-1 min-w-0 text-left flex items-center gap-2" onClick={() => onChannelChange(channel.id)}>
-										<span className="channel-dot" aria-hidden="true">
-											<Icon name="tag" size={12} />
-										</span>
-										<span className="channel-name">{String(channel.name || "").replace(/^#/, "")}</span>
-									</button>
-									<div className="flex items-center gap-1">
-										{unread > 0 ? <span className="channel-unread">{unread}</span> : null}
-										{typeof onToggleChannelStar === "function" ? (
-											<button
-												type="button"
-												onClick={() => onToggleChannelStar(channel.id)}
-												className="chat-section-action"
-												aria-label={`Unstar ${channel.name}`}
-											>
-												<Icon name="star" size={12} />
-											</button>
-										) : null}
-										{ownerCanManageChannels && typeof onEditChannel === "function" ? (
-											<button
-												type="button"
-												onClick={() => onEditChannel(channel.id)}
-												className="chat-section-action"
-												aria-label={`Edit ${channel.name}`}
-											>
-												<Icon name="edit" size={12} />
-											</button>
-										) : null}
-									</div>
-								</div>
-							);
-						})}
-						<div className="chat-section-header section-spacer">
-							<p className="section-title chat-section-title">Groups</p>
-							{canCreateChannels ? (
-								<button className="chat-section-action" type="button" aria-label="Add channel" onClick={handleCreateChannel}>
-									<Icon name="add" size={12} />
-								</button>
-							) : null}
-						</div>
-					</>
-				) : (
 				<div className="chat-section-header">
 					<p className="section-title chat-section-title">Groups</p>
-					{canCreateChannels ? (
-						<button className="chat-section-action" type="button" aria-label="Add channel" onClick={handleCreateChannel}>
-							<Icon name="add" size={12} />
-						</button>
-					) : null}
+					<button className="chat-section-action" type="button" aria-label="Add channel" onClick={handleCreateChannel}>
+						<Icon name="add" size={12} />
+					</button>
 				</div>
-				)}
 
 				{groupChannels.length === 0 ? (
 					<div className="channel-item team-channel-item-muted">
@@ -215,15 +78,13 @@ export default function ChannelList({
 					</div>
 				) : null}
 
-				{regularJoinedGroups.slice(0, 6).map((channel, index) => {
+				{favoriteChannels.map((channel, index) => {
 					const unread = Number(channelUnread?.[channel.id] || 0);
 					const isActive = activeChannelId === channel.id;
-					const isStarred = starredSet.has(String(channel.id));
 					return (
 						<div
 							key={channel.id}
 							className={`channel-item team-channel-item ${isActive ? "active" : ""} ${index > 0 ? "team-channel-item-muted" : ""}`}
-							onContextMenu={(event) => handleGroupContextMenu(event, channel)}
 						>
 							<button type="button" className="flex-1 min-w-0 text-left flex items-center gap-2" onClick={() => onChannelChange(channel.id)}>
 								<span className="channel-dot" aria-hidden="true">
@@ -237,27 +98,7 @@ export default function ChannelList({
 								) : unread > 0 ? (
 									<span className="channel-unread">{unread}</span>
 								) : null}
-								{typeof onToggleChannelStar === "function" ? (
-									<button
-										type="button"
-										onClick={() => onToggleChannelStar(channel.id)}
-										className="chat-section-action"
-										aria-label={isStarred ? `Unstar ${channel.name}` : `Star ${channel.name}`}
-									>
-										<Icon name={isStarred ? "star" : "star_outline"} size={12} />
-									</button>
-								) : null}
-								{ownerCanManageChannels && typeof onEditChannel === "function" ? (
-									<button
-										type="button"
-										onClick={() => onEditChannel(channel.id)}
-										className="chat-section-action"
-										aria-label={`Edit ${channel.name}`}
-									>
-										<Icon name="edit" size={12} />
-									</button>
-								) : null}
-								{canLeaveGroups ? (
+								{typeof onLeaveChannel === "function" ? (
 									<button
 										type="button"
 										onClick={() => onLeaveChannel(channel.id)}
@@ -279,14 +120,14 @@ export default function ChannelList({
 				) : null}
 
 				{discoverableGroups.map((channel) => (
-					<div key={channel.id} className="channel-item team-channel-item team-channel-item-muted" onContextMenu={(event) => handleGroupContextMenu(event, channel)}>
+					<div key={channel.id} className="channel-item team-channel-item team-channel-item-muted">
 						<button type="button" className="flex-1 min-w-0 text-left flex items-center gap-2" onClick={() => onChannelChange(channel.id)}>
 							<span className="channel-dot" aria-hidden="true">
 								<Icon name="group" size={12} />
 							</span>
 							<span className="channel-name">{String(channel.name || "").replace(/^#/, "")}</span>
 						</button>
-						{canJoinGroups ? (
+						{typeof onJoinChannel === "function" ? (
 							<button
 								type="button"
 								onClick={() => onJoinChannel(channel.id)}
@@ -348,9 +189,9 @@ export default function ChannelList({
 						</div>
 						{allMembers.slice(0, 6).map((member) => {
 							const memberLabel = String(member?.display_name || member?.email || "Member");
-							const memberRole = formatWorkspaceRole(member);
+							const memberRole = String(member?.role || "member");
 							const isOnline = Boolean(member?.is_online);
-							const removable = canRemoveMembers && memberRole.toLowerCase() !== "owner";
+							const removable = canRemoveMembers && memberRole !== "owner";
 							return (
 								<div key={String(member?.user_id || memberLabel)} className="channel-item team-channel-item team-channel-item-muted">
 									<div className="flex-1 min-w-0 text-left flex items-center gap-2">
@@ -371,29 +212,6 @@ export default function ChannelList({
 							);
 						})}
 					</>
-				) : null}
-
-				{groupContextMenu && contextChannel ? (
-					<div
-						className="group-context-menu"
-						style={{ left: `${groupContextMenu.x}px`, top: `${groupContextMenu.y}px` }}
-						onClick={(event) => event.stopPropagation()}
-					>
-						<button type="button" className="group-context-item" onClick={() => handleContextAction("star")}>
-							<Icon name={contextIsStarred ? "star" : "star_outline"} size={14} />
-							<span>{contextIsStarred ? "Unstar group" : "Star group"}</span>
-						</button>
-						{ownerCanManageChannels ? (
-							<button type="button" className="group-context-item" onClick={() => handleContextAction("rename")}>
-								<Icon name="edit" size={14} />
-								<span>Rename group</span>
-							</button>
-						) : null}
-						<button type="button" className="group-context-item danger" onClick={() => handleContextAction("delete")}>
-							<Icon name={ownerCanManageChannels ? "delete" : "logout"} size={14} />
-							<span>{ownerCanManageChannels ? "Delete group" : "Leave group"}</span>
-						</button>
-					</div>
 				) : null}
 			</div>
 		);

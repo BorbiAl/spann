@@ -4,7 +4,6 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios'
 import { tokenManager } from '../lib/tokens'
-import { getAuthState } from '../data/constants'
 
 type RuntimeWindow = Window & { SPANN_API_BASE?: string }
 
@@ -111,21 +110,7 @@ export const apiClient: AxiosInstance = axios.create({
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    let token = tokenManager.getAccessToken()
-    if (!token) {
-      const fallbackAuth = getAuthState()
-      const fallbackToken = String(fallbackAuth?.accessToken || '').trim()
-      if (fallbackToken) {
-        tokenManager.setAccessToken(fallbackToken)
-        token = fallbackToken
-
-        const fallbackEmail = String(fallbackAuth?.user?.email || '').trim().toLowerCase()
-        if (fallbackEmail) {
-          tokenManager.setActiveAccountEmail(fallbackEmail)
-        }
-      }
-    }
-
+    const token = tokenManager.getAccessToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }

@@ -143,14 +143,6 @@ function formatMessageTime(timestamp) {
 	return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function formatWorkspaceRole(member) {
-	const rawRole = String(member?.role || member?.workspace_role || member?.member_role || "member").trim().toLowerCase();
-	if (!rawRole) {
-		return "Member";
-	}
-	return rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
-}
-
 const DEFAULT_NAV_ITEMS = [
 	{ key: "chat", label: "Chat", icon: "chat", badge: 0 },
 	{ key: "mesh", label: "Mesh", icon: "tower", badge: 0 },
@@ -167,23 +159,15 @@ function toUiMessage(apiMessage) {
 		: [];
 	const originalText = String(apiMessage?.text || "").trim();
 	const translatedText = String(apiMessage?.text_translated || "").trim();
-	const sentimentCandidate = apiMessage?.sentiment_score ?? apiMessage?.sentimentScore;
-	const sentimentValue = Number(sentimentCandidate);
-	const sentimentScore = Number.isFinite(sentimentValue)
-		? Math.max(0, Math.min(100, Math.round(sentimentValue)))
-		: null;
 
 	return {
 		id: String(apiMessage?.id || Date.now()),
-		userId: String(apiMessage?.user_id || apiMessage?.user?.id || ""),
 		user: String(apiMessage?.user?.name || "Member"),
 		initials: String(apiMessage?.user?.initials || "US"),
 		color: String(apiMessage?.user?.color || "#0f67b7"),
-		createdAt: String(apiMessage?.created_at || ""),
 		time: formatMessageTime(apiMessage?.created_at),
 		text: originalText || translatedText,
 		translatedText: translatedText || null,
-		sentimentScore,
 		reactions,
 		translated: Boolean(translatedText),
 		lang: apiMessage?.source_locale ? `${apiMessage.source_locale} -> en-US` : undefined
@@ -269,7 +253,7 @@ function ContextContent({ activeView, activeChannel }) {
 	);
 }
 
-function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, onJoinChannel, onLeaveChannel, onEditChannel, joinedChannelIds, starredChannelIds, onToggleChannelStar, jumpRef, collapsed, currentUserName, currentUserInitials, onSectionAction, onlineMembers, workspaceMembers, canManageMembers, canRemoveMembers, onInviteMember, onRemoveMember }) {
+function Sidebar({ activeView, activeChannelId, channels, onChannelChange, channelUnread, navItems, onViewChange, isChatLayout, onCreateChannel, onStartDirectMessage, onJoinChannel, onLeaveChannel, joinedChannelIds, jumpRef, collapsed, currentUserName, currentUserInitials, onSectionAction, onlineMembers, workspaceMembers, canManageMembers, canRemoveMembers, onInviteMember, onRemoveMember }) {
 	const [jumpSearch, setJumpSearch] = useState("");
 	const displayedMembers = Array.isArray(onlineMembers) ? onlineMembers.slice(0, 6) : [];
 
@@ -314,10 +298,7 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 					onStartDirectMessage={onStartDirectMessage}
 					onJoinChannel={onJoinChannel}
 					onLeaveChannel={onLeaveChannel}
-					onEditChannel={onEditChannel}
 					joinedChannelIds={joinedChannelIds}
-					starredChannelIds={starredChannelIds}
-					onToggleChannelStar={onToggleChannelStar}
 					workspaceMembers={workspaceMembers}
 					canManageMembers={canManageMembers}
 					canRemoveMembers={canRemoveMembers}
@@ -379,7 +360,6 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 				) : (
 					displayedMembers.map((member) => {
 						const label = String(member?.display_name || member?.email || "Member");
-						const roleLabel = formatWorkspaceRole(member);
 						const initials = label
 							.split(/\s+/)
 							.filter(Boolean)
@@ -393,7 +373,7 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 								<span className="member-avatar" style={{ background: isOnline ? "#0f67b7" : "#667085" }}>
 									{initials}
 								</span>
-								<span className="member-meta">{`${label} · ${roleLabel}`}</span>
+								<span className="member-meta">{label}</span>
 							</button>
 						);
 					})
@@ -576,15 +556,10 @@ function MainPanel({
 	activeView,
 	onViewChange,
 	activeChannel,
-	activeChannelId,
 	channelMood,
 	messages,
-	isChannelStarred,
-	onToggleChannelStar,
 	onSendMessage,
 	onReactMessage,
-	onEditMessage,
-	onDeleteMessage,
 	translateEnabled,
 	setTranslateEnabled,
 	showNudge,
@@ -613,7 +588,6 @@ function MainPanel({
 	onLogout,
 	currentUserName,
 	workspaceMembers,
-	channels,
 	hasGroupChannels,
 	onCreateGroup,
 	canManageMembers,
@@ -627,22 +601,16 @@ function MainPanel({
 			return (
 				<ChatView
 					activeChannel={activeChannel}
-					activeChannelId={activeChannelId}
 					channelMood={channelMood}
 					messages={messages}
-					isChannelStarred={isChannelStarred}
-					onToggleChannelStar={onToggleChannelStar}
 					accessibilityPrefs={accessibilityPrefs}
 					preferredLocale={authState?.user?.locale || "en-US"}
 					onSendMessage={onSendMessage}
 					onReactMessage={onReactMessage}
-					onEditMessage={onEditMessage}
-					onDeleteMessage={onDeleteMessage}
 					translateEnabled={translateEnabled}
 					setTranslateEnabled={setTranslateEnabled}
 					showNudge={showNudge}
 					currentUserName={currentUserName}
-					currentUserId={currentUserId}
 					workspaceMembers={workspaceMembers}
 					hasGroupChannels={hasGroupChannels}
 					onCreateGroup={onCreateGroup}
@@ -717,9 +685,6 @@ function MainPanel({
 					onLogout={onLogout}
 					accessibilityPrefs={accessibilityPrefs}
 					onChangeAccessibility={onChangeAccessibility}
-					workspaceMembers={workspaceMembers}
-					channels={channels}
-					activeChannelName={activeChannel}
 				/>
 			);
 		}
@@ -859,7 +824,6 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const [translateEnabled, setTranslateEnabled] = useState(() => loadFromStorage("spann-translate-enabled", true));
 	const [showNudge, setShowNudge] = useState(() => loadFromStorage("spann-show-nudge", true));
 	const [joinedChannelIds, setJoinedChannelIds] = useState(() => loadFromStorage("spann-joined-channel-ids", []));
-	const [starredChannelIds, setStarredChannelIds] = useState(() => loadFromStorage("spann-starred-channel-ids", []));
 	const [myReactionsByMessage, setMyReactionsByMessage] = useState(() => loadFromStorage("spann-my-reactions", {}));
 	const [channelMoodById, setChannelMoodById] = useState(() => toFallbackMoodByChannel());
 	const [pulseLoading, setPulseLoading] = useState(false);
@@ -921,7 +885,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 		liveAuth?.email ||
 		"Member"
 	).trim();
-	const authFallbackRole = String(liveAuth?.user?.role || "member").trim().toLowerCase() || "member";
+	const userRole = String(liveAuth?.user?.role || "Member").trim() || "Member";
 	const userAvatar = String(liveAuth?.user?.avatar_url || liveAuth?.user?.avatar || "").trim();
 function initialsFromLabel(label) {
 	const raw = String(label || "").trim();
@@ -944,22 +908,13 @@ function initialsFromLabel(label) {
 }
 	const userInitials = initialsFromLabel(userName);
 		const [pulseChannels, setPulseChannels] = useState(() =>
-			fallbackChannels.map((channel) => ({ id: channel.id, name: channel.name, energy: null, label: null, hasData: false }))
+			fallbackChannels.map((channel) => ({ id: channel.id, name: channel.name, energy: null, hasData: false }))
 		);
 	const onlineMembers = useMemo(
 		() => (Array.isArray(workspaceMembers) ? workspaceMembers.filter((member) => Boolean(member?.is_online)) : []),
 		[workspaceMembers]
 	);
-	const workspaceRole = useMemo(() => {
-		if (!Array.isArray(workspaceMembers) || !workspaceMembers.length || !currentUserId) {
-			return authFallbackRole;
-		}
-		const currentMember = workspaceMembers.find((member) => String(member?.user_id || "") === currentUserId);
-		const memberRole = String(currentMember?.role || currentMember?.workspace_role || currentMember?.member_role || "").trim().toLowerCase();
-		return memberRole || authFallbackRole;
-	}, [workspaceMembers, currentUserId, authFallbackRole]);
-	const normalizedRole = String(workspaceRole || "member").toLowerCase();
-	const userRole = normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1);
+	const normalizedRole = String(userRole || "member").toLowerCase();
 	const canManageMembers = normalizedRole === "owner" || normalizedRole === "admin";
 	const canRemoveMembers = normalizedRole === "owner";
 
@@ -1103,10 +1058,6 @@ function initialsFromLabel(label) {
 	}, [joinedChannelIds]);
 
 	useEffect(() => {
-		localStorage.setItem("spann-starred-channel-ids", JSON.stringify(starredChannelIds));
-	}, [starredChannelIds]);
-
-	useEffect(() => {
 		setForcedTheme("light");
 
 		return () => {
@@ -1202,7 +1153,6 @@ function initialsFromLabel(label) {
 							id: channel.id,
 							name: channel.name,
 							energy: null,
-							label: null,
 							hasData: false
 						};
 					}
@@ -1210,21 +1160,17 @@ function initialsFromLabel(label) {
 					try {
 						const payload = await apiRequest(`/pulse/${encodeURIComponent(channel.id)}`);
 						const snapshot = payload?.data || {};
-						const scoreValue = Number(snapshot.score);
-						const normalizedLabel = String(snapshot.label || "").trim();
 						return {
 							id: channel.id,
 							name: channel.name,
-							energy: Number.isFinite(scoreValue) ? normalizePulseScore(scoreValue) : null,
-							label: normalizedLabel || null,
-							hasData: Number.isFinite(scoreValue)
+							energy: Number.isFinite(Number(snapshot.score)) ? normalizePulseScore(snapshot.score) : null,
+							hasData: Number.isFinite(Number(snapshot.score))
 						};
 					} catch (error) {
 						return {
 							id: channel.id,
 							name: channel.name,
 							energy: null,
-							label: null,
 							hasData: false
 						};
 					}
@@ -1375,8 +1321,7 @@ function initialsFromLabel(label) {
 				const mappedChannels = fetchedChannels.map((row) => ({
 					id: String(row.id),
 					name: withHash(row.name),
-					mood: 60,
-					tone: String(row?.tone || "neutral").trim() || "neutral"
+					mood: 60
 				}));
 
 				setChannels((current) => {
@@ -1710,68 +1655,11 @@ function initialsFromLabel(label) {
 		pushAppNotice("Joined group.", "success");
 	}
 
-	function handleToggleChannelStar(channelId) {
-		const id = String(channelId || "");
-		if (!id) {
-			return;
-		}
-		setStarredChannelIds((current) => {
-			const set = new Set((current || []).map((value) => String(value)));
-			if (set.has(id)) {
-				set.delete(id);
-				return Array.from(set);
-			}
-			set.add(id);
-			return Array.from(set);
-		});
-	}
-
 	function handleLeaveChannel(channelId) {
 		const id = String(channelId || "");
 		if (!id) {
 			return;
 		}
-
-		if (canManageMembers && isUuidLike(id) && backendConnected) {
-			const approved = typeof window !== "undefined"
-				? window.confirm("Delete this group channel? This will remove its messages from this workspace.")
-				: true;
-			if (!approved) {
-				return;
-			}
-
-			apiRequest(`/channels/${encodeURIComponent(id)}`, {
-				method: "DELETE"
-			})
-				.then(() => {
-					setChannels((current) => current.filter((channel) => String(channel.id) !== id));
-					setMessagesByChannel((current) => {
-						const next = { ...current };
-						delete next[id];
-						return next;
-					});
-					setChannelUnread((current) => {
-						const next = { ...current };
-						delete next[id];
-						return next;
-					});
-					setJoinedChannelIds((current) => (current || []).filter((value) => String(value) !== id));
-					setStarredChannelIds((current) => (current || []).filter((value) => String(value) !== id));
-					if (String(activeChannelId) === id) {
-						const fallbackChannel = channels.find((channel) => String(channel.id) !== id && (isDirectChannel(channel) || (joinedChannelIds || []).includes(String(channel.id))));
-						if (fallbackChannel) {
-							setActiveChannelId(fallbackChannel.id);
-						}
-					}
-					pushAppNotice("Group deleted.", "success");
-				})
-				.catch((error) => {
-					const normalized = normalizeApiError(error, "Unable to delete channel");
-					pushAppNotice(normalized.message || "Unable to delete channel.", "error");
-				});
-			return;
-		}
-
 		setJoinedChannelIds((current) => (current || []).filter((value) => String(value) !== id));
 		if (String(activeChannelId) === id) {
 			const joinedSet = new Set((joinedChannelIds || []).map((value) => String(value)).filter((value) => value !== id));
@@ -1781,61 +1669,6 @@ function initialsFromLabel(label) {
 			}
 		}
 		pushAppNotice("Left group.", "info");
-	}
-
-	async function handleEditChannel(channelId) {
-		const id = String(channelId || "");
-		if (!id || !canManageMembers) {
-			return;
-		}
-
-		const channel = channels.find((item) => String(item.id) === id);
-		if (!channel) {
-			return;
-		}
-
-		const currentName = String(channel.name || "").replace(/^#/, "");
-		const nextNameInput = typeof window !== "undefined"
-			? window.prompt("Rename group channel", currentName)
-			: currentName;
-		const nextName = String(nextNameInput || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-		if (!nextName || nextName === currentName) {
-			return;
-		}
-
-		if (backendConnected && isUuidLike(id)) {
-			try {
-				const payload = await apiRequest(`/channels/${encodeURIComponent(id)}`, {
-					method: "PATCH",
-					body: JSON.stringify({ name: nextName }),
-				});
-				const row = payload?.data || {};
-				setChannels((current) => current.map((item) => {
-					if (String(item.id) !== id) {
-						return item;
-					}
-					return {
-						...item,
-						name: withHash(row.name || nextName),
-						tone: String(row.tone || item.tone || "neutral"),
-					};
-				}));
-				pushAppNotice("Group updated.", "success");
-				return;
-			} catch (error) {
-				const normalized = normalizeApiError(error, "Unable to update channel");
-				pushAppNotice(normalized.message || "Unable to update channel.", "error");
-				return;
-			}
-		}
-
-		setChannels((current) => current.map((item) => {
-			if (String(item.id) !== id) {
-				return item;
-			}
-			return { ...item, name: withHash(nextName) };
-		}));
-		pushAppNotice("Group updated locally.", "info");
 	}
 
 	async function handleSendMessage(channelId, text, translated, sendOptions = {}) {
@@ -1986,96 +1819,6 @@ function initialsFromLabel(label) {
 				: "Reaction could not be saved.",
 			"error"
 		);
-	}
-
-	async function handleEditMessage(channelId, messageId, newText) {
-		if (!channelId || !messageId) {
-			return;
-		}
-
-		const trimmed = String(newText || "").trim();
-		if (!trimmed) {
-			pushAppNotice("Message cannot be empty.", "error");
-			return;
-		}
-
-		if (String(messageId).startsWith("live-")) {
-			setMessagesByChannel((current) => ({
-				...current,
-				[channelId]: (current[channelId] || []).map((message) => (
-					String(message.id) === String(messageId)
-						? { ...message, text: trimmed }
-						: message
-				)),
-			}));
-			pushAppNotice("Message updated.", "success");
-			return;
-		}
-
-		if (backendConnected && isUuidLike(channelId) && isUuidLike(messageId)) {
-			try {
-				const payload = await apiRequest(`/messages/${encodeURIComponent(messageId)}`, {
-					method: "PATCH",
-					body: JSON.stringify({ text: trimmed }),
-				});
-				const updated = payload?.data;
-				setMessagesByChannel((current) => ({
-					...current,
-					[channelId]: (current[channelId] || []).map((message) => {
-						if (String(message.id) !== String(messageId)) {
-							return message;
-						}
-						return {
-							...message,
-							text: String(updated?.text || trimmed),
-						};
-					}),
-				}));
-				pushAppNotice("Message updated.", "success");
-				return;
-			} catch (error) {
-				const normalized = normalizeApiError(error, "Unable to edit message");
-				pushAppNotice(normalized.message || "Unable to edit message.", "error");
-				return;
-			}
-		}
-
-		pushAppNotice("Message could not be edited. Backend connection is required.", "error");
-	}
-
-	async function handleDeleteMessage(channelId, messageId) {
-		if (!channelId || !messageId) {
-			return;
-		}
-
-		if (String(messageId).startsWith("live-")) {
-			setMessagesByChannel((current) => ({
-				...current,
-				[channelId]: (current[channelId] || []).filter((message) => String(message.id) !== String(messageId)),
-			}));
-			pushAppNotice("Message unsent.", "success");
-			return;
-		}
-
-		if (backendConnected && isUuidLike(channelId) && isUuidLike(messageId)) {
-			try {
-				await apiRequest(`/messages/${encodeURIComponent(messageId)}`, {
-					method: "DELETE",
-				});
-				setMessagesByChannel((current) => ({
-					...current,
-					[channelId]: (current[channelId] || []).filter((message) => String(message.id) !== String(messageId)),
-				}));
-				pushAppNotice("Message unsent.", "success");
-				return;
-			} catch (error) {
-				const normalized = normalizeApiError(error, "Unable to unsend message");
-				pushAppNotice(normalized.message || "Unable to unsend message.", "error");
-				return;
-			}
-		}
-
-		pushAppNotice("Message could not be unsent. Backend connection is required.", "error");
 	}
 
 	async function handleLogCarbon(action) {
@@ -2287,10 +2030,7 @@ function initialsFromLabel(label) {
 								onStartDirectMessage={handleStartDirectMessage}
 								onJoinChannel={handleJoinChannel}
 								onLeaveChannel={handleLeaveChannel}
-								onEditChannel={handleEditChannel}
 								joinedChannelIds={joinedChannelIds}
-								starredChannelIds={starredChannelIds}
-								onToggleChannelStar={handleToggleChannelStar}
 								jumpRef={jumpInputRef}
 								collapsed={sidebarCollapsed}
 								currentUserName={userName}
@@ -2311,11 +2051,8 @@ function initialsFromLabel(label) {
 									activeView={activeView}
 									onViewChange={setActiveView}
 									activeChannel={activeChannel}
-									activeChannelId={activeChannelId}
 									channelMood={activeMood}
 									messages={currentMessages}
-									isChannelStarred={starredChannelIds.includes(String(activeChannelId))}
-									onToggleChannelStar={() => handleToggleChannelStar(activeChannelId)}
 									onSendMessage={(channelLabel, text, translated, sendOptions) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
 										return handleSendMessage(channel?.id || activeChannelId, text, translated, sendOptions);
@@ -2323,14 +2060,6 @@ function initialsFromLabel(label) {
 									onReactMessage={(channelLabel, messageId, emoji) => {
 										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
 										handleReactMessage(channel?.id || activeChannelId, messageId, emoji);
-									}}
-									onEditMessage={(channelLabel, messageId, newText) => {
-										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-										return handleEditMessage(channel?.id || activeChannelId, messageId, newText);
-									}}
-									onDeleteMessage={(channelLabel, messageId) => {
-										const channel = channels.find((item) => item.name === channelLabel) || channels.find((item) => item.id === activeChannelId);
-										return handleDeleteMessage(channel?.id || activeChannelId, messageId);
 									}}
 									translateEnabled={translateEnabled}
 									setTranslateEnabled={setTranslateEnabled}
@@ -2360,7 +2089,6 @@ function initialsFromLabel(label) {
 									onLogout={onLogout}
 									currentUserName={liveAuth?.user?.display_name || liveAuth?.user?.name || ""}
 									workspaceMembers={workspaceMembers}
-									channels={channels}
 									hasGroupChannels={hasGroupChannels}
 									onCreateGroup={handleCreateChannel}
 									canManageMembers={canManageMembers}

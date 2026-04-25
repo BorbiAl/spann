@@ -67,34 +67,8 @@
       border: none;
       background: transparent;
       border-radius: 0;
-      padding: 14px 8px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      padding: 0 2px;
       overflow: auto;
-    }
-
-
-    .channel-view-intro {
-      padding: 2px 12px 10px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-      margin-bottom: 6px;
-    }
-
-
-    .channel-view-title {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      color: #1f2937;
-      margin: 0;
-    }
-
-
-    .channel-view-meta {
-      font-size: 11px;
-      color: #64748b;
-      margin: 2px 0 0;
     }
 
 
@@ -121,14 +95,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-top: 12px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       padding: 0 12px;
-    }
-
-
-    .teams-channel-list .chat-section-header:first-of-type {
-      margin-top: 2px;
     }
 
 
@@ -185,16 +153,16 @@
 
 
     .section-spacer {
-      margin-top: 20px;
+      margin-top: 16px;
     }
 
 
 
     .team-channel-item {
-      min-height: 40px;
-      border-radius: 10px;
+      min-height: 36px;
+      border-radius: 8px;
       border: 1px solid transparent;
-      padding: 0 14px;
+      padding: 0 12px;
       font-size: 14px;
       color: #1a1c1c;
       gap: 10px;
@@ -236,7 +204,7 @@
 
 
     .team-channel-item:hover {
-      background: #edf1f6;
+      background: #e8eaee;
       color: #0f67b7;
       border-color: transparent;
     }
@@ -255,21 +223,6 @@
 
     :root[data-theme="dark"] .team-channel-item {
       color: #cbd5e1;
-    }
-
-
-    :root[data-theme="dark"] .channel-view-intro {
-      border-bottom-color: rgba(148, 163, 184, 0.28);
-    }
-
-
-    :root[data-theme="dark"] .channel-view-title {
-      color: #e2e8f0;
-    }
-
-
-    :root[data-theme="dark"] .channel-view-meta {
-      color: #94a3b8;
     }
 
 
@@ -360,88 +313,6 @@
       background: #1e293b;
       color: #93c5fd;
       border-color: rgba(147, 197, 253, 0.24);
-    }
-
-
-    .group-context-menu {
-      position: fixed;
-      z-index: 80;
-      min-width: 180px;
-      border-radius: 10px;
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      background: #ffffff;
-      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18);
-      padding: 6px;
-      display: grid;
-      gap: 4px;
-    }
-
-
-    .group-context-item {
-      width: 100%;
-      min-height: 34px;
-      border-radius: 8px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 0 10px;
-      color: #1f2937;
-      font-size: 13px;
-      font-weight: 600;
-      text-align: left;
-      background: transparent;
-    }
-
-
-    .group-context-item:hover {
-      background: #eef2f7;
-      color: #0f67b7;
-    }
-
-
-    .group-context-item:focus-visible {
-      outline: 2px solid rgba(15, 103, 183, 0.45);
-      outline-offset: 1px;
-    }
-
-
-    .group-context-item.danger {
-      color: #b42318;
-    }
-
-
-    .group-context-item.danger:hover {
-      background: #fef3f2;
-      color: #b42318;
-    }
-
-
-    :root[data-theme="dark"] .group-context-menu {
-      background: #0f172a;
-      border-color: rgba(148, 163, 184, 0.45);
-      box-shadow: 0 20px 34px rgba(2, 6, 23, 0.45);
-    }
-
-
-    :root[data-theme="dark"] .group-context-item {
-      color: #dbe5f3;
-    }
-
-
-    :root[data-theme="dark"] .group-context-item:hover {
-      background: #1e293b;
-      color: #93c5fd;
-    }
-
-
-    :root[data-theme="dark"] .group-context-item.danger {
-      color: #fda29b;
-    }
-
-
-    :root[data-theme="dark"] .group-context-item.danger:hover {
-      background: rgba(180, 35, 24, 0.2);
-      color: #fecaca;
     }
 
 

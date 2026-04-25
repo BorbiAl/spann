@@ -1110,12 +1110,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 	const pendingJoinRequests = Array.isArray(state?.pending_join_requests) ? state.pending_join_requests : [];
 	const hasOrganization = myOrganizations.length > 0;
 	const canContinueToWorkspace = hasOrganization;
-	const overviewItems = [
-		{ id: "orgs", label: "Your organizations", value: myOrganizations.length },
-		{ id: "invites", label: "Invitations", value: pendingInvitations.length },
-		{ id: "discoverable", label: "Public organizations", value: discoverableOrganizations.length },
-		{ id: "requests", label: "Join requests", value: pendingJoinRequests.length },
-	];
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1178,7 +1172,7 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 				<div className="auth-main org-onboarding-main">
 					<div className="auth-head">
 						<h2>Create an organization or join one</h2>
-						<p>Set up your team space before entering the workspace. All onboarding details stay visible below so you can manage access in one place.</p>
+						<p>Set up your team space before entering the workspace.</p>
 					</div>
 
 					<div className="org-mode-switch" role="tablist" aria-label="Organization setup mode">
@@ -1202,15 +1196,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 						</button>
 					</div>
 
-					<div className="org-overview-grid" aria-label="Organization onboarding summary">
-						{overviewItems.map((item) => (
-							<div key={item.id} className="org-overview-card">
-								<p className="org-overview-value">{item.value}</p>
-								<p className="org-overview-label">{item.label}</p>
-							</div>
-						))}
-					</div>
-
 					{errorText ? (
 						<div className="auth-banner error" role="alert" aria-live="assertive">
 							<span>{errorText}</span>
@@ -1232,7 +1217,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 
 					{!loading && mode === "create" ? (
 						<form className="auth-form org-panel" onSubmit={handleCreateOrganization}>
-							<p className="org-panel-note">Create a private organization and optionally invite teammates now.</p>
 							<label className="auth-field">
 								<span>Organization name</span>
 								<input
@@ -1253,7 +1237,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 									placeholder="teammate1@company.com, teammate2@company.com"
 									rows={4}
 								/>
-								<span className="org-input-help">Invalid emails are ignored so remaining invites can still be sent.</span>
 							</label>
 							<button type="submit" className="accent-btn auth-submit" disabled={submitting}>
 								{submitting ? "Creating..." : "Create organization"}
@@ -1263,7 +1246,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 
 					{!loading && mode === "join" ? (
 						<div className="auth-form org-panel">
-							<p className="org-panel-note">Request access to a public organization. Owners can approve or reject your request.</p>
 							<label className="auth-field">
 								<span>Optional message to owner</span>
 								<textarea
@@ -1278,10 +1260,9 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 								{discoverableOrganizations.length === 0 ? <p className="org-empty">No public organizations available right now.</p> : null}
 								{discoverableOrganizations.map((organization) => (
 									<div key={organization.id} className="org-list-item">
-										<div className="org-item-main">
+										<div>
 											<strong className="org-name">{organization.name}</strong>
-											<div className="status-subtext org-meta">{organization.slug || "public"}</div>
-											{organization?.description ? <p className="org-description">{organization.description}</p> : null}
+											<div className="status-subtext org-meta">{organization.slug}</div>
 										</div>
 										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
 											Request to join

@@ -77,35 +77,6 @@ def _build_initials(name: str) -> str:
     return f"{parts[0][0]}{parts[-1][0]}".upper()
 
 
-def _estimate_sentiment_score(text: str, text_translated: str | None = None) -> float:
-    source = str(text_translated if isinstance(text_translated, str) and text_translated.strip() else text)
-    normalized = source.strip().lower()
-    if not normalized:
-        return 50.0
-
-    positive_terms = {
-        "thanks", "thank", "great", "awesome", "good", "nice", "appreciate", "helpful", "perfect", "excellent", "love", "glad"
-    }
-    negative_terms = {
-        "urgent", "asap", "problem", "issue", "broken", "bad", "hate", "angry", "frustrated", "fail", "error", "blocked"
-    }
-
-    score = 50.0
-    for token in positive_terms:
-        if token in normalized:
-            score += 7.5
-    for token in negative_terms:
-        if token in normalized:
-            score -= 7.5
-
-    if "!" in normalized:
-        score += 2.0
-    if "?" in normalized:
-        score -= 1.0
-
-    return max(0.0, min(100.0, round(score, 2)))
-
-
 def _normalize_user_blob(row: dict[str, Any]) -> dict[str, Any]:
     user_obj = row.get("users") or row.get("user") or {}
     if isinstance(user_obj, list):
@@ -192,8 +163,6 @@ async def create_message(
     mesh_origin: bool,
     source_locale: str | None,
 ) -> MessageRow:
-    computed_sentiment = _estimate_sentiment_score(text=text, text_translated=text_translated)
-
     if _use_local_channel(channel_id):
         created = local_store.create_message(
             channel_id=channel_id,
@@ -201,7 +170,6 @@ async def create_message(
             workspace_id=workspace_id,
             text=text.strip(),
             text_translated=text_translated,
-            sentiment_score=computed_sentiment,
             mesh_origin=bool(mesh_origin),
             source_locale=source_locale,
         )
@@ -220,7 +188,7 @@ async def create_message(
         "text": text.strip(),
         "text_translated": text_translated.strip() if isinstance(text_translated, str) and text_translated.strip() else None,
         "source_locale": source_locale,
-        "sentiment_score": computed_sentiment,
+        "sentiment_score": None,
         "mesh_origin": bool(mesh_origin),
         "deleted_at": None,
         "created_at": now.isoformat(),
