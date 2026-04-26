@@ -26,18 +26,12 @@ import {
 	fetchOrganizationMembers,
 	fetchPublicRuntimeConfig,
 	getAuthState,
-	incrementReaction,
 	inviteOrganizationMember,
 	loadFromStorage,
 	normalizeApiError,
 	removeOrganizationMember,
 	pushAppNotice
 } from "../data/constants";
-import {
-	DEMO_CHANNELS,
-	DEMO_CHANNEL_UNREAD,
-	DEMO_MESSAGES_BY_CHANNEL,
-} from "../lib/demoMode";
 import { useUserSettingsStore } from "../store/userSettings";
 
 function withHash(channelName) {
@@ -671,7 +665,7 @@ function GroupCreateModal({
 	);
 }
 
-export default function Layout({ authState, onLogout, onSessionExpired, isDemo = false }) {
+export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const fallbackChannels = useMemo(() => toFallbackChannels(), []);
 	const [activeView, setActiveView] = useState(() => loadFromStorage("spann-active-view", "chat"));
 	const [channels, setChannels] = useState(fallbackChannels);
@@ -1105,16 +1099,6 @@ function initialsFromLabel(label) {
 	}, []);
 
 	useEffect(() => {
-		if (isDemo) {
-			setChannels(DEMO_CHANNELS);
-			setActiveChannelId(DEMO_CHANNELS[0].id);
-			setMessagesByChannel(DEMO_MESSAGES_BY_CHANNEL);
-			setChannelUnread(DEMO_CHANNEL_UNREAD);
-			setJoinedChannelIds(DEMO_CHANNELS.map((c) => c.id));
-			setBackendConnected(false);
-			return;
-		}
-
 		if (!workspaceId) {
 			setBackendConnected(false);
 			if (onSessionExpired) {
@@ -1184,14 +1168,14 @@ function initialsFromLabel(label) {
 	}, [workspaceId]);
 
 	useEffect(() => {
-		if (isDemo || activeView !== "chat" || !activeChannelId || !backendConnected) {
+		if (activeView !== "chat" || !activeChannelId || !backendConnected) {
 			return;
 		}
 		loadChannelMessages(activeChannelId);
-	}, [isDemo, activeView, activeChannelId, backendConnected]);
+	}, [activeView, activeChannelId, backendConnected]);
 
 	useEffect(() => {
-		if (isDemo || !backendConnected || !workspaceId || !activeChannelId) {
+		if (!backendConnected || !workspaceId || !activeChannelId) {
 			return;
 		}
 
@@ -1201,10 +1185,10 @@ function initialsFromLabel(label) {
 		}, 4000);
 
 		return () => clearInterval(pollHandle);
-	}, [isDemo, backendConnected, workspaceId, activeChannelId]);
+	}, [backendConnected, workspaceId, activeChannelId]);
 
 	useEffect(() => {
-		if (isDemo || !prefsLoadedRef.current || !backendConnected) {
+		if (!prefsLoadedRef.current || !backendConnected) {
 			return;
 		}
 
@@ -1511,26 +1495,6 @@ function initialsFromLabel(label) {
 			return;
 		}
 
-		if (isDemo) {
-			const now = new Date();
-			setMessagesByChannel((current) => ({
-				...current,
-				[channelId]: [
-					...(current[channelId] || []),
-					{
-						id: `demo-you-${Date.now()}`,
-						user: "You",
-						initials: "ME",
-						color: "#0f67b7",
-						time: now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-						text: trimmedText,
-						reactions: [],
-					},
-				],
-			}));
-			return;
-		}
-
 		let sourceLocale = translated ? "en-US" : null;
 		let translatedEnglishText = "";
 		const fromVoice = String(sendOptions?.origin || "").toLowerCase() === "voice";
@@ -1658,18 +1622,6 @@ function initialsFromLabel(label) {
 
 	async function handleReactMessage(channelId, messageId, emoji) {
 		if (!channelId || !messageId || !emoji) {
-			return;
-		}
-
-		if (isDemo) {
-			setMessagesByChannel((current) => ({
-				...current,
-				[channelId]: (current[channelId] || []).map((msg) =>
-					String(msg.id) === String(messageId)
-						? { ...msg, reactions: incrementReaction(msg.reactions || [], emoji) }
-						: msg
-				),
-			}));
 			return;
 		}
 
@@ -1842,50 +1794,7 @@ function initialsFromLabel(label) {
 
 	return (
 		<div className="app-shell chat-workspace bg-background font-body text-on-surface flex overflow-hidden h-screen w-full">
-			{isDemo && (
-				<div
-					style={{
-						position: "fixed",
-						top: 0,
-						left: 0,
-						right: 0,
-						zIndex: 9999,
-						background: "linear-gradient(90deg,#0A84FF,#30D158)",
-						color: "#fff",
-						fontSize: "12px",
-						fontWeight: 600,
-						padding: "6px 16px",
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "space-between",
-						gap: "12px",
-					}}
-				>
-					<span>
-						Demo Mode — No login required. Hover any message to try{" "}
-						<strong>Simplify</strong>, <strong>Explain</strong>, and{" "}
-						<strong>Listen</strong> (TTS). Click <strong>Summarize</strong> in the toolbar.
-					</span>
-					<button
-						type="button"
-						onClick={onLogout}
-						style={{
-							background: "rgba(255,255,255,0.2)",
-							border: "1px solid rgba(255,255,255,0.4)",
-							color: "#fff",
-							borderRadius: "6px",
-							padding: "2px 10px",
-							fontSize: "11px",
-							fontWeight: 600,
-							cursor: "pointer",
-							whiteSpace: "nowrap",
-						}}
-					>
-						Exit Demo
-					</button>
-				</div>
-			)}
-			<div className="workspace-stack h-full w-full flex" style={isDemo ? { paddingTop: "34px" } : undefined}>
+			<div className="workspace-stack h-full w-full flex">
 				<div className="chat-layout flex h-screen w-full relative">
 					<aside className="h-screen w-64 left-0 top-0 fixed bg-slate-100/60 dark:bg-slate-900/60 backdrop-blur-2xl border-r border-slate-200/30 dark:border-slate-800/30 flex flex-col p-4 gap-2 font-['Segoe_UI_Variable',sans-serif] text-[13px] leading-relaxed z-50">
 						<div className="flex items-center gap-3 px-2 mb-8 mt-2">
