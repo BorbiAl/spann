@@ -11,6 +11,7 @@ import {
 	loadAccessibilityPreferencesGlobal,
 } from "./accessibility";
 import Icon from "../components/Icon";
+import { setDemoMode, isDemoMode } from "../lib/demoMode";
 import {
 	APP_NOTICE_EVENT_NAME,
 	AUTH_STATE_UPDATED_EVENT_NAME,
@@ -138,7 +139,17 @@ function evaluatePasswordStrength(rawPassword) {
 }
 
 
-function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
+const DEMO_AUTH_STATE = {
+	workspaceId: "demo",
+	user: {
+		name: "Demo User",
+		display_name: "Demo User",
+		email: "demo@spann.app",
+		role: "member",
+	},
+};
+
+function LandingScreen({ onContinueWeb, onContinueWorkspace, onStartDemo, hasSession }) {
 	return (
 		<div className="entry-shell">
 			<section className="entry-surface glass">
@@ -161,6 +172,10 @@ function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
 						<Icon name="attach" size={18} />
 						<span>Download App</span>
 					</a>
+					<button className="entry-cta demo" onClick={onStartDemo} type="button" style={{ background: "linear-gradient(135deg,#30D158,#0A84FF)", color: "#fff", border: "none" }}>
+						<Icon name="play" size={18} />
+						<span>Try Demo</span>
+					</button>
 				</div>
 
 				{hasSession ? (
@@ -802,7 +817,9 @@ function AppFlow() {
 	}, []);
 
 	useEffect(() => {
-		localStorage.setItem(ENTRY_STAGE_KEY, entryStage);
+		if (entryStage !== "demo") {
+			localStorage.setItem(ENTRY_STAGE_KEY, entryStage);
+		}
 	}, [entryStage]);
 
 	useEffect(() => {
@@ -836,18 +853,37 @@ function AppFlow() {
 
 	const hasSession = Boolean(authState?.accessToken);
 
+	function handleStartDemo() {
+		setDemoMode(true);
+		setAuthState(DEMO_AUTH_STATE);
+		setEntryStage("demo");
+	}
+
 	async function handleLogout() {
-		await logoutSession();
+		if (!isDemoMode()) {
+			await logoutSession();
+		}
+		setDemoMode(false);
 		setAuthState(null);
 		setEntryStage("landing");
 	}
 
 	let content;
-	if (entryStage === "landing") {
+	if (entryStage === "demo") {
+		content = (
+			<Layout
+				authState={DEMO_AUTH_STATE}
+				isDemo={true}
+				onLogout={handleLogout}
+				onSessionExpired={() => { setDemoMode(false); setEntryStage("landing"); }}
+			/>
+		);
+	} else if (entryStage === "landing") {
 		content = (
 			<LandingScreen
 				onContinueWeb={() => setEntryStage("auth")}
 				onContinueWorkspace={() => setEntryStage(hasSession ? "organization" : "auth")}
+				onStartDemo={handleStartDemo}
 				hasSession={hasSession}
 			/>
 		);
@@ -1226,6 +1262,7 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 					) : null}
 
 					{loading ? <p className="org-loading">Loading organization options...</p> : null}
+					<div className="org-primary-column">
 
 					{!loading && mode === "create" ? (
 						<form className="auth-form org-panel" onSubmit={handleCreateOrganization}>
@@ -1256,32 +1293,7 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 						</form>
 					) : null}
 
-					{!loading && mode === "join" ? (
-						<div className="auth-form org-panel">
-							<label className="auth-field">
-								<span>Optional message to owner</span>
-								<textarea
-									className="auth-input"
-									value={joinMessage}
-									onChange={(event) => setJoinMessage(event.target.value)}
-									placeholder="Hi, I work with your team and need access to this workspace."
-									rows={3}
-								/>
-							</label>
-							<div className="org-list">
-								{discoverableOrganizations.length === 0 ? <p className="org-empty">No public organizations available right now.</p> : null}
-								{discoverableOrganizations.map((organization) => (
-									<div key={organization.id} className="org-list-item">
-										<div>
-											<strong className="org-name">{organization.name}</strong>
-											<div className="status-subtext org-meta">{organization.slug}</div>
-										</div>
-										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
-											Request to join
-										</button>
-									</div>
-								</form>
-							) : null}
+
 
 							{!loading && mode === "join" ? (
 								<div className="auth-form org-primary-panel org-join-window">
@@ -1420,7 +1432,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 							</div>
 						</aside>
 					</div>
-				</div>
 			</section>
 		</div>
 	);

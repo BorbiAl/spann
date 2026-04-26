@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import { isDemoMode, DEMO_SUMMARIZE_RESULT } from '../lib/demoMode'
 
 export interface SummarizeResult {
   bullets: string[]
@@ -10,6 +11,10 @@ export interface SummarizeResult {
 
 export const summarizeApi = {
   async summarize(channelId: string): Promise<SummarizeResult> {
+    if (isDemoMode()) {
+      return { ...DEMO_SUMMARIZE_RESULT }
+    }
+
     const { data } = await apiClient.post<{ data: SummarizeResult }>(
       `/channels/${encodeURIComponent(channelId)}/summarize`,
     )
