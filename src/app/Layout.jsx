@@ -24,6 +24,7 @@ import {
 	removeOrganizationMember,
 	pushAppNotice
 } from "../data/constants";
+import { useUserSettingsStore } from "../store/userSettings";
 
 function withHash(channelName) {
 	const value = String(channelName || "").trim();
@@ -601,6 +602,7 @@ function MainPanel({
 			return (
 				<ChatView
 					activeChannel={activeChannel}
+					activeChannelId={activeChannelId}
 					channelMood={channelMood}
 					messages={messages}
 					accessibilityPrefs={accessibilityPrefs}
@@ -857,6 +859,7 @@ export default function Layout({ authState, onLogout, onSessionExpired }) {
 	const [groupCreateBusy, setGroupCreateBusy] = useState(false);
 	const prefsLoadedRef = useRef(false);
 	const jumpInputRef = useRef(null);
+	const { initialize: initUserSettings } = useUserSettingsStore();
 
 	// Refs so the stable keydown effect can read current values without stale closures
 	const activeViewRef = useRef(activeView);
@@ -1249,10 +1252,7 @@ function initialsFromLabel(label) {
 
 	async function loadPreferences() {
 		try {
-			const payload = await apiRequest("/users/me/preferences", {
-				method: "PATCH",
-				body: JSON.stringify({})
-			});
+			const payload = await apiRequest("/users/me/preferences");
 			const data = payload?.data || {};
 			const loaded = data.accessibility_settings && typeof data.accessibility_settings === "object" ? data.accessibility_settings : {};
 			setAccessibilityPrefs((current) => ({
@@ -1346,7 +1346,8 @@ function initialsFromLabel(label) {
 					refreshCarbonLeaderboard(),
 					refreshWorkspaceMembers(),
 					refreshMeshNodes(),
-					loadPreferences()
+					loadPreferences(),
+					initUserSettings(),
 				]);
 			} catch (error) {
 				if (cancelled) {

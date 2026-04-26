@@ -215,7 +215,9 @@ class LocalStore:
         if coaching_enabled is not None:
             user.coaching_enabled = coaching_enabled
         if accessibility_settings is not None:
-            user.accessibility_settings = accessibility_settings
+            # Merge into existing settings — never replace wholesale
+            current = user.accessibility_settings or {}
+            user.accessibility_settings = {**current, **accessibility_settings}
         return {
             "locale": user.locale,
             "coaching_enabled": user.coaching_enabled,

@@ -1618,7 +1618,7 @@
     .workspace-topnav-btn,
     .rail-item,
     .send-btn {
-      transition: transform var(--motion), background-color var(--motion), color var(--motion), border-color var(--motion), box-shadow var(--motion), filter var(--motion);
+      transition: transform var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast), filter var(--motion-fast);
     }
 
 

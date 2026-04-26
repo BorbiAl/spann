@@ -15,9 +15,9 @@ from app.metrics import groq_api_calls_total, groq_api_errors_total, groq_api_la
 logger = logging.getLogger(__name__)
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-MAX_RETRIES = 3
-BASE_BACKOFF_SECONDS = 1
-REQUEST_TIMEOUT_SECONDS = 10
+MAX_RETRIES = 2
+BASE_BACKOFF_SECONDS = 0.25
+REQUEST_TIMEOUT_SECONDS = 8
 CIRCUIT_BREAKER_THRESHOLD = 5
 CIRCUIT_BREAKER_OPEN_SECONDS = 60
 

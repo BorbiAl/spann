@@ -1929,7 +1929,11 @@ class DatabaseClient:
         if coaching_enabled is not None:
             payload["coaching_enabled"] = bool(coaching_enabled)
         if accessibility_settings is not None:
-            payload["accessibility_settings"] = accessibility_settings
+            # Merge into the existing JSONB column — never replace wholesale so
+            # unrelated keys (dyslexia, fontSize, …) are preserved.
+            current_prefs = await self.get_user_preferences(user_id)
+            current_a11y: dict[str, Any] = current_prefs.get("accessibility_settings") or {}
+            payload["accessibility_settings"] = {**current_a11y, **accessibility_settings}
 
         await self._execute(
             "update_user_preferences",

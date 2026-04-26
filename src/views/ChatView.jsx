@@ -3,9 +3,13 @@ import Icon from "../components/Icon";
 import Message from "../components/Message";
 import { apiRequestFormData, getAuthState } from "../data/constants";
 import { CHANNELS, INCOMING_AUTHORS, INCOMING_MESSAGE_BANK, incrementReaction } from "../data/constants";
+import { useMutation } from "@tanstack/react-query";
+import { summarizeApi } from "../api/summarize";
+import { useUserSettingsStore } from "../store/userSettings";
 
 export default function ChatView({
 	activeChannel,
+	activeChannelId,
 	channelMood,
 	messages,
 	accessibilityPrefs,
@@ -67,7 +71,16 @@ export default function ChatView({
 	const lastMessageCountRef = useRef(0);
 	const lastSpokenIdRef = useRef("");
 	const channelKey = String(activeChannel || "#general");
-	const ttsEnabled = Boolean(accessibilityPrefs?.tts);
+	const { settings: userSettings } = useUserSettingsStore();
+	// tts_auto_play from user settings overrides/complements the accessibility pref
+	const ttsEnabled = Boolean(accessibilityPrefs?.tts) || Boolean(userSettings.tts_auto_play);
+	// Thread summarization
+	const [summaryOpen, setSummaryOpen] = useState(false);
+	const [summary, setSummary] = useState(null);
+	const summarizeMutation = useMutation({
+		mutationFn: () => summarizeApi.summarize(activeChannelId),
+		onSuccess: (data) => { setSummary(data); setSummaryOpen(true); },
+	});
 	const simplifiedMode = Boolean(accessibilityPrefs?.simplified);
 	const hasSpeechRecognition =
 		typeof window !== "undefined" &&
@@ -118,6 +131,8 @@ export default function ChatView({
 		setActiveTypist("");
 		setIsUserTyping(false);
 		setInputValue("");
+		setSummaryOpen(false);
+		setSummary(null);
 	}, [activeChannel]);
 
 	useEffect(() => {
@@ -906,6 +921,23 @@ export default function ChatView({
 					</button>
 					<button
 						type="button"
+						disabled={!activeChannelId || summarizeMutation.isPending}
+						onClick={() => {
+							if (summaryOpen) { setSummaryOpen(false); return; }
+							summarizeMutation.mutate();
+						}}
+						className={`text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 ${summaryOpen ? "border-primary/30 text-primary bg-primary/10" : "border-outline-variant/50 text-on-surface-variant bg-surface-container-low hover:border-primary/30 hover:text-primary"} disabled:opacity-40`}
+						aria-label="Summarize thread"
+					>
+						{summarizeMutation.isPending ? (
+							<span className="flex gap-0.5 items-center"><span className="w-1 h-1 rounded-full bg-current animate-pulse" /><span className="w-1 h-1 rounded-full bg-current animate-pulse delay-75" /><span className="w-1 h-1 rounded-full bg-current animate-pulse delay-150" /></span>
+						) : (
+							<span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+						)}
+						<span>{summaryOpen ? "Hide summary" : "Summarize"}</span>
+					</button>
+					<button
+						type="button"
 						onClick={onStartCall}
 						className="text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 border-primary/20 text-on-primary bg-primary hover:brightness-95"
 						aria-label="Start call"
@@ -979,6 +1011,49 @@ export default function ChatView({
 
 			{/* Message Area */}
 			<div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto px-10 pt-8 pb-4 flex flex-col gap-6 scroll-smooth custom-scrollbar">
+				{/* Thread Summary Panel */}
+				{summaryOpen && summary && (
+					<div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 mb-2 flex flex-col gap-3">
+						<div className="flex items-center justify-between">
+							<span className="text-[13px] font-semibold text-primary flex items-center gap-1.5">
+								<span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+								Thread summary
+								{summary.cached ? <span className="text-[10px] font-normal opacity-60 ml-1">(cached)</span> : null}
+							</span>
+							<button type="button" onClick={() => setSummaryOpen(false)} className="text-on-surface-variant opacity-50 hover:opacity-100 transition-opacity" aria-label="Dismiss summary">
+								<span className="material-symbols-outlined text-[18px]">close</span>
+							</button>
+						</div>
+						{summary.bullets.length > 0 && (
+							<ul className="flex flex-col gap-1">
+								{summary.bullets.map((b, i) => (
+									<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-primary mt-0.5">•</span><span>{b}</span></li>
+								))}
+							</ul>
+						)}
+						{summary.decisions.length > 0 && (
+							<div>
+								<p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Decisions</p>
+								<ul className="flex flex-col gap-1">
+									{summary.decisions.map((d, i) => (
+										<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-amber-500 mt-0.5">◆</span><span>{d}</span></li>
+									))}
+								</ul>
+							</div>
+						)}
+						{summary.action_items.length > 0 && (
+							<div>
+								<p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Action items</p>
+								<ul className="flex flex-col gap-1">
+									{summary.action_items.map((a, i) => (
+										<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-emerald-500 mt-0.5">✓</span><span>{a}</span></li>
+									))}
+								</ul>
+							</div>
+						)}
+						<p className="text-[11px] text-on-surface-variant opacity-60">Based on last {summary.message_count} messages</p>
+					</div>
+				)}
 				{/* Date Divider */}
 				<div className="relative flex justify-center items-center mt-2 mb-4">
 					<div className="absolute inset-0 flex items-center">

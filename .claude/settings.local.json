@@ -3,7 +3,8 @@
     "allow": [
       "Bash(docker --version)",
       "Bash(docker compose:*)",
-      "Bash(python -m venv .venv)"
+      "Bash(python -m venv .venv)",
+      "Bash(python:*)"
     ]
   }
 }

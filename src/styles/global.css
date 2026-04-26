@@ -3,8 +3,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Motion tokens ─────────────────────────────────────────────────────────
+   --motion      : page-level transitions (view changes, sidebar collapse)
+   --motion-fast : micro-interactions (hover, press, tooltip)                */
+
+@keyframes explainIn {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes toolbarSlideUp {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes messageAppear {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 :root {
-      --motion: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+      --motion: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+      --motion-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
       --display-size: clamp(26px, 4.4vw, 42px);
       --title-size: clamp(19px, 2.5vw, 25px);
       --body-size: clamp(14px, 1.1vw, 15px);
@@ -85,8 +110,8 @@
 
 
     *::-webkit-scrollbar {
-      width: 10px;
-      height: 10px;
+      width: 5px;
+      height: 5px;
     }
 
 
