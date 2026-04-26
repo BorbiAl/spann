@@ -3,11 +3,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "../components/Icon";
 import Message from "../components/Message";
 import { apiRequestFormData, getAuthState } from "../data/constants";
-import { INCOMING_AUTHORS, INCOMING_MESSAGE_BANK, incrementReaction } from "../data/constants";
+import { CHANNELS, INCOMING_AUTHORS, INCOMING_MESSAGE_BANK, incrementReaction } from "../data/constants";
+import { useMutation } from "@tanstack/react-query";
+import { summarizeApi } from "../api/summarize";
+import { useUserSettingsStore } from "../store/userSettings";
 
 export default function ChatView({
 	activeChannel,
-	activeChannelId,
 	channelMood,
 	messages,
 	isChannelStarred,
@@ -177,8 +179,8 @@ export default function ChatView({
 		setActiveTypist("");
 		setIsUserTyping(false);
 		setInputValue("");
-		setReplyContext(null);
-		setEditContext(null);
+		setSummaryOpen(false);
+		setSummary(null);
 	}, [activeChannel]);
 
 	useEffect(() => {
@@ -1112,7 +1114,50 @@ export default function ChatView({
 			</header>
 
 			{/* Message Area */}
-			<div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto px-8 pt-6 pb-4 flex flex-col gap-6 scroll-smooth custom-scrollbar">
+			<div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto px-10 pt-8 pb-4 flex flex-col gap-6 scroll-smooth custom-scrollbar">
+				{/* Thread Summary Panel */}
+				{summaryOpen && summary && (
+					<div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 mb-2 flex flex-col gap-3">
+						<div className="flex items-center justify-between">
+							<span className="text-[13px] font-semibold text-primary flex items-center gap-1.5">
+								<span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+								Thread summary
+								{summary.cached ? <span className="text-[10px] font-normal opacity-60 ml-1">(cached)</span> : null}
+							</span>
+							<button type="button" onClick={() => setSummaryOpen(false)} className="text-on-surface-variant opacity-50 hover:opacity-100 transition-opacity" aria-label="Dismiss summary">
+								<span className="material-symbols-outlined text-[18px]">close</span>
+							</button>
+						</div>
+						{summary.bullets.length > 0 && (
+							<ul className="flex flex-col gap-1">
+								{summary.bullets.map((b, i) => (
+									<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-primary mt-0.5">•</span><span>{b}</span></li>
+								))}
+							</ul>
+						)}
+						{summary.decisions.length > 0 && (
+							<div>
+								<p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Decisions</p>
+								<ul className="flex flex-col gap-1">
+									{summary.decisions.map((d, i) => (
+										<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-amber-500 mt-0.5">◆</span><span>{d}</span></li>
+									))}
+								</ul>
+							</div>
+						)}
+						{summary.action_items.length > 0 && (
+							<div>
+								<p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Action items</p>
+								<ul className="flex flex-col gap-1">
+									{summary.action_items.map((a, i) => (
+										<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-emerald-500 mt-0.5">✓</span><span>{a}</span></li>
+									))}
+								</ul>
+							</div>
+						)}
+						<p className="text-[11px] text-on-surface-variant opacity-60">Based on last {summary.message_count} messages</p>
+					</div>
+				)}
 				{/* Date Divider */}
 				<div className="relative flex justify-center items-center mt-2 mb-4">
 					<div className="absolute inset-0 flex items-center">

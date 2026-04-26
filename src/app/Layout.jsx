@@ -502,7 +502,6 @@ function MainPanel({
 			return (
 				<ChatView
 					activeChannel={activeChannel}
-					activeChannelId={activeChannelId}
 					channelMood={channelMood}
 					messages={messages}
 					isChannelStarred={isChannelStarred}
