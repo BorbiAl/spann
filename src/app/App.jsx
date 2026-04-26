@@ -1119,6 +1119,12 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 	const pendingJoinRequests = Array.isArray(state?.pending_join_requests) ? state.pending_join_requests : [];
 	const hasOrganization = myOrganizations.length > 0;
 	const canContinueToWorkspace = hasOrganization;
+	const overviewItems = [
+		{ id: "orgs", label: "Your organizations", value: myOrganizations.length },
+		{ id: "invites", label: "Invitations", value: pendingInvitations.length },
+		{ id: "discoverable", label: "Public organizations", value: discoverableOrganizations.length },
+		{ id: "requests", label: "Join requests", value: pendingJoinRequests.length },
+	];
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1184,7 +1190,7 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 				<div className="auth-main org-onboarding-main">
 					<div className="auth-head">
 						<h2>Create an organization or join one</h2>
-						<p>Set up your team space in a minimal two-step flow, then continue to workspace.</p>
+						<p>Set up your team space before entering the workspace.</p>
 					</div>
 
 					<div className="org-mode-switch" role="tablist" aria-label="Organization setup mode">
@@ -1208,6 +1214,15 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 						</button>
 					</div>
 
+					<div className="org-overview-grid" aria-label="Organization onboarding summary">
+						{overviewItems.map((item) => (
+							<div key={item.id} className="org-overview-card">
+								<p className="org-overview-value">{item.value}</p>
+								<p className="org-overview-label">{item.label}</p>
+							</div>
+						))}
+					</div>
+
 					{errorText ? (
 						<div className="auth-banner error" role="alert" aria-live="assertive">
 							<span>{errorText}</span>
@@ -1227,86 +1242,63 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 
 					{loading ? <p className="org-loading">Loading organization options...</p> : null}
 
-					<div className="org-content-grid">
-						<div className="org-primary-column">
-							{!loading && mode === "create" ? (
-								<form className="auth-form org-primary-panel org-create-windows" onSubmit={handleCreateOrganization}>
-									<section className="org-window" aria-label="Create organization window">
-										<h3 className="org-window-title">
-											<span className="org-window-step" aria-hidden="true">Step 1</span>
-											Organization details
-										</h3>
-										<p className="org-panel-note">Name your space. You can update branding later in settings.</p>
-										<label className="auth-field">
-											<span>Organization name</span>
-											<input
-												type="text"
-												className="auth-input"
-												value={createName}
-												onChange={(event) => setCreateName(event.target.value)}
-												placeholder="Acme Engineering"
-												required
-											/>
-										</label>
-									</section>
+					{!loading && mode === "create" ? (
+						<form className="auth-form org-panel" onSubmit={handleCreateOrganization}>
+							<label className="auth-field">
+								<span>Organization name</span>
+								<input
+									type="text"
+									className="auth-input"
+									value={createName}
+									onChange={(event) => setCreateName(event.target.value)}
+									placeholder="Acme Engineering"
+									required
+								/>
+							</label>
+							<label className="auth-field">
+								<span>Invite emails (comma or newline separated)</span>
+								<textarea
+									className="auth-input"
+									value={inviteEmails}
+									onChange={(event) => setInviteEmails(event.target.value)}
+									placeholder="teammate1@company.com, teammate2@company.com"
+									rows={4}
+								/>
+							</label>
+							<button type="submit" className="accent-btn auth-submit" disabled={submitting}>
+								{submitting ? "Creating..." : "Create organization"}
+							</button>
+						</form>
+					) : null}
 
-									<section className="org-window" aria-label="Organization invitations window">
-										<h3 className="org-window-title">
-											<span className="org-window-step" aria-hidden="true">Step 2</span>
-											Invite members
-										</h3>
-										<p className="org-panel-note">Add teammates now, or leave this blank and invite from settings any time.</p>
-										<label className="auth-field">
-											<span>Invite emails (comma or newline separated)</span>
-											<textarea
-												className="auth-input"
-												value={inviteEmails}
-												onChange={(event) => setInviteEmails(event.target.value)}
-												placeholder="teammate1@company.com, teammate2@company.com"
-												rows={5}
-											/>
-											<span className="org-input-help">Invalid emails are ignored so valid invites can still be sent.</span>
-										</label>
-									</section>
-
-									<div className="org-create-actions">
-										<button type="submit" className="accent-btn auth-submit org-create-submit" disabled={submitting}>
-											{submitting ? "Creating..." : "Create organization"}
+					{!loading && mode === "join" ? (
+						<div className="auth-form org-panel">
+							<label className="auth-field">
+								<span>Optional message to owner</span>
+								<textarea
+									className="auth-input"
+									value={joinMessage}
+									onChange={(event) => setJoinMessage(event.target.value)}
+									placeholder="Hi, I work with your team and need access to this workspace."
+									rows={3}
+								/>
+							</label>
+							<div className="org-list">
+								{discoverableOrganizations.length === 0 ? <p className="org-empty">No public organizations available right now.</p> : null}
+								{discoverableOrganizations.map((organization) => (
+									<div key={organization.id} className="org-list-item">
+										<div>
+											<strong className="org-name">{organization.name}</strong>
+											<div className="status-subtext org-meta">{organization.slug}</div>
+										</div>
+										<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
+											Request to join
 										</button>
 									</div>
-								</form>
-							) : null}
-
-							{!loading && mode === "join" ? (
-								<div className="auth-form org-primary-panel org-join-window">
-									<p className="org-panel-note">Request access to a public organization. Owners can approve or reject your request.</p>
-									<label className="auth-field">
-										<span>Optional message to owner</span>
-										<textarea
-											className="auth-input"
-											value={joinMessage}
-											onChange={(event) => setJoinMessage(event.target.value)}
-											placeholder="Hi, I work with your team and need access to this workspace."
-											rows={3}
-										/>
-									</label>
-									<div className="org-list">
-										{discoverableOrganizations.length === 0 ? <p className="org-empty">No public organizations available right now.</p> : null}
-										{discoverableOrganizations.map((organization) => (
-											<div key={organization.id} className="org-list-item">
-												<div className="org-item-main">
-													<strong className="org-name">{organization.name}</strong>
-													<div className="status-subtext org-meta">{organization.slug || "public"}</div>
-													{organization?.description ? <p className="org-description">{organization.description}</p> : null}
-												</div>
-												<button type="button" className="auth-text-link inline" disabled={submitting} onClick={() => handleJoinRequest(organization.id)}>
-													Request to join
-												</button>
-											</div>
-										))}
-									</div>
-								</div>
-							) : null}
+								))}
+							</div>
+						</div>
+					) : null}
 
 							{!loading && myOrganizations.length === 0 && pendingInvitations.length === 0 && discoverableOrganizations.length === 0 ? (
 								<div className="org-section org-empty-state">

@@ -191,7 +191,7 @@
 
 
     .team-channel-item {
-      min-height: 34px;
+      min-height: 36px;
       border-radius: 8px;
       border: 1px solid transparent;
       padding: 0 14px;
@@ -236,7 +236,7 @@
 
 
     .team-channel-item:hover {
-      background: #eaecf0;
+      background: #e8eaee;
       color: #0f67b7;
       border-color: transparent;
     }

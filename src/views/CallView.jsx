@@ -551,20 +551,6 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 								<span className="text-[13px] font-medium text-on-surface-variant">
 									{formatDuration(callDuration)} • Connected
 								</span>
-								<div className="flex items-center gap-2 rounded-full bg-surface-container-high px-2 py-1" aria-label="Microphone level">
-									<span className="text-[11px] font-semibold text-on-surface-variant">{micActive ? `Mic ${micLevel}%` : "Mic muted"}</span>
-									<div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-container-highest">
-										<div
-											className="h-full rounded-full bg-primary transition-[width] duration-100"
-											style={{ width: `${micActive ? micLevel : 0}%` }}
-										/>
-									</div>
-								</div>
-								<div className="discord-voice-bars" aria-hidden="true">
-									<span />
-									<span />
-									<span />
-								</div>
 							</div>
 						</div>
 					</div>

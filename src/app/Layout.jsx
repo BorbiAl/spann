@@ -385,8 +385,6 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 				) : (
 					displayedMembers.map((member) => {
 						const label = String(member?.display_name || member?.email || "Member");
-						const roleLabel = formatWorkspaceRole(member);
-						const avatarUrl = String(member?.avatar_url || member?.avatar || "").trim();
 						const initials = label
 							.split(/\s+/)
 							.filter(Boolean)
@@ -397,18 +395,10 @@ function Sidebar({ activeView, activeChannelId, channels, onChannelChange, chann
 						const isOnline = Boolean(member?.is_online);
 						return (
 							<button key={String(member?.user_id || label)} className="member-item" type="button">
-								{avatarUrl ? (
-									<img
-										className="member-avatar"
-										src={avatarUrl}
-										alt={`${label} avatar`}
-									/>
-								) : (
-									<span className="member-avatar" style={{ background: isOnline ? "#0f67b7" : "#667085" }}>
-										{initials}
-									</span>
-								)}
-								<span className="member-meta">{`${label} · ${roleLabel}`}</span>
+								<span className="member-avatar" style={{ background: isOnline ? "#0f67b7" : "#667085" }}>
+									{initials}
+								</span>
+								<span className="member-meta">{label}</span>
 							</button>
 						);
 					})
@@ -502,6 +492,7 @@ function MainPanel({
 			return (
 				<ChatView
 					activeChannel={activeChannel}
+					activeChannelId={activeChannelId}
 					channelMood={channelMood}
 					messages={messages}
 					isChannelStarred={isChannelStarred}
@@ -950,6 +941,10 @@ function initialsFromLabel(label) {
 	useEffect(() => {
 		localStorage.setItem("spann-joined-channel-ids", JSON.stringify(joinedChannelIds));
 	}, [joinedChannelIds]);
+
+	useEffect(() => {
+		localStorage.setItem("spann-starred-channel-ids", JSON.stringify(starredChannelIds));
+	}, [starredChannelIds]);
 
 	useEffect(() => {
 		localStorage.setItem("spann-starred-channel-ids", JSON.stringify(starredChannelIds));
