@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from app.database import db
 from app.middleware.rate_limit import public_rate_limit_dependency
 from app.schemas.common import success_response
-from app.schemas.user import UserPreferencesPatchRequest, UserProfilePatchRequest, UserSettingsPatchRequest
+from app.schemas.user import UserPreferencesPatchRequest, UserProfilePatchRequest
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -64,45 +64,6 @@ async def patch_me(
 
     if updated is None:
         return JSONResponse(status_code=404, content={"detail": {"error_code": "user_not_found", "message": "User not found."}})
-    return success_response(updated)
-
-
-@router.get("/me/preferences")
-async def get_me_preferences(
-    request: Request,
-    _rate_limit: None = Depends(public_rate_limit_dependency),
-) -> JSONResponse:
-    """Return the authenticated user's locale, coaching, and accessibility settings."""
-
-    user_id = request.state.user_id
-    prefs = await db.get_user_preferences(user_id=user_id)
-    return success_response(prefs)
-
-
-@router.patch("/me/settings")
-async def patch_me_settings(
-    payload: UserSettingsPatchRequest,
-    request: Request,
-    _rate_limit: None = Depends(public_rate_limit_dependency),
-) -> JSONResponse:
-    """Update the four reading/intelligence settings stored in accessibility_settings.
-
-    Only supplied (non-null) fields are changed; all other accessibility_settings
-    keys are preserved via a server-side merge.
-    """
-
-    user_id = request.state.user_id
-    patch = payload.model_dump(exclude_none=True)
-    if not patch:
-        prefs = await db.get_user_preferences(user_id=user_id)
-        return success_response(prefs)
-
-    updated = await db.update_user_preferences(
-        user_id=user_id,
-        locale=None,
-        coaching_enabled=None,
-        accessibility_settings=patch,
-    )
     return success_response(updated)
 
 

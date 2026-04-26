@@ -1,21 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./app/App";
 import { applyAccessibilityPreferencesGlobal, loadAccessibilityPreferencesGlobal } from "./app/accessibility";
 import "./styles/global.css";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 5 * 60 * 1000, retry: 1 },
-    mutations: { retry: 0 },
-  },
-});
+applyAccessibilityPreferencesGlobal(loadAccessibilityPreferencesGlobal());
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <App />
   </React.StrictMode>
 );

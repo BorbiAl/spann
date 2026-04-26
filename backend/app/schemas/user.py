@@ -2,35 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# User reading / intelligence settings (stored inside accessibility_settings)
-# ─────────────────────────────────────────────────────────────────────────────
-
-class UserSettings(BaseModel):
-    """The four reading/intelligence fields stored inside accessibility_settings."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    reading_level: Literal["simple", "standard"] = "standard"
-    auto_simplify: bool = False
-    preferred_language: str = Field(default="en", max_length=16)
-    tts_auto_play: bool = False
-
-
-class UserSettingsPatchRequest(BaseModel):
-    """PATCH /users/me/settings — only the reading/intelligence fields."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    reading_level: Literal["simple", "standard"] | None = None
-    auto_simplify: bool | None = None
-    preferred_language: str | None = Field(default=None, max_length=16)
-    tts_auto_play: bool | None = None
 
 
 class LoginRequest(BaseModel):

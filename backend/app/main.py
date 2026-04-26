@@ -22,7 +22,7 @@ from app.database import db
 from app.metrics import MetricsMiddleware, metrics_response, refresh_infra_metrics
 from app.middleware.auth import AuthMiddleware
 from app.middleware.request_context import RequestContextMiddleware
-from app.routers import auth, carbon, channels, mesh, messages, organizations, pulse, runtime_config, summarize, translate, understand, users
+from app.routers import auth, carbon, channels, mesh, messages, organizations, pulse, runtime_config, translate, users
 from app.schemas.common import error_response
 from app.services.groq_client import groq_client
 from app.services.redis_client import redis_client
@@ -269,8 +269,6 @@ app.include_router(organizations.router)
 app.include_router(channels.router)
 app.include_router(messages.router)
 app.include_router(translate.router)
-app.include_router(understand.router)
-app.include_router(summarize.router)
 app.include_router(carbon.router)
 app.include_router(pulse.router)
 app.include_router(users.router)

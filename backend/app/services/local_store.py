@@ -239,9 +239,7 @@ class LocalStore:
         if coaching_enabled is not None:
             user.coaching_enabled = coaching_enabled
         if accessibility_settings is not None:
-            # Merge into existing settings — never replace wholesale
-            current = user.accessibility_settings or {}
-            user.accessibility_settings = {**current, **accessibility_settings}
+            user.accessibility_settings = accessibility_settings
         return {
             "locale": user.locale,
             "coaching_enabled": user.coaching_enabled,
@@ -389,6 +387,50 @@ class LocalStore:
     def get_channel(self, channel_id: str) -> dict[str, Any] | None:
         return self.channels.get(channel_id)
 
+    def update_channel(
+        self,
+        *,
+        channel_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        tone: str | None = None,
+        is_private: bool | None = None,
+    ) -> dict[str, Any] | None:
+        row = self.channels.get(channel_id)
+        if row is None:
+            return None
+
+        if isinstance(name, str) and name.strip():
+            row["name"] = name.strip()
+        if description is not None:
+            row["description"] = description
+        if isinstance(tone, str) and tone.strip():
+            row["tone"] = tone.strip()
+        if is_private is not None:
+            row["is_private"] = bool(is_private)
+        return row
+
+    def delete_channel(self, channel_id: str) -> bool:
+        row = self.channels.pop(channel_id, None)
+        if row is None:
+            return False
+
+        message_ids = [
+            message_id
+            for message_id, message in self.messages.items()
+            if str(message.get("channel_id", "")) == channel_id
+        ]
+        for message_id in message_ids:
+            self.messages.pop(message_id, None)
+
+        self.message_reactions = [
+            reaction for reaction in self.message_reactions if reaction.get("message_id") not in message_ids
+        ]
+        self.message_edits = [
+            edit for edit in self.message_edits if edit.get("message_id") not in message_ids
+        ]
+        return True
+
     def _user_blob(self, user_id: str) -> dict[str, Any]:
         user = self.users_by_id.get(user_id)
         if user is None:
@@ -417,6 +459,7 @@ class LocalStore:
         workspace_id: str,
         text: str,
         text_translated: str | None,
+        sentiment_score: float | None = None,
         mesh_origin: bool,
         source_locale: str | None,
     ) -> dict[str, Any]:
@@ -429,7 +472,7 @@ class LocalStore:
             "text": text,
             "text_translated": text_translated,
             "source_locale": source_locale,
-            "sentiment_score": None,
+            "sentiment_score": sentiment_score,
             "mesh_origin": bool(mesh_origin),
             "deleted_at": None,
             "created_at": now_iso,

@@ -38,9 +38,6 @@ class Settings(BaseSettings):
 
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_model: str = "llama-3.3-70b-versatile"
-    # Faster model for latency-sensitive AI features (understand, summarize).
-    # llama-3.1-8b-instant averages ~400ms vs ~1.5s for 70b on Groq.
-    groq_fast_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_FAST_MODEL")
 
     redis_url: str = Field(default="redis://valkey:6379/0", alias="REDIS_URL")
 

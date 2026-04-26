@@ -1,6 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiRequest, apiRequestFormData, fetchPublicRuntimeConfig } from '../data/constants';
 
+const FALLBACK_CULTURES = [
+	{ key: 'American', label: 'American', locale: 'en-US' },
+	{ key: 'British', label: 'British', locale: 'en-GB' },
+	{ key: 'Bulgarian', label: 'Bulgarian', locale: 'bg-BG' },
+	{ key: 'Spanish', label: 'Spanish', locale: 'es-ES' },
+	{ key: 'French', label: 'French', locale: 'fr-FR' },
+	{ key: 'German', label: 'German', locale: 'de-DE' },
+	{ key: 'Brazilian', label: 'Brazilian', locale: 'pt-BR' },
+	{ key: 'Japanese', label: 'Japanese', locale: 'ja-JP' },
+	{ key: 'Chinese', label: 'Chinese', locale: 'zh-CN' },
+	{ key: 'Korean', label: 'Korean', locale: 'ko-KR' },
+	{ key: 'Arabic', label: 'Arabic', locale: 'ar-SA' },
+];
+
 function isGarbledMultilingualText(value) {
 	const text = String(value || '');
 	return /\uFFFD/.test(text) || /^\s*[?？]{4,}\s*$/.test(text);
@@ -244,9 +258,15 @@ export default function TranslatorView() {
 				}
 
 				if (rows.length > 0) {
-					setCultures(rows);
-					setSourceCulture((current) => current || rows[0].key);
-					setTargetCulture((current) => current || rows[Math.min(1, rows.length - 1)].key);
+					const mergedCultures = rows.length >= 2
+						? rows
+						: [
+							...rows,
+							...FALLBACK_CULTURES.filter((fallbackItem) => !rows.some((row) => row.key === fallbackItem.key))
+						];
+					setCultures(mergedCultures);
+					setSourceCulture((current) => current || mergedCultures[0].key);
+					setTargetCulture((current) => current || mergedCultures.find((item) => item.key !== mergedCultures[0].key)?.key || mergedCultures[0].key);
 					return;
 				}
 			} catch {
@@ -254,11 +274,13 @@ export default function TranslatorView() {
 			}
 
 			const browserLocale = Intl.DateTimeFormat().resolvedOptions().locale || 'en-US';
-			const fallback = [{ key: browserLocale, label: browserLocale, locale: browserLocale }];
+			const fallback = FALLBACK_CULTURES;
 			if (!cancelled) {
 				setCultures(fallback);
-				setSourceCulture(browserLocale);
-				setTargetCulture(browserLocale);
+				const source = fallback.find((item) => String(item.locale).toLowerCase() === String(browserLocale).toLowerCase())?.key || fallback[0].key;
+				const target = fallback.find((item) => item.key !== source)?.key || fallback[0].key;
+				setSourceCulture(source);
+				setTargetCulture(target);
 			}
 		}
 
