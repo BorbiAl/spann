@@ -3,28 +3,26 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "../components/Icon";
 import Message from "../components/Message";
 import { apiRequestFormData, getAuthState } from "../data/constants";
-import { INCOMING_AUTHORS, INCOMING_MESSAGE_BANK, incrementReaction } from "../data/constants";
+import { CHANNELS, INCOMING_AUTHORS, INCOMING_MESSAGE_BANK, incrementReaction } from "../data/constants";
+import { useMutation } from "@tanstack/react-query";
+import { summarizeApi } from "../api/summarize";
+import { useUserSettingsStore } from "../store/userSettings";
 
 export default function ChatView({
 	activeChannel,
 	activeChannelId,
 	channelMood,
 	messages,
-	isChannelStarred,
-	onToggleChannelStar,
 	accessibilityPrefs,
 	preferredLocale,
 	onSendMessage,
 	onReactMessage,
-	onEditMessage,
-	onDeleteMessage,
 	translateEnabled,
 	setTranslateEnabled,
 	showNudge,
 	setShowNudge,
 	onStartCall,
 	currentUserName,
-	currentUserId,
 	workspaceMembers,
 	onOpenChannelSettings,
 	onOpenSupport,
@@ -44,8 +42,6 @@ export default function ChatView({
 	const [isAtBottom, setIsAtBottom] = useState(true);
 	const [isDictating, setIsDictating] = useState(false);
 	const [dictationHint, setDictationHint] = useState("");
-	const [replyContext, setReplyContext] = useState(null);
-	const [editContext, setEditContext] = useState(null);
 	const [speechDebug, setSpeechDebug] = useState({
 		status: "idle",
 		locale: "",
@@ -76,7 +72,16 @@ export default function ChatView({
 	const lastMessageCountRef = useRef(0);
 	const lastSpokenIdRef = useRef("");
 	const channelKey = String(activeChannel || "#general");
-	const ttsEnabled = Boolean(accessibilityPrefs?.tts);
+	const { settings: userSettings } = useUserSettingsStore();
+	// tts_auto_play from user settings overrides/complements the accessibility pref
+	const ttsEnabled = Boolean(accessibilityPrefs?.tts) || Boolean(userSettings.tts_auto_play);
+	// Thread summarization
+	const [summaryOpen, setSummaryOpen] = useState(false);
+	const [summary, setSummary] = useState(null);
+	const summarizeMutation = useMutation({
+		mutationFn: () => summarizeApi.summarize(activeChannelId),
+		onSuccess: (data) => { setSummary(data); setSummaryOpen(true); },
+	});
 	const simplifiedMode = Boolean(accessibilityPrefs?.simplified);
 	const hasSpeechRecognition =
 		typeof window !== "undefined" &&
@@ -111,6 +116,8 @@ export default function ChatView({
 		}
 	}, []);
 
+	const sentimentScore = Number(channelMood || CHANNELS.find((channel) => channel.name === activeChannel)?.mood || 65);
+	const sentimentLabel = sentimentScore > 70 ? "Collaborative" : sentimentScore > 45 ? "Neutral" : "Critical";
 	const activeMembers = Array.isArray(workspaceMembers) ? workspaceMembers.filter((member) => Boolean(member?.is_online)) : [];
 	const shownMembers = activeMembers.slice(0, 2);
 	const extraMembers = Math.max(0, activeMembers.length - shownMembers.length);
@@ -118,67 +125,15 @@ export default function ChatView({
 	const displayMessages = useMemo(() => {
 		const channelMessages = Array.isArray(messages) ? messages : [];
 		const liveMessages = localMessagesByChannel[channelKey] || [];
-		const merged = [...channelMessages, ...liveMessages]
-			.map((message, index) => {
-				const rawCreatedAt = String(message?.createdAt || message?.created_at || "").trim();
-				const createdAtMs = rawCreatedAt ? Date.parse(rawCreatedAt) : Number.NaN;
-				return {
-					message,
-					index,
-					timestamp: Number.isFinite(createdAtMs) ? createdAtMs : Number.MAX_SAFE_INTEGER,
-				};
-			})
-			.sort((a, b) => {
-				if (a.timestamp === b.timestamp) {
-					return a.index - b.index;
-				}
-				return a.timestamp - b.timestamp;
-			})
-			.map((entry) => entry.message);
-
-		return merged.slice(-80);
+		return [...channelMessages, ...liveMessages].slice(-80);
 	}, [messages, localMessagesByChannel, channelKey]);
-
-	const sentimentSummary = useMemo(() => {
-		const scored = displayMessages
-			.map((message) => Number(message?.sentimentScore))
-			.filter((value) => Number.isFinite(value));
-
-		if (scored.length > 0) {
-			const average = scored.reduce((sum, value) => sum + value, 0) / scored.length;
-			return {
-				score: Math.max(0, Math.min(100, Math.round(average))),
-				count: scored.length,
-				source: "messages"
-			};
-		}
-
-		const fallbackMood = Number(channelMood);
-		if (Number.isFinite(fallbackMood)) {
-			return {
-				score: Math.max(0, Math.min(100, Math.round(fallbackMood))),
-				count: 0,
-				source: "channel"
-			};
-		}
-
-		return {
-			score: 50,
-			count: 0,
-			source: "fallback"
-		};
-	}, [displayMessages, channelMood]);
-
-	const sentimentScore = sentimentSummary.score;
-	const sentimentLabel = sentimentScore >= 70 ? "Collaborative" : sentimentScore >= 45 ? "Neutral" : "Critical";
-	const sentimentMeta = sentimentSummary.count > 0 ? `${sentimentSummary.count} msgs` : sentimentSummary.source === "channel" ? "Channel trend" : "No scores yet";
 
 	useEffect(() => {
 		setActiveTypist("");
 		setIsUserTyping(false);
 		setInputValue("");
-		setReplyContext(null);
-		setEditContext(null);
+		setSummaryOpen(false);
+		setSummary(null);
 	}, [activeChannel]);
 
 	useEffect(() => {
@@ -376,9 +331,6 @@ export default function ChatView({
 
 		// Escape → clear input
 		if (e.key === "Escape") {
-			if (editContext) {
-				setEditContext(null);
-			}
 			setInputValue("");
 			return;
 		}
@@ -431,25 +383,15 @@ export default function ChatView({
 			return;
 		}
 
+		const shouldTranslate = translateEnabled;
+
 		setIsSending(true);
 		try {
-			if (editContext?.id && onEditMessage) {
-				await onEditMessage(activeChannelId, editContext.id, text);
-				return;
-			}
-
-			const shouldTranslate = translateEnabled;
-			const replyPrefix = replyContext
-				? `↪ ${String(replyContext.user || "Member")}: "${String(replyContext.text || "").slice(0, 120)}"\n`
-				: "";
-			const outboundText = `${replyPrefix}${text}`;
-			await onSendMessage(activeChannel, outboundText, shouldTranslate, {});
+			await onSendMessage(activeChannel, text, shouldTranslate, {});
 		} finally {
 			setIsUserTyping(false);
 			setIsSending(false);
 			setInputValue("");
-			setReplyContext(null);
-			setEditContext(null);
 			pendingVoiceTranscriptRef.current = "";
 			latestVoiceTranscriptRef.current = "";
 			hasVoiceTranscriptRef.current = false;
@@ -507,48 +449,6 @@ export default function ChatView({
 		}));
 
 		onReactMessage(activeChannel, messageId, emoji);
-	}
-
-	async function handleEditMessage(message) {
-		if (!message?.id || !onEditMessage) {
-			return;
-		}
-		const currentText = String(message.text || "");
-		setReplyContext(null);
-		setEditContext({
-			id: message.id,
-			preview: currentText.slice(0, 160),
-		});
-		setInputValue(currentText);
-		requestAnimationFrame(() => {
-			textareaRef.current?.focus();
-		});
-	}
-
-	async function handleDeleteMessage(message) {
-		if (!message?.id || !onDeleteMessage) {
-			return;
-		}
-		const approved = typeof window !== "undefined"
-			? window.confirm("Unsend this message?")
-			: true;
-		if (!approved) {
-			return;
-		}
-		await onDeleteMessage(activeChannelId, message.id);
-	}
-
-	function handleReferenceMessage(message) {
-		if (!message?.id) {
-			return;
-		}
-		setEditContext(null);
-		setReplyContext({
-			id: message.id,
-			user: message.user,
-			text: String(message.text || ""),
-		});
-		textareaRef.current?.focus();
 	}
 
 	// Removed toggleVoiceRoom as it is handled by CallView now
@@ -1002,22 +902,15 @@ export default function ChatView({
 	return (
 		<div className="flex-1 min-h-0 h-full flex flex-col min-w-0 bg-surface">
 			{/* Top App Bar */}
-			<header className="min-h-[72px] flex items-center justify-between flex-wrap gap-y-2 px-6 py-3 bg-surface sticky top-0 z-10 border-b border-outline-variant/20">
-				<div className="flex items-center gap-3 min-w-0">
+			<header className="h-[60px] flex items-center justify-between px-6 bg-surface sticky top-0 z-10 border-b border-outline-variant/20">
+				<div className="flex items-center gap-3">
 					<span className="text-primary text-[20px] font-medium">#</span>
-					<h2 className="font-bold text-on-surface text-[18px] tracking-tight truncate">{String(activeChannel || "product-strategy").replace(/^#/, "")}</h2>
-					<button
-						type="button"
-						onClick={onToggleChannelStar}
-						className={`material-symbols-outlined text-[18px] transition-colors ${isChannelStarred ? "text-amber-500" : "text-on-surface-variant opacity-70 hover:text-on-surface"}`}
-						data-icon="star"
-						aria-label={isChannelStarred ? "Unstar channel" : "Star channel"}
-						title={isChannelStarred ? "Unstar channel" : "Star channel"}
-					>
-						{isChannelStarred ? "star" : "star_outline"}
-					</button>
+					<h2 className="font-bold text-on-surface text-[18px] tracking-tight">{String(activeChannel || "product-strategy").replace(/^#/, "")}</h2>
+					<span className="material-symbols-outlined text-on-surface-variant opacity-50 text-[18px] cursor-pointer" data-icon="star">
+						star
+					</span>
 				</div>
-				<div className="flex items-center gap-2.5 flex-wrap justify-end">
+				<div className="flex items-center gap-3">
 					<button
 						type="button"
 						onClick={() => setLiveFeedEnabled((current) => !current)}
@@ -1029,6 +922,23 @@ export default function ChatView({
 					</button>
 					<button
 						type="button"
+						disabled={!activeChannelId || summarizeMutation.isPending}
+						onClick={() => {
+							if (summaryOpen) { setSummaryOpen(false); return; }
+							summarizeMutation.mutate();
+						}}
+						className={`text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 ${summaryOpen ? "border-primary/30 text-primary bg-primary/10" : "border-outline-variant/50 text-on-surface-variant bg-surface-container-low hover:border-primary/30 hover:text-primary"} disabled:opacity-40`}
+						aria-label="Summarize thread"
+					>
+						{summarizeMutation.isPending ? (
+							<span className="flex gap-0.5 items-center"><span className="w-1 h-1 rounded-full bg-current animate-pulse" /><span className="w-1 h-1 rounded-full bg-current animate-pulse delay-75" /><span className="w-1 h-1 rounded-full bg-current animate-pulse delay-150" /></span>
+						) : (
+							<span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+						)}
+						<span>{summaryOpen ? "Hide summary" : "Summarize"}</span>
+					</button>
+					<button
+						type="button"
 						onClick={onStartCall}
 						className="text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 border-primary/20 text-on-primary bg-primary hover:brightness-95"
 						aria-label="Start call"
@@ -1036,17 +946,6 @@ export default function ChatView({
 						<span className="material-symbols-outlined text-[16px]">call</span>
 						<span>Start Call</span>
 					</button>
-					{typeof onCreateGroup === "function" ? (
-						<button
-							type="button"
-							onClick={onCreateGroup}
-							className="text-[12px] font-semibold px-3 py-1.5 rounded-md border transition-colors inline-flex items-center gap-1.5 border-outline-variant/40 text-on-surface bg-surface-container-low hover:bg-surface-container"
-							aria-label="Create group"
-						>
-							<span className="material-symbols-outlined text-[16px]">group_add</span>
-							<span>Create Group</span>
-						</button>
-					) : null}
 					{canManageMembers ? (
 						<button
 							type="button"
@@ -1112,7 +1011,50 @@ export default function ChatView({
 			</header>
 
 			{/* Message Area */}
-			<div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto px-8 pt-6 pb-4 flex flex-col gap-6 scroll-smooth custom-scrollbar">
+			<div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto px-10 pt-8 pb-4 flex flex-col gap-6 scroll-smooth custom-scrollbar">
+				{/* Thread Summary Panel */}
+				{summaryOpen && summary && (
+					<div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 mb-2 flex flex-col gap-3">
+						<div className="flex items-center justify-between">
+							<span className="text-[13px] font-semibold text-primary flex items-center gap-1.5">
+								<span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+								Thread summary
+								{summary.cached ? <span className="text-[10px] font-normal opacity-60 ml-1">(cached)</span> : null}
+							</span>
+							<button type="button" onClick={() => setSummaryOpen(false)} className="text-on-surface-variant opacity-50 hover:opacity-100 transition-opacity" aria-label="Dismiss summary">
+								<span className="material-symbols-outlined text-[18px]">close</span>
+							</button>
+						</div>
+						{summary.bullets.length > 0 && (
+							<ul className="flex flex-col gap-1">
+								{summary.bullets.map((b, i) => (
+									<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-primary mt-0.5">•</span><span>{b}</span></li>
+								))}
+							</ul>
+						)}
+						{summary.decisions.length > 0 && (
+							<div>
+								<p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Decisions</p>
+								<ul className="flex flex-col gap-1">
+									{summary.decisions.map((d, i) => (
+										<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-amber-500 mt-0.5">◆</span><span>{d}</span></li>
+									))}
+								</ul>
+							</div>
+						)}
+						{summary.action_items.length > 0 && (
+							<div>
+								<p className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Action items</p>
+								<ul className="flex flex-col gap-1">
+									{summary.action_items.map((a, i) => (
+										<li key={i} className="text-[13px] text-on-surface flex gap-2"><span className="text-emerald-500 mt-0.5">✓</span><span>{a}</span></li>
+									))}
+								</ul>
+							</div>
+						)}
+						<p className="text-[11px] text-on-surface-variant opacity-60">Based on last {summary.message_count} messages</p>
+					</div>
+				)}
 				{/* Date Divider */}
 				<div className="relative flex justify-center items-center mt-2 mb-4">
 					<div className="absolute inset-0 flex items-center">
@@ -1129,11 +1071,6 @@ export default function ChatView({
 						message={message}
 						index={index}
 						onReaction={handleReaction}
-						onReference={handleReferenceMessage}
-						onEdit={handleEditMessage}
-						onDelete={handleDeleteMessage}
-						currentUserName={currentUserName}
-						currentUserId={currentUserId}
 					/>
 				))}
 
@@ -1179,45 +1116,10 @@ export default function ChatView({
 			</div>
 
 			{/* Message Input Area */}
-			<footer className="px-8 pb-7 bg-surface shrink-0 border-t border-outline-variant/20">
+			<footer className="px-10 pb-8 bg-surface shrink-0">
 				<div className="w-full space-y-3">
-					{editContext ? (
-						<div className="rounded-lg border border-primary/35 bg-primary/10 px-3 py-2 flex items-start justify-between gap-3">
-							<div className="min-w-0">
-								<p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Editing message</p>
-								<p className="text-[12px] text-on-surface-variant truncate max-w-[72ch]">{editContext.preview}</p>
-							</div>
-							<button
-								type="button"
-								onClick={() => {
-									setEditContext(null);
-									setInputValue("");
-								}}
-								className="material-symbols-outlined text-[18px] text-on-surface-variant hover:text-on-surface"
-								aria-label="Cancel edit"
-							>
-								close
-							</button>
-						</div>
-					) : null}
-					{replyContext ? (
-						<div className="rounded-lg border border-outline-variant/40 bg-surface-container-low px-3 py-2 flex items-start justify-between gap-3">
-							<div className="min-w-0">
-								<p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Replying to {replyContext.user}</p>
-								<p className="text-[12px] text-on-surface-variant truncate max-w-[72ch]">{replyContext.text}</p>
-							</div>
-							<button
-								type="button"
-								onClick={() => setReplyContext(null)}
-								className="material-symbols-outlined text-[18px] text-on-surface-variant hover:text-on-surface"
-								aria-label="Cancel reply"
-							>
-								close
-							</button>
-						</div>
-					) : null}
 					{/* Sentiment Bar */}
-					<div className="flex items-center gap-3 px-1.5 py-2 w-full max-w-full rounded-xl bg-surface-container-low border border-outline-variant/25">
+					<div className="flex items-center gap-4 px-2 w-full max-w-full">
 						<span className="text-[10px] font-bold text-on-surface opacity-70 uppercase tracking-widest whitespace-nowrap">
 							TONE SENTIMENT
 						</span>
@@ -1227,12 +1129,11 @@ export default function ChatView({
 								style={{ width: `${Math.max(6, Math.min(95, sentimentScore))}%` }}
 							/>
 						</div>
-						<span className="text-[12px] font-bold text-primary">{sentimentLabel} {sentimentScore}%</span>
-						<span className="text-[10px] font-medium text-on-surface-variant uppercase tracking-wide whitespace-nowrap">{sentimentMeta}</span>
+						<span className="text-[12px] font-bold text-primary">{sentimentLabel}</span>
 					</div>
 
 					{/* Input Box */}
-					<div className="bg-surface rounded-[14px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-outline-variant/45 p-3.5 focus-within:ring-2 focus-within:ring-primary/20 transition-all flex flex-col">
+					<div className="bg-surface rounded-[12px] shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-outline-variant/50 p-3 focus-within:ring-2 focus-within:ring-primary/20 transition-all flex flex-col">
 						<textarea
 							ref={textareaRef}
 							value={inputValue}
@@ -1242,19 +1143,23 @@ export default function ChatView({
 							rows={1}
 							onKeyDown={handleInputKeyDown}
 						/>
-						<div className="flex items-center justify-between mt-5 gap-3">
-							<div className="flex items-center gap-2.5 pl-1">
+						<div className="flex items-center justify-between mt-6">
+							<div className="flex items-center gap-3 pl-1">
+								<span className="material-symbols-outlined text-[24px] text-on-surface-variant opacity-80 hover:text-on-surface cursor-pointer" data-icon="add_circle">add_circle</span>
 								<button
 									type="button"
 									onClick={toggleDictation}
-									className={`inline-flex h-9 w-9 items-center justify-center rounded-full border border-outline-variant/40 ${isDictating ? "text-primary bg-primary/10 border-primary/30" : "text-on-surface-variant bg-surface-container-low hover:text-on-surface"} cursor-pointer`}
+									className={`material-symbols-outlined text-[24px] ${isDictating ? "text-primary" : "text-on-surface-variant opacity-80 hover:text-on-surface"} cursor-pointer`}
 									aria-label={isDictating ? "Stop dictation" : "Start dictation"}
 								>
-									<span className="material-symbols-outlined text-[20px]">{isDictating ? "mic" : "mic_none"}</span>
+									{isDictating ? "mic" : "mic_none"}
 								</button>
-								<div className="flex items-center gap-2.5 ml-1 border-l border-outline-variant/45 pl-3.5">
+								<span className="material-symbols-outlined text-[24px] text-on-surface-variant opacity-80 hover:text-on-surface cursor-pointer" data-icon="sentiment_satisfied">sentiment_satisfied</span>
+								<span className="material-symbols-outlined text-[24px] text-on-surface-variant opacity-80 hover:text-on-surface cursor-pointer" data-icon="alternate_email">alternate_email</span>
+								
+								<div className="flex items-center gap-3 ml-2 border-l border-outline-variant/50 pl-5">
 									<span className="material-symbols-outlined text-[20px] text-on-surface-variant opacity-80" data-icon="translate">translate</span>
-									<span className="text-[11px] font-semibold text-on-surface-variant opacity-90 uppercase tracking-wide">Translate</span>
+									<span className="text-[12px] font-semibold text-on-surface-variant opacity-90 uppercase tracking-widest tracking-tighter">TRANSLATE</span>
 									
 									<button
 										type="button"
@@ -1271,10 +1176,10 @@ export default function ChatView({
 								className={`bg-primary text-on-primary pl-4 pr-3 py-[6px] rounded-[16px] text-[14px] font-semibold flex items-center justify-center gap-1.5 hover:brightness-95 transition-all cursor-pointer shadow-sm ${isSending ? "opacity-75 cursor-wait" : "active:scale-95"}`}
 								onClick={() => sendMessage()}
 								disabled={isSending}
-								aria-label={isSending ? (editContext ? "Saving message..." : "Sending message...") : (editContext ? "Save edited message" : "Send message")}
+								aria-label={isSending ? "Sending message..." : "Send message"}
 								type="button"
 							>
-								<span>{isSending ? (editContext ? "Saving..." : "Sending...") : (editContext ? "Save" : "Send")}</span>
+								<span>{isSending ? "Sending..." : "Send"}</span>
 								{isSending ? <span className="material-symbols-outlined text-[16px] animate-spin" data-icon="sync">sync</span> : <span className="material-symbols-outlined text-[16px]" data-icon="send">send</span>}
 							</button>
 						</div>

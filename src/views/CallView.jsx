@@ -507,9 +507,8 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 	}
 
 	return (
-		<div className="h-full overflow-y-auto bg-surface p-6 w-full view-transition flex items-center justify-center">
-			<div className="flex flex-col relative overflow-hidden bg-background/90 backdrop-blur-[12px] border border-outline-variant/20 shadow-sm w-full max-w-4xl min-h-[620px] font-body text-on-surface rounded-3xl">
-				<div className="discord-call-atmosphere" aria-hidden="true" />
+		<div className="h-full overflow-y-auto bg-surface p-8 w-full view-transition flex items-center justify-center">
+			<div className="flex flex-col relative overflow-hidden bg-background/80 backdrop-blur-[12px] border border-outline-variant/20 shadow-sm w-full max-w-4xl min-h-[600px] font-body text-on-surface rounded-3xl">
 				{statusNote ? (
 					<div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 rounded-full bg-inverse-surface/90 px-3 py-1 text-xs text-inverse-on-surface">
 						{statusNote}
@@ -533,14 +532,10 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 				) : null}
 				
 				{/* Call Header */}
-				<header className="min-h-[88px] flex items-center justify-between px-7 py-3 border-b border-outline-variant/20 bg-surface/70 gap-4">
-					<div className="flex items-center gap-3.5">
-						<div className="discord-call-badge-wrap">
-							<span className="discord-call-ring ring-a" aria-hidden="true" />
-							<span className="discord-call-ring ring-b" aria-hidden="true" />
-							<div className="discord-call-badge flex h-12 w-12 items-center justify-center bg-primary/10 text-primary rounded-2xl">
-								<span className="material-symbols-outlined text-[24px]">Record_Voice_Over</span>
-							</div>
+				<header className="h-[80px] flex items-center justify-between px-8 border-b border-outline-variant/20 bg-surface/60">
+					<div className="flex items-center gap-4">
+						<div className="flex h-12 w-12 items-center justify-center bg-primary/10 text-primary rounded-2xl">
+							<span className="material-symbols-outlined text-[24px]">Record_Voice_Over</span>
 						</div>
 						<div>
 							<h2 className="font-bold text-on-surface text-[20px] tracking-tight">
@@ -551,41 +546,33 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 								<span className="text-[13px] font-medium text-on-surface-variant">
 									{formatDuration(callDuration)} • Connected
 								</span>
-								<div className="flex items-center gap-2 rounded-full bg-surface-container-high px-2 py-1" aria-label="Microphone level">
-									<span className="text-[11px] font-semibold text-on-surface-variant">{micActive ? `Mic ${micLevel}%` : "Mic muted"}</span>
-									<div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-container-highest">
-										<div
-											className="h-full rounded-full bg-primary transition-[width] duration-100"
-											style={{ width: `${micActive ? micLevel : 0}%` }}
-										/>
-									</div>
-								</div>
-								<div className="discord-voice-bars" aria-hidden="true">
-									<span />
-									<span />
-									<span />
-								</div>
 							</div>
 						</div>
 					</div>
-					<div className="flex items-center gap-3">
-						<div className="flex -space-x-2.5 mr-2">
+					<div className="flex items-center gap-4">
+						<div className="flex -space-x-3 mr-4">
 							{shownParticipants.map((member, index) => {
-								const label = String(member?.label || "Member");
-								const initials = String(member?.initials || "ME");
+								const label = String(member?.display_name || member?.email || "Member");
+								const initials = label
+									.split(/\s+/)
+									.filter(Boolean)
+									.slice(0, 2)
+									.map((word) => word[0])
+									.join("")
+									.toUpperCase() || "ME";
 								const zClass = index === 0 ? "z-30" : index === 1 ? "z-20" : "z-10";
-								if (member?.avatarUrl) {
+								if (member?.avatar_url) {
 									return (
 										<img
 											key={String(member?.user_id || label)}
 											className={`w-10 h-10 rounded-full border-2 border-surface object-cover ${zClass}`}
-											src={member.avatarUrl}
+											src={member.avatar_url}
 											alt={`${label} avatar`}
 										/>
 									);
 								}
 								return (
-									<div key={String(member?.id || label)} className={`w-10 h-10 rounded-full border-2 border-surface bg-surface-container-high flex items-center justify-center text-primary font-bold ${zClass}`}>
+									<div key={String(member?.user_id || label)} className={`w-10 h-10 rounded-full border-2 border-surface bg-surface-container-high flex items-center justify-center text-primary font-bold ${zClass}`}>
 										{initials}
 									</div>
 								);
@@ -606,12 +593,12 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 				{/* Main Call Area */}
 				<div className="flex-1 flex flex-col p-6 bg-surface-container-low relative">
 					<div className="mb-4 flex items-center justify-between">
-						<h3 className="text-sm font-semibold text-on-surface-variant uppercase tracking-wide">Participants</h3>
+						<h3 className="text-sm font-semibold text-on-surface-variant uppercase tracking-wide">In This Call</h3>
 						<p className="text-xs text-on-surface-variant">{callTiles.length} participant{callTiles.length === 1 ? "" : "s"}</p>
 					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 content-start">
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
 						{callTiles.map((member) => (
-							<div key={member.id} className="rounded-2xl border border-outline-variant/20 bg-surface p-4 flex items-center gap-4 relative overflow-hidden min-h-[92px]">
+							<div key={member.id} className="rounded-2xl border border-outline-variant/20 bg-surface p-4 flex items-center gap-4 relative overflow-hidden">
 								<div className="relative">
 									{member.avatarUrl ? (
 										<img src={member.avatarUrl} alt={`${member.label} avatar`} className="w-14 h-14 rounded-xl object-cover" />
@@ -626,13 +613,6 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 									<p className="text-sm font-semibold text-on-surface truncate">{member.isMe ? "You" : member.label}</p>
 									<p className="text-xs text-on-surface-variant">{member.online ? "Connected" : "Offline"}</p>
 								</div>
-								{member.online ? (
-									<div className="discord-voice-bars" aria-hidden="true">
-										<span />
-										<span />
-										<span />
-									</div>
-								) : null}
 								{member.isMe ? (
 									<div className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
 										{micActive ? "Mic on" : "Muted"}
@@ -670,7 +650,7 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 				</div>
 
 				{/* Call Controls Footer */}
-				<footer className="h-[94px] flex items-center justify-center gap-5 px-8 border-t border-outline-variant/20 bg-surface/80">
+				<footer className="h-[90px] flex items-center justify-center gap-6 px-8 border-t border-outline-variant/20 bg-surface/70">
 					<button
 						onClick={() => setMicActive(!micActive)}
 						className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${

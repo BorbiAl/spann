@@ -7,7 +7,6 @@ import { apiRequest, getAuthState, setAuthState } from "../data/constants";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-	{ key: "channels",      label: "Channel Settings",   icon: "tune" },
 	{ key: "profile",       label: "Profile",            icon: "person" },
 	{ key: "appearance",    label: "Appearance",          icon: "palette" },
 	{ key: "notifications", label: "Notifications",       icon: "notifications" },
@@ -753,78 +752,22 @@ function AboutSection() {
 	);
 }
 
-function ChannelSettingsSection({ activeChannelName, channels, workspaceMembers }) {
-	const normalizedName = String(activeChannelName || "").replace(/^#/, "").trim();
-	const channelList = Array.isArray(channels) ? channels : [];
-	const selectedChannel = channelList.find((channel) => String(channel?.name || "").replace(/^#/, "") === normalizedName) || null;
-	const members = Array.isArray(workspaceMembers) ? workspaceMembers : [];
-	const onlineCount = members.filter((member) => Boolean(member?.is_online)).length;
-
-	return (
-		<div className="space-y-8">
-			<div>
-				<h1 className="text-2xl font-bold tracking-tight text-on-surface">Channel Settings</h1>
-				<p className="mt-1 text-sm text-on-surface-variant">Configure behavior for the currently selected chat channel.</p>
-			</div>
-
-			<div className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-6 space-y-5">
-				<div>
-					<p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Selected channel</p>
-					<h2 className="mt-1 text-lg font-bold text-on-surface">#{normalizedName || "unknown"}</h2>
-				</div>
-
-				<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-					<div className="rounded-lg border border-outline-variant/10 bg-surface p-3">
-						<p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Tone</p>
-						<p className="mt-1 text-sm font-semibold text-on-surface">{String(selectedChannel?.tone || "neutral")}</p>
-					</div>
-					<div className="rounded-lg border border-outline-variant/10 bg-surface p-3">
-						<p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Members online</p>
-						<p className="mt-1 text-sm font-semibold text-on-surface">{onlineCount}</p>
-					</div>
-					<div className="rounded-lg border border-outline-variant/10 bg-surface p-3">
-						<p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Type</p>
-						<p className="mt-1 text-sm font-semibold text-on-surface">{String(selectedChannel?.name || "").startsWith("@") ? "Direct" : "Group"}</p>
-					</div>
-				</div>
-
-				<p className="text-xs text-on-surface-variant">More channel-level controls can be expanded here (retention, posting permissions, mention policy, pinned guidance).</p>
-			</div>
-		</div>
-	);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Root
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function SettingsView({ authState, onLogout, accessibilityPrefs, onChangeAccessibility, initialSection, activeChannelName, channels, workspaceMembers }) {
+export default function SettingsView({ authState, onLogout, accessibilityPrefs, onChangeAccessibility, initialSection }) {
 	const [activeSection, setActiveSection] = useState(initialSection || "profile");
-	const [selectedChannelName, setSelectedChannelName] = useState(String(activeChannelName || ""));
-
-	useEffect(() => {
-		setSelectedChannelName(String(activeChannelName || ""));
-	}, [activeChannelName]);
 
 	// Allow the global Ctrl+/ shortcut to jump to a section even while settings is already open
 	useEffect(() => {
-		function handler(e) {
-			const detail = e?.detail || {};
-			if (detail.section) {
-				setActiveSection(detail.section);
-			}
-			if (detail.channelName) {
-				setSelectedChannelName(String(detail.channelName));
-			}
-		}
+		function handler(e) { setActiveSection(e.detail.section); }
 		document.addEventListener("spann:goto-settings", handler);
 		return () => document.removeEventListener("spann:goto-settings", handler);
 	}, []);
 
 	function renderSection() {
 		switch (activeSection) {
-			case "channels":
-				return <ChannelSettingsSection activeChannelName={selectedChannelName} channels={channels} workspaceMembers={workspaceMembers} />;
 			case "profile":
 				return <ProfileSection authState={authState} />;
 			case "appearance":

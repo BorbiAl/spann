@@ -1,6 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useUserSettingsStore } from "../store/userSettings";
 
 const COLOR_BLIND_OPTIONS = ["Normal", "Deuter", "Protan", "Tritan"];
+
+// Language options for the preferred_language field (AI explanation target)
+const LANGUAGE_OPTIONS = [
+	{ value: "en", label: "English" },
+	{ value: "es", label: "Español" },
+	{ value: "fr", label: "Français" },
+	{ value: "de", label: "Deutsch" },
+	{ value: "pt", label: "Português" },
+	{ value: "it", label: "Italiano" },
+	{ value: "ja", label: "日本語" },
+	{ value: "zh", label: "中文" },
+	{ value: "ko", label: "한국어" },
+	{ value: "ar", label: "العربية" },
+	{ value: "bg", label: "Български" },
+	{ value: "tr", label: "Türkçe" },
+];
 
 function Toggle({ checked, onChange, ariaLabel }) {
 	return (
@@ -38,6 +55,9 @@ function SettingRow({ icon, title, description, right }) {
 }
 
 export default function AccessibilityView({ preferences, onChangePreference, saveState }) {
+	// User settings store — reading/intelligence settings backed by the API
+	const { settings: userSettings, updateSetting, isSaving: isSettingsSaving } = useUserSettingsStore();
+
 	const normalizedPreferences = useMemo(
 		() => ({
 			dyslexia: Boolean(preferences?.dyslexia),
@@ -214,6 +234,92 @@ export default function AccessibilityView({ preferences, onChangePreference, sav
 									title="Text-to-Speech"
 									description="Read messages aloud using high-quality neutral voices."
 										right={<Toggle checked={tts} onChange={(value) => updateDraft("tts", value)} ariaLabel="Toggle text to speech" />}
+								/>
+							</div>
+						</section>
+
+						{/* ── Message Intelligence ──────────────────────────── */}
+						<section className="space-y-4">
+							<div className="flex items-center gap-2 px-2">
+								<span className="material-symbols-outlined text-primary">auto_awesome</span>
+								<h3 className="font-semibold text-on-surface">Message Intelligence</h3>
+								{isSettingsSaving && (
+									<span className="ml-auto text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant opacity-60">
+										Saving…
+									</span>
+								)}
+							</div>
+							<div className="bg-surface-container-low rounded-xl overflow-hidden divide-y divide-outline-variant/10">
+								{/* Reading Level */}
+								<SettingRow
+									icon="menu_book"
+									title="Reading Level"
+									description="Controls how messages are simplified by AI."
+									right={
+										<div className="flex items-center gap-1 rounded-full bg-surface-container-high border border-outline-variant/20 p-0.5">
+											{(["standard", "simple"]).map((level) => (
+												<button
+													key={level}
+													type="button"
+													onClick={() => updateSetting("reading_level", level)}
+													className={[
+														"px-3 py-1 rounded-full text-[11px] font-semibold capitalize transition-colors",
+														userSettings.reading_level === level
+															? "bg-primary text-on-primary shadow-sm"
+															: "text-on-surface-variant hover:text-on-surface",
+													].join(" ")}
+												>
+													{level === "simple" ? "Simple" : "Standard"}
+												</button>
+											))}
+										</div>
+									}
+								/>
+
+								{/* Auto-Simplify */}
+								<SettingRow
+									icon="auto_fix_high"
+									title="Auto-Simplify Messages"
+									description="Show simplified text by default for incoming messages."
+									right={
+										<Toggle
+											checked={userSettings.auto_simplify}
+											onChange={(v) => updateSetting("auto_simplify", v)}
+											ariaLabel="Toggle auto-simplify"
+										/>
+									}
+								/>
+
+								{/* Preferred Language */}
+								<SettingRow
+									icon="translate"
+									title="Explanation Language"
+									description="Language used when AI explains idioms and context."
+									right={
+										<select
+											value={userSettings.preferred_language}
+											onChange={(e) => updateSetting("preferred_language", e.target.value)}
+											className="bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+										>
+											{LANGUAGE_OPTIONS.map(({ value, label }) => (
+												<option key={value} value={value}>{label}</option>
+											))}
+										</select>
+									}
+								/>
+
+								{/* TTS Auto-Play */}
+								<SettingRow
+									icon="volume_up"
+									title="TTS Auto-Play"
+									description="Automatically read new messages aloud as they arrive."
+									right={
+										<Toggle
+											checked={userSettings.tts_auto_play}
+											onChange={(v) => updateSetting("tts_auto_play", v)}
+											ariaLabel="Toggle TTS auto-play"
+										/>
+									}
 								/>
 							</div>
 						</section>

@@ -281,6 +281,23 @@ def mock_groq(monkeypatch):
             if "terrible" in text_lower:
                 return "-0.8"
             return "0.0"
+        if task_type == "understand":
+            # Extract message_text from the user turn (second message content).
+            msg_text = ""
+            for item in messages:
+                if item.get("role") == "user":
+                    for line in str(item.get("content", "")).splitlines():
+                        if line.startswith("message:"):
+                            msg_text = line.split(":", 1)[1].strip()
+                            break
+            payload = {
+                "simplified": f"simplified: {msg_text}",
+                "explanation": "test explanation",
+                "idioms": [{"phrase": "break a leg", "meaning": "good luck", "localized_equivalent": "bonne chance"}] if "break a leg" in text_lower else [],
+                "tone_hint": "neutral",
+                "translated": f"translated: {msg_text}",
+            }
+            return json.dumps(payload)
         return "0.0"
 
     monkeypatch.setattr("app.services.groq_client.groq_client.chat", fake_chat)
