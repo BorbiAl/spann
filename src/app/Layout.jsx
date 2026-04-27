@@ -32,6 +32,12 @@ import {
 	removeOrganizationMember,
 	pushAppNotice
 } from "../data/constants";
+import {
+	isDemoMode,
+	DEMO_CHANNELS,
+	DEMO_MESSAGES_BY_CHANNEL,
+	DEMO_CHANNEL_UNREAD,
+} from "../lib/demoMode";
 
 function withHash(channelName) {
 	const value = String(channelName || "").trim();
@@ -216,7 +222,7 @@ function SideSection({ activeView, onSectionAction }) {
 			<p className="section-title">Sections</p>
 			{items.map((item, index) => (
 				<button key={item} onClick={() => onSectionAction?.(item)} className={`section-item ${index === 0 ? "active" : ""}`}>
-					<span className="channel-dot">G��</span>
+					<span className="channel-dot">·</span>
 					<span className="section-label">{item}</span>
 				</button>
 			))}
@@ -947,10 +953,6 @@ function initialsFromLabel(label) {
 	}, [starredChannelIds]);
 
 	useEffect(() => {
-		localStorage.setItem("spann-starred-channel-ids", JSON.stringify(starredChannelIds));
-	}, [starredChannelIds]);
-
-	useEffect(() => {
 		persistAccessibilityPreferencesGlobal(accessibilityPrefs);
 	}, [accessibilityPrefs]);
 
@@ -1132,10 +1134,7 @@ function initialsFromLabel(label) {
 
 	async function loadPreferences() {
 		try {
-			const payload = await apiRequest("/users/me/preferences", {
-				method: "PATCH",
-				body: JSON.stringify({})
-			});
+			const payload = await apiRequest("/users/me/preferences");
 			const data = payload?.data || {};
 			const loaded = data.accessibility_settings && typeof data.accessibility_settings === "object" ? data.accessibility_settings : {};
 			setAccessibilityPrefs((current) => ({
@@ -1145,7 +1144,7 @@ function initialsFromLabel(label) {
 				colorBlind: loaded.colorBlind || current.colorBlind || "Normal"
 			}));
 			prefsLoadedRef.current = true;
-		} catch (error) {
+		} catch {
 			prefsLoadedRef.current = true;
 		}
 	}
@@ -1194,6 +1193,19 @@ function initialsFromLabel(label) {
 		let cancelled = false;
 
 		async function bootstrapFromBackend() {
+			// Demo mode: skip all API calls, use preloaded data
+			if (isDemoMode()) {
+				if (cancelled) return;
+				const demoChannels = DEMO_CHANNELS.map((c) => ({ ...c, mood: 60, tone: "neutral" }));
+				setChannels(demoChannels);
+				setMessagesByChannel(DEMO_MESSAGES_BY_CHANNEL);
+				setChannelUnread(DEMO_CHANNEL_UNREAD);
+				setActiveChannelId(demoChannels[0]?.id || "");
+				setBackendConnected(true);
+				prefsLoadedRef.current = true;
+				return;
+			}
+
 			try {
 				const payload = await apiRequest(`/channels?workspace_id=${encodeURIComponent(workspaceId)}`);
 				if (cancelled) {
@@ -1259,7 +1271,7 @@ function initialsFromLabel(label) {
 	}, [activeView, activeChannelId, backendConnected]);
 
 	useEffect(() => {
-		if (!backendConnected || !workspaceId || !activeChannelId) {
+		if (!backendConnected || !workspaceId || !activeChannelId || isDemoMode()) {
 			return;
 		}
 
@@ -1688,6 +1700,33 @@ function initialsFromLabel(label) {
 		const trimmedText = String(text || "").trim();
 		if (!trimmedText) {
 			pushAppNotice("Message cannot be empty.", "error");
+			return;
+		}
+
+		// Demo mode: add message locally and skip all network calls
+		if (isDemoMode()) {
+			const createdAt = new Date().toISOString();
+			setMessagesByChannel((current) => ({
+				...current,
+				[channelId]: [
+					...(current[channelId] || []),
+					{
+						id: `demo-sent-${Date.now()}`,
+						userId: currentUserId || "demo-user",
+						user: userName || "You",
+						avatarUrl: "",
+						initials: userInitials,
+						color: "#0f67b7",
+						createdAt,
+						time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+						text: trimmedText,
+						translatedText: null,
+						sentimentScore: null,
+						reactions: [],
+						translated: false,
+					},
+				],
+			}));
 			return;
 		}
 

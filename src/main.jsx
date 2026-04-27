@@ -1,8 +1,21 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app/App";
-import { applyAccessibilityPreferencesGlobal, loadAccessibilityPreferencesGlobal } from "./app/accessibility";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { setDemoMode } from "./lib/demoMode";
 import "./styles/global.css";
+
+// Activate demo mode when ?demo=1 is in the URL (no auth required)
+if (typeof window !== "undefined") {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("demo") === "1") {
+      setDemoMode(true);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,6 +26,8 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </React.StrictMode>
 );

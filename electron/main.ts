@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  desktopCapturer,
   ipcMain,
   nativeTheme,
   protocol,
@@ -187,6 +188,12 @@ app.on('ready', async () => {
 
   // Create the main window
   mainWindow = createMainWindow()
+
+  // Allow getDisplayMedia in the renderer — pick the primary screen automatically
+  mainWindow.webContents.session.setDisplayMediaRequestHandler(async (_request, callback) => {
+    const sources = await desktopCapturer.getSources({ types: ['screen'] })
+    callback({ video: sources[0] })
+  })
 
   // System tray
   setupTray(mainWindow)

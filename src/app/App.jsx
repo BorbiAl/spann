@@ -30,6 +30,7 @@ import {
 	requestOrganizationJoin,
 	setAuthState
 } from "../data/constants";
+import { isDemoMode, setDemoMode } from "../lib/demoMode";
 
 const ENTRY_STAGE_KEY = "spann-entry-stage";
 const APP_DOWNLOAD_URL = "https://github.com/BorbiAl/spann/releases";
@@ -138,7 +139,7 @@ function evaluatePasswordStrength(rawPassword) {
 }
 
 
-function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
+function LandingScreen({ onContinueWeb, onContinueWorkspace, onTryDemo, hasSession }) {
 	return (
 		<div className="entry-shell">
 			<section className="entry-surface glass">
@@ -156,6 +157,10 @@ function LandingScreen({ onContinueWeb, onContinueWorkspace, hasSession }) {
 					<button className="entry-cta primary" onClick={onContinueWeb}>
 						<Icon name="chat" size={18} />
 						<span>Open on Web</span>
+					</button>
+					<button className="entry-cta secondary" onClick={onTryDemo} type="button">
+						<Icon name="bolt" size={18} />
+						<span>Try Demo</span>
 					</button>
 					<a className="entry-cta secondary" href={APP_DOWNLOAD_URL} target="_blank" rel="noreferrer">
 						<Icon name="attach" size={18} />
@@ -837,10 +842,37 @@ function AppFlow() {
 	const hasSession = Boolean(authState?.accessToken);
 
 	async function handleLogout() {
+		setDemoMode(false);
 		await logoutSession();
 		setAuthState(null);
 		setEntryStage("landing");
 	}
+
+	function handleEnterDemo() {
+		setDemoMode(true);
+		// Provide a minimal auth state — never persisted, only in component state
+		setAuthState({
+			accessToken: "demo",
+			refreshToken: "demo",
+			workspaceId: "demo-workspace",
+			userId: "demo-user",
+			user: {
+				display_name: "Demo User",
+				email: "demo@spann.app",
+				role: "member",
+				locale: "en-US",
+			},
+			persist: false,
+		});
+		setEntryStage("workspace");
+	}
+
+	// Auto-enter demo mode if URL param was set before mount
+	useEffect(() => {
+		if (isDemoMode() && entryStage === "landing") {
+			handleEnterDemo();
+		}
+	}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	let content;
 	if (entryStage === "landing") {
@@ -848,6 +880,7 @@ function AppFlow() {
 			<LandingScreen
 				onContinueWeb={() => setEntryStage("auth")}
 				onContinueWorkspace={() => setEntryStage(hasSession ? "organization" : "auth")}
+				onTryDemo={handleEnterDemo}
 				hasSession={hasSession}
 			/>
 		);
@@ -1405,8 +1438,6 @@ function OrganizationOnboardingScreen({ authState, onWorkspaceReady, onLogout })
 								)}
 							</div>
 						</aside>
-					</div>
-				</div>
 			</section>
 		</div>
 	);

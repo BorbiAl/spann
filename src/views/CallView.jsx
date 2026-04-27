@@ -1,20 +1,35 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { apiRequestFormData, getAuthState } from "../data/constants";
 
+const STUN_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+function buildWsUrl(room) {
+	const base =
+		(typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+		"http://localhost:8000";
+	return base.replace(/^http/, "ws") + "/ws/" + encodeURIComponent(room);
+}
+
 export default function CallView({ activeChannel, participants = [], onEndCall }) {
+	// ── Core call state ───────────────────────────────────────────────────────
 	const [micActive, setMicActive] = useState(true);
 	const [videoActive, setVideoActive] = useState(false);
 	const [deafened, setDeafened] = useState(false);
 	const [callDuration, setCallDuration] = useState(0);
 	const [micLevel, setMicLevel] = useState(0);
 	const [statusNote, setStatusNote] = useState("");
-	const [showOptions, setShowOptions] = useState(false);
+	const [remoteConnected, setRemoteConnected] = useState(false);
+	const [remoteHasVideo, setRemoteHasVideo] = useState(false);
+	const [sharingScreen, setSharingScreen] = useState(false);
+
+	// ── Captions state ────────────────────────────────────────────────────────
 	const [captionsEnabled, setCaptionsEnabled] = useState(false);
 	const [captionStatus, setCaptionStatus] = useState("idle");
 	const [captionError, setCaptionError] = useState("");
 	const [interimCaption, setInterimCaption] = useState("");
 	const [captions, setCaptions] = useState([]);
 
+	// ── Caption / mic monitoring refs ─────────────────────────────────────────
 	const recognitionRef = useRef(null);
 	const mediaRecorderRef = useRef(null);
 	const mediaStreamRef = useRef(null);
@@ -27,230 +42,368 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 	const isTranscribingRef = useRef(false);
 	const captionsEnabledRef = useRef(false);
 
+	// ── WebRTC refs ───────────────────────────────────────────────────────────
+	const localVideoRef = useRef(null);
+	const remoteVideoRef = useRef(null);
+	const pcRef = useRef(null);
+	const wsRef = useRef(null);
+	const localStreamRef = useRef(null);
+	const screenTrackRef = useRef(null);
+	const videoBeforeShareRef = useRef(false);
+
 	const hasSpeechRecognition =
 		typeof window !== "undefined" &&
 		Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-	const hasMediaRecorder = typeof window !== "undefined" && typeof window.MediaRecorder !== "undefined";
+	const hasMediaRecorder =
+		typeof window !== "undefined" && typeof window.MediaRecorder !== "undefined";
 	const preferRecorderCaptions =
-		typeof navigator !== "undefined" && String(navigator.userAgent || "").toLowerCase().includes("electron");
+		typeof navigator !== "undefined" &&
+		String(navigator.userAgent || "").toLowerCase().includes("electron");
 	const captionLocale = useMemo(() => {
 		const raw = typeof navigator !== "undefined" ? navigator.language : "en-US";
 		try {
-			const normalized = Intl.getCanonicalLocales(raw);
-			return normalized?.[0] || "en-US";
+			return Intl.getCanonicalLocales(raw)?.[0] || "en-US";
 		} catch {
 			return "en-US";
 		}
 	}, []);
 
+	// ── Timers / sync effects ─────────────────────────────────────────────────
 	useEffect(() => {
-		const timer = setInterval(() => {
-			setCallDuration((prev) => prev + 1);
-		}, 1000);
-		return () => clearInterval(timer);
+		const t = setInterval(() => setCallDuration((s) => s + 1), 1000);
+		return () => clearInterval(t);
 	}, []);
 
-	useEffect(() => {
-		captionsEnabledRef.current = captionsEnabled;
-	}, [captionsEnabled]);
+	useEffect(() => { captionsEnabledRef.current = captionsEnabled; }, [captionsEnabled]);
 
+	useEffect(() => {
+		if (remoteVideoRef.current) remoteVideoRef.current.muted = deafened;
+	}, [deafened]);
+
+	// ── WebRTC ────────────────────────────────────────────────────────────────
+	useEffect(() => {
+		const room = String(activeChannel || "general")
+			.replace(/^#/, "")
+			.toLowerCase()
+			.replace(/[^a-z0-9_-]/g, "-");
+
+		let destroyed = false;
+		let pc = null;
+		let ws = null;
+
+		async function init() {
+			// Audio-only on start — camera is opt-in
+			let stream;
+			try {
+				stream = await navigator.mediaDevices.getUserMedia({
+					audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+					video: false,
+				});
+			} catch {
+				return;
+			}
+			if (destroyed) { stream.getTracks().forEach((t) => t.stop()); return; }
+
+			localStreamRef.current = stream;
+			if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+
+			pc = new RTCPeerConnection(STUN_CONFIG);
+			pcRef.current = pc;
+			stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+
+			pc.ontrack = (e) => {
+				if (destroyed) return;
+				if (remoteVideoRef.current && e.streams[0]) {
+					remoteVideoRef.current.srcObject = e.streams[0];
+				}
+				setRemoteConnected(true);
+				if (e.track.kind === "video") setRemoteHasVideo(true);
+			};
+
+			pc.onicecandidate = (e) => {
+				if (e.candidate && ws?.readyState === WebSocket.OPEN) {
+					ws.send(JSON.stringify({ type: "ice", candidate: e.candidate }));
+				}
+			};
+
+			pc.onconnectionstatechange = () => {
+				if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+					if (!destroyed) { setRemoteConnected(false); setRemoteHasVideo(false); }
+				}
+			};
+
+			pc.onnegotiationneeded = async () => {
+				try {
+					if (ws?.readyState !== WebSocket.OPEN) return;
+					const offer = await pc.createOffer();
+					await pc.setLocalDescription(offer);
+					ws.send(JSON.stringify({ type: "offer", offer }));
+					console.log("[webrtc] Renegotiation offer sent");
+				} catch (err) {
+					console.warn("[webrtc] Renegotiation failed:", err);
+				}
+			};
+
+			ws = new WebSocket(buildWsUrl(room));
+			wsRef.current = ws;
+
+			ws.onopen = () => { if (!destroyed) ws.send(JSON.stringify({ type: "join" })); };
+
+			ws.onmessage = async ({ data }) => {
+				if (destroyed) return;
+				let msg;
+				try { msg = JSON.parse(data); } catch { return; }
+
+				if (msg.type === "join") {
+					const offer = await pc.createOffer();
+					await pc.setLocalDescription(offer);
+					ws.send(JSON.stringify({ type: "offer", offer }));
+				} else if (msg.type === "offer") {
+					await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+					const answer = await pc.createAnswer();
+					await pc.setLocalDescription(answer);
+					ws.send(JSON.stringify({ type: "answer", answer }));
+				} else if (msg.type === "answer") {
+					await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
+				} else if (msg.type === "ice" && msg.candidate) {
+					try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch { /* stale */ }
+				}
+			};
+
+			ws.onclose = () => {
+				if (!destroyed) { setRemoteConnected(false); setRemoteHasVideo(false); }
+			};
+		}
+
+		init().catch(() => {});
+
+		return () => {
+			destroyed = true;
+			ws?.close();
+			pc?.close();
+			screenTrackRef.current?.stop();
+			screenTrackRef.current = null;
+			if (localStreamRef.current) {
+				localStreamRef.current.getTracks().forEach((t) => t.stop());
+				localStreamRef.current = null;
+			}
+			pcRef.current = null;
+			wsRef.current = null;
+		};
+	}, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+	// ── Caption / misc cleanup ────────────────────────────────────────────────
 	useEffect(() => {
 		return () => {
 			if (recognitionRef.current) {
 				recognitionRef.current.onresult = null;
 				recognitionRef.current.onerror = null;
 				recognitionRef.current.onend = null;
-				try {
-					recognitionRef.current.stop();
-				} catch {
-					// no-op
-				}
+				try { recognitionRef.current.stop(); } catch { /* already stopped */ }
 				recognitionRef.current = null;
 			}
-
 			if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-				try {
-					mediaRecorderRef.current.stop();
-				} catch {
-					// no-op
-				}
+				try { mediaRecorderRef.current.stop(); } catch { /* already stopped */ }
 			}
 			mediaRecorderRef.current = null;
-
 			if (mediaStreamRef.current) {
-				mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+				mediaStreamRef.current.getTracks().forEach((t) => t.stop());
 				mediaStreamRef.current = null;
 			}
-
-			if (micFrameRef.current) {
-				cancelAnimationFrame(micFrameRef.current);
-				micFrameRef.current = null;
-			}
-
-			if (micSourceRef.current) {
-				try {
-					micSourceRef.current.disconnect();
-				} catch {
-					// no-op
-				}
-				micSourceRef.current = null;
-			}
-
-			if (micAnalyserRef.current) {
-				try {
-					micAnalyserRef.current.disconnect();
-				} catch {
-					// no-op
-				}
-				micAnalyserRef.current = null;
-			}
-
+			if (micFrameRef.current) { cancelAnimationFrame(micFrameRef.current); micFrameRef.current = null; }
+			try { micSourceRef.current?.disconnect(); } catch { /* already disconnected */ }
+			micSourceRef.current = null;
+			try { micAnalyserRef.current?.disconnect(); } catch { /* already disconnected */ }
+			micAnalyserRef.current = null;
 			if (micMonitorStreamRef.current) {
-				micMonitorStreamRef.current.getTracks().forEach((track) => track.stop());
+				micMonitorStreamRef.current.getTracks().forEach((t) => t.stop());
 				micMonitorStreamRef.current = null;
 			}
-
-			if (micAudioContextRef.current) {
-				try {
-					micAudioContextRef.current.close();
-				} catch {
-					// no-op
-				}
-				micAudioContextRef.current = null;
-			}
+			try { micAudioContextRef.current?.close(); } catch { /* already closed */ }
+			micAudioContextRef.current = null;
 		};
 	}, []);
 
+	// ── Mic level monitoring ──────────────────────────────────────────────────
 	useEffect(() => {
-		if (!micActive) {
-			setMicLevel(0);
-			if (micMonitorStreamRef.current) {
-				micMonitorStreamRef.current.getTracks().forEach((track) => {
-					track.enabled = false;
-				});
-			}
-			return;
-		}
+		if (!micActive) { setMicLevel(0); return; }
 
 		async function startMicMonitoring() {
-			if (typeof window === "undefined" || typeof navigator === "undefined") {
-				return;
+			if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+			let stream = localStreamRef.current;
+			if (!stream) {
+				if (!micMonitorStreamRef.current) {
+					micMonitorStreamRef.current = await requestMicrophoneStream();
+				}
+				stream = micMonitorStreamRef.current;
 			}
-
-			if (!navigator.mediaDevices?.getUserMedia) {
-				return;
-			}
-
-			if (!micMonitorStreamRef.current) {
-				const stream = await requestMicrophoneStream();
-				micMonitorStreamRef.current = stream;
-			}
-
-			micMonitorStreamRef.current.getTracks().forEach((track) => {
-				track.enabled = true;
-			});
-
-			if (micAnalyserRef.current) {
-				return;
-			}
-
+			stream.getAudioTracks().forEach((t) => { t.enabled = true; });
+			if (micAnalyserRef.current) return;
 			const AudioContextImpl = window.AudioContext || window.webkitAudioContext;
-			if (!AudioContextImpl) {
-				return;
-			}
-
-			const audioContext = new AudioContextImpl();
-			const analyser = audioContext.createAnalyser();
+			if (!AudioContextImpl) return;
+			const ctx = new AudioContextImpl();
+			const analyser = ctx.createAnalyser();
 			analyser.fftSize = 1024;
 			analyser.smoothingTimeConstant = 0.8;
-
-			const source = audioContext.createMediaStreamSource(micMonitorStreamRef.current);
+			const source = ctx.createMediaStreamSource(stream);
 			source.connect(analyser);
-
-			micAudioContextRef.current = audioContext;
+			micAudioContextRef.current = ctx;
 			micAnalyserRef.current = analyser;
 			micSourceRef.current = source;
-
-			const sampleBuffer = new Uint8Array(analyser.fftSize);
-
+			const buf = new Uint8Array(analyser.fftSize);
 			const tick = () => {
-				if (!micAnalyserRef.current || !micActive) {
-					setMicLevel(0);
-					micFrameRef.current = null;
-					return;
-				}
-
-				micAnalyserRef.current.getByteTimeDomainData(sampleBuffer);
-				let sumSquares = 0;
-				for (let i = 0; i < sampleBuffer.length; i += 1) {
-					const normalized = (sampleBuffer[i] - 128) / 128;
-					sumSquares += normalized * normalized;
-				}
-				const rms = Math.sqrt(sumSquares / sampleBuffer.length);
-				const nextLevel = Math.max(0, Math.min(100, Math.round(rms * 180)));
-				setMicLevel(nextLevel);
+				if (!micAnalyserRef.current || !micActive) { setMicLevel(0); micFrameRef.current = null; return; }
+				micAnalyserRef.current.getByteTimeDomainData(buf);
+				let sum = 0;
+				for (let i = 0; i < buf.length; i++) { const n = (buf[i] - 128) / 128; sum += n * n; }
+				setMicLevel(Math.max(0, Math.min(100, Math.round(Math.sqrt(sum / buf.length) * 180))));
 				micFrameRef.current = requestAnimationFrame(tick);
 			};
-
 			micFrameRef.current = requestAnimationFrame(tick);
 		}
 
-		startMicMonitoring().catch(() => {
-			setMicLevel(0);
-		});
+		startMicMonitoring().catch(() => setMicLevel(0));
 	}, [micActive]);
 
-	const formatDuration = (seconds) => {
-		const m = Math.floor(seconds / 60).toString().padStart(2, "0");
-		const s = (seconds % 60).toString().padStart(2, "0");
-		return `${m}:${s}`;
-	};
+	// ── Helpers ───────────────────────────────────────────────────────────────
+	const formatDuration = (s) =>
+		`${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-	const normalizedParticipants = Array.isArray(participants)
-		? participants.map((member, index) => {
-			const label = String(member?.display_name || member?.email || `Member ${index + 1}`);
-			const initials = label
-				.split(/\s+/)
-				.filter(Boolean)
-				.slice(0, 2)
-				.map((word) => word[0])
-				.join("")
-				.toUpperCase() || "ME";
-			return {
-				id: String(member?.user_id || member?.id || `${label}-${index}`),
-				label,
-				avatarUrl: String(member?.avatar_url || "").trim(),
-				online: Boolean(member?.is_online),
-				isMe: Boolean(member?.is_me),
-				initials,
-			};
-		})
-		: [];
+	function showTemporaryNote(msg) {
+		setStatusNote(String(msg || ""));
+		setTimeout(() => setStatusNote(""), 2200);
+	}
 
-	const callTiles = normalizedParticipants.length
-		? normalizedParticipants
-		: [{ id: "you", label: "You", avatarUrl: "", online: true, isMe: true, initials: "YO" }];
+	// ── Controls ──────────────────────────────────────────────────────────────
+	function handleToggleMic() {
+		const next = !micActive;
+		setMicActive(next);
+		localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = next; });
+	}
 
-	const shownParticipants = normalizedParticipants.filter((member) => member.online).slice(0, 4);
-	const extraParticipants = Math.max(0, normalizedParticipants.filter((member) => member.online).length - shownParticipants.length);
+	async function handleToggleVideo() {
+		if (sharingScreen) return;
 
-	function appendCaption(text, speaker = "You") {
-		const clean = String(text || "").trim();
-		if (!clean) {
+		if (videoActive) {
+			localStreamRef.current?.getVideoTracks().forEach((t) => {
+				t.stop();
+				localStreamRef.current.removeTrack(t);
+			});
+			const sender = pcRef.current?.getSenders().find((s) => s.track?.kind === "video");
+			if (sender) await sender.replaceTrack(null);
+			if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+			setVideoActive(false);
+			console.log("[camera] Off");
+		} else {
+			try {
+				const cam = await navigator.mediaDevices.getUserMedia({ video: true });
+				const camTrack = cam.getVideoTracks()[0];
+				await _replaceVideoTrack(camTrack);
+				setVideoActive(true);
+				console.log("[camera] On:", camTrack.label);
+			} catch (err) {
+				console.warn("[camera] Denied or unavailable:", err);
+			}
+		}
+	}
+
+	async function _replaceVideoTrack(newTrack) {
+		const stream = localStreamRef.current;
+		if (stream) {
+			stream.getVideoTracks().forEach((t) => { t.stop(); stream.removeTrack(t); });
+			stream.addTrack(newTrack);
+		}
+		const pc = pcRef.current;
+		if (pc) {
+			const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+			if (sender) {
+				await sender.replaceTrack(newTrack);
+				console.log("[video] Track replaced:", newTrack.label);
+			} else {
+				pc.addTrack(newTrack, stream);
+				console.log("[video] Track added:", newTrack.label);
+			}
+		}
+		if (localVideoRef.current && stream) localVideoRef.current.srcObject = stream;
+	}
+
+	async function _restoreAfterScreenShare() {
+		screenTrackRef.current = null;
+		setSharingScreen(false);
+
+		if (!videoBeforeShareRef.current) {
+			localStreamRef.current?.getVideoTracks().forEach((t) => {
+				t.stop();
+				localStreamRef.current.removeTrack(t);
+			});
+			const sender = pcRef.current?.getSenders().find((s) => s.track?.kind === "video");
+			if (sender) await sender.replaceTrack(null);
+			if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+			setVideoActive(false);
+			console.log("[screen-share] Restored to audio-only");
 			return;
 		}
-		setCaptions((current) => {
-			const next = [
-				...current,
-				{
-					id: `cap-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-					speaker,
-					text: clean,
-					time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-				},
-			];
-			return next.slice(-32);
-		});
+
+		try {
+			const cam = await navigator.mediaDevices.getUserMedia({ video: true });
+			const camTrack = cam.getVideoTracks()[0];
+			await _replaceVideoTrack(camTrack);
+			setVideoActive(true);
+			console.log("[screen-share] Camera restored");
+		} catch (err) {
+			console.error("[screen-share] Camera restore failed:", err);
+			setVideoActive(false);
+		}
+	}
+
+	async function handleScreenShare() {
+		if (sharingScreen) {
+			const track = screenTrackRef.current;
+			if (track) { track.stop(); } else { await _restoreAfterScreenShare(); }
+			return;
+		}
+
+		let screenTrack;
+		try {
+			const s = await navigator.mediaDevices.getDisplayMedia({ video: true });
+			screenTrack = s.getVideoTracks()[0];
+		} catch (err) { console.error("[screen-share] getDisplayMedia failed:", err); return; }
+
+		videoBeforeShareRef.current = videoActive;
+		screenTrackRef.current = screenTrack;
+		screenTrack.onended = () => { console.log("[screen-share] Stopped via browser"); _restoreAfterScreenShare(); };
+
+		try {
+			await _replaceVideoTrack(screenTrack);
+			setSharingScreen(true);
+			setVideoActive(true);
+			console.log("[screen-share] Started:", screenTrack.label);
+		} catch (err) {
+			console.error("[screen-share] Failed:", err);
+			screenTrack.stop();
+			screenTrackRef.current = null;
+		}
+	}
+
+	function handleLeave() {
+		wsRef.current?.close();
+		pcRef.current?.close();
+		onEndCall?.();
+	}
+
+	// ── Caption helpers ───────────────────────────────────────────────────────
+	function appendCaption(text, speaker = "You") {
+		const clean = String(text || "").trim();
+		if (!clean) return;
+		setCaptions((cur) => [
+			...cur,
+			{
+				id: `cap-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+				speaker,
+				text: clean,
+				time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+			},
+		].slice(-32));
 	}
 
 	function clearCaptionResources() {
@@ -258,25 +411,15 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 			recognitionRef.current.onresult = null;
 			recognitionRef.current.onerror = null;
 			recognitionRef.current.onend = null;
-			try {
-				recognitionRef.current.stop();
-			} catch {
-				// no-op
-			}
+			try { recognitionRef.current.stop(); } catch { /* already stopped */ }
 			recognitionRef.current = null;
 		}
-
 		if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-			try {
-				mediaRecorderRef.current.stop();
-			} catch {
-				// no-op
-			}
+			try { mediaRecorderRef.current.stop(); } catch { /* already stopped */ }
 		}
 		mediaRecorderRef.current = null;
-
 		if (mediaStreamRef.current) {
-			mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+			mediaStreamRef.current.getTracks().forEach((t) => t.stop());
 			mediaStreamRef.current = null;
 		}
 	}
@@ -289,15 +432,11 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 	}
 
 	async function transcribeChunk(blob) {
-		if (!blob || blob.size < 256) {
-			return;
-		}
-
+		if (!blob || blob.size < 256) return;
 		const formData = new FormData();
-		const extension = String(blob.type || "").includes("ogg") ? "ogg" : "webm";
-		formData.append("audio", blob, `caption.${extension}`);
+		const ext = String(blob.type || "").includes("ogg") ? "ogg" : "webm";
+		formData.append("audio", blob, `caption.${ext}`);
 		formData.append("locale", captionLocale);
-
 		const hasToken = Boolean(getAuthState()?.accessToken);
 		const payload = await apiRequestFormData("/speech-to-text", {
 			method: "POST",
@@ -305,17 +444,12 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 			allowAuthFailOpen: true,
 			...(hasToken ? {} : { auth: false }),
 		});
-
 		const text = String(payload?.data?.text || payload?.text || "").trim();
-		if (text) {
-			appendCaption(text, "You");
-		}
+		if (text) appendCaption(text, "You");
 	}
 
 	async function processCaptionQueue() {
-		if (isTranscribingRef.current) {
-			return;
-		}
+		if (isTranscribingRef.current) return;
 		isTranscribingRef.current = true;
 		try {
 			while (captionQueueRef.current.length > 0 && captionsEnabledRef.current) {
@@ -323,12 +457,12 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 				try {
 					await transcribeChunk(blob);
 				} catch (error) {
-					const message = String(error?.message || "").toLowerCase();
-					if (message.includes("failed to fetch") || message.includes("network") || message.includes("aborted")) {
-						setCaptionError("Network error while uploading audio for captions. Check API/backend connectivity.");
-					} else {
-						setCaptionError("Live caption transcription is temporarily unavailable.");
-					}
+					const msg = String(error?.message || "").toLowerCase();
+					setCaptionError(
+						msg.includes("failed to fetch") || msg.includes("network")
+							? "Network error — check connection."
+							: "Transcription temporarily unavailable.",
+					);
 				}
 			}
 		} finally {
@@ -337,16 +471,8 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 	}
 
 	async function requestMicrophoneStream() {
-		if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-			throw new Error("getUserMedia unavailable");
-		}
-
 		return navigator.mediaDevices.getUserMedia({
-			audio: {
-				echoCancellation: true,
-				noiseSuppression: true,
-				autoGainControl: true,
-			},
+			audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
 		});
 	}
 
@@ -359,20 +485,14 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 		recognition.maxAlternatives = 1;
 
 		recognition.onresult = (event) => {
-			let nextInterim = "";
-			for (let i = event.resultIndex; i < event.results.length; i += 1) {
-				const result = event.results[i];
-				const transcript = String(result?.[0]?.transcript || "").trim();
-				if (!transcript) {
-					continue;
-				}
-				if (result.isFinal) {
-					appendCaption(transcript, "You");
-				} else {
-					nextInterim = transcript;
-				}
+			let interim = "";
+			for (let i = event.resultIndex; i < event.results.length; i++) {
+				const r = event.results[i];
+				const t = String(r?.[0]?.transcript || "").trim();
+				if (!t) continue;
+				if (r.isFinal) { appendCaption(t, "You"); } else { interim = t; }
 			}
-			setInterimCaption(nextInterim);
+			setInterimCaption(interim);
 		};
 
 		recognition.onerror = (event) => {
@@ -381,28 +501,17 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 				setCaptionError("");
 				setCaptionStatus("starting");
 				startRecorderFallbackCaptions()
-					.then(() => {
-						showTemporaryNote("Captions switched to backend transcription.");
-					})
-					.catch(() => {
-						setCaptionError("Caption service error.");
-						setCaptionStatus("error");
-					});
+					.then(() => showTemporaryNote("Captions switched to backend."))
+					.catch(() => { setCaptionError("Caption error."); setCaptionStatus("error"); });
 				return;
 			}
-
-			setCaptionError(code ? `Caption error: ${code}` : "Caption service error.");
+			setCaptionError(code ? `Caption error: ${code}` : "Caption error.");
 			setCaptionStatus("error");
 		};
 
 		recognition.onend = () => {
 			if (captionsEnabledRef.current) {
-				try {
-					recognition.start();
-					setCaptionStatus("listening");
-				} catch {
-					setCaptionStatus("error");
-				}
+				try { recognition.start(); setCaptionStatus("listening"); } catch { setCaptionStatus("error"); }
 			}
 		};
 
@@ -413,314 +522,270 @@ export default function CallView({ activeChannel, participants = [], onEndCall }
 
 	async function startRecorderFallbackCaptions() {
 		const stream = await requestMicrophoneStream();
-		const preferredMimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
-		const mimeType = preferredMimeTypes.find((candidate) => {
-			return typeof window.MediaRecorder?.isTypeSupported === "function" && window.MediaRecorder.isTypeSupported(candidate);
-		});
-
+		const mimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+		const mimeType = mimeTypes.find(
+			(t) => typeof window.MediaRecorder?.isTypeSupported === "function" && window.MediaRecorder.isTypeSupported(t),
+		);
 		const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 		mediaStreamRef.current = stream;
 		mediaRecorderRef.current = recorder;
-
-		recorder.ondataavailable = (event) => {
-			if (event.data && event.data.size > 0) {
-				captionQueueRef.current.push(event.data);
-				processCaptionQueue().catch(() => undefined);
-			}
+		recorder.ondataavailable = (e) => {
+			if (e.data?.size > 0) { captionQueueRef.current.push(e.data); processCaptionQueue().catch(() => {}); }
 		};
-
-		recorder.onerror = () => {
-			setCaptionError("Audio recording failed for captions.");
-			setCaptionStatus("error");
-		};
-
+		recorder.onerror = () => { setCaptionError("Audio recording failed."); setCaptionStatus("error"); };
 		recorder.start(2500);
 		setCaptionStatus("listening");
 	}
 
 	async function handleToggleCaptions() {
-		if (captionsEnabled) {
-			stopCaptionCapture();
-			showTemporaryNote("Live captions turned off.");
-			return;
-		}
-
+		if (captionsEnabled) { stopCaptionCapture(); return; }
 		setCaptionError("");
 		setInterimCaption("");
 		setCaptionsEnabled(true);
 		setCaptionStatus("starting");
-
 		try {
-			if (preferRecorderCaptions && hasMediaRecorder) {
-				await startRecorderFallbackCaptions();
-				showTemporaryNote("Live captions enabled (backend transcription).");
-				return;
-			}
-
-			if (hasSpeechRecognition) {
-				await startBrowserSpeechCaptions();
-				showTemporaryNote("Live captions enabled.");
-				return;
-			}
-
-			if (hasMediaRecorder) {
-				await startRecorderFallbackCaptions();
-				showTemporaryNote("Live captions enabled (backend transcription).");
-				return;
-			}
-
+			if (preferRecorderCaptions && hasMediaRecorder) { await startRecorderFallbackCaptions(); return; }
+			if (hasSpeechRecognition) { await startBrowserSpeechCaptions(); return; }
+			if (hasMediaRecorder) { await startRecorderFallbackCaptions(); return; }
 			setCaptionStatus("error");
-			setCaptionError("This runtime does not support live speech capture.");
+			setCaptionError("Live captions not supported in this browser.");
 			setCaptionsEnabled(false);
 		} catch {
 			setCaptionStatus("error");
-			setCaptionError("Could not start live captions. Check microphone permissions.");
+			setCaptionError("Could not start captions — check microphone permissions.");
 			setCaptionsEnabled(false);
 			clearCaptionResources();
 		}
 	}
 
-	function showTemporaryNote(message) {
-		setStatusNote(String(message || ""));
-		setTimeout(() => setStatusNote(""), 2200);
-	}
-
 	async function handleInviteParticipant() {
-		const channelLabel = String(activeChannel || "general").replace(/^#/, "");
-		const inviteLink = `${window.location.origin}${window.location.pathname}?channel=${encodeURIComponent(channelLabel)}`;
+		const ch = String(activeChannel || "general").replace(/^#/, "");
+		const link = `${window.location.origin}${window.location.pathname}?channel=${encodeURIComponent(ch)}`;
 		try {
 			if (navigator?.clipboard?.writeText) {
-				await navigator.clipboard.writeText(inviteLink);
-				showTemporaryNote("Invite link copied to clipboard.");
+				await navigator.clipboard.writeText(link);
+				showTemporaryNote("Invite link copied");
 				return;
 			}
-		} catch {
-			// Fall back to prompt when clipboard access is blocked.
-		}
-
-		window.prompt("Copy this invite link", inviteLink);
-		showTemporaryNote("Invite link ready.");
+		} catch { /* clipboard API blocked — fall through to prompt */ }
+		window.prompt("Copy invite link", link);
 	}
 
-	function handleMoreOptions() {
-		setShowOptions((current) => !current);
-	}
-
+	// ── Render ────────────────────────────────────────────────────────────────
 	return (
-		<div className="h-full overflow-y-auto bg-surface p-6 w-full view-transition flex items-center justify-center">
-			<div className="flex flex-col relative overflow-hidden bg-background/90 backdrop-blur-[12px] border border-outline-variant/20 shadow-sm w-full max-w-4xl min-h-[620px] font-body text-on-surface rounded-3xl">
-				<div className="discord-call-atmosphere" aria-hidden="true" />
-				{statusNote ? (
-					<div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 rounded-full bg-inverse-surface/90 px-3 py-1 text-xs text-inverse-on-surface">
+		<div className="relative h-full w-full overflow-hidden select-none" style={{ background: "#0f0f11" }}>
+
+			{/* ── STATUS TOAST ──────────────────────────────────────────── */}
+			{statusNote ? (
+				<div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+					<div className="bg-black/70 backdrop-blur-sm text-white/90 text-xs font-medium px-4 py-1.5 rounded-full shadow-lg">
 						{statusNote}
 					</div>
-				) : null}
-				{showOptions ? (
-					<div className="absolute top-16 right-8 z-30 min-w-[220px] rounded-xl border border-outline-variant/20 bg-surface/95 p-2 shadow-xl">
-						<button type="button" onClick={() => { setMicActive((current) => !current); setShowOptions(false); }} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-container-high">
-							{micActive ? "Mute microphone" : "Unmute microphone"}
-						</button>
-						<button type="button" onClick={() => { setVideoActive((current) => !current); setShowOptions(false); }} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-container-high">
-							{videoActive ? "Turn camera off" : "Turn camera on"}
-						</button>
-						<button type="button" onClick={() => { setDeafened((current) => !current); setShowOptions(false); }} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-container-high">
-							{deafened ? "Undeafen" : "Deafen"}
-						</button>
-						<button type="button" onClick={() => { setShowOptions(false); onEndCall?.(); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-error hover:bg-error-container">
-							Leave call
-						</button>
-					</div>
-				) : null}
-				
-				{/* Call Header */}
-				<header className="min-h-[88px] flex items-center justify-between px-7 py-3 border-b border-outline-variant/20 bg-surface/70 gap-4">
-					<div className="flex items-center gap-3.5">
-						<div className="discord-call-badge-wrap">
-							<span className="discord-call-ring ring-a" aria-hidden="true" />
-							<span className="discord-call-ring ring-b" aria-hidden="true" />
-							<div className="discord-call-badge flex h-12 w-12 items-center justify-center bg-primary/10 text-primary rounded-2xl">
-								<span className="material-symbols-outlined text-[24px]">Record_Voice_Over</span>
-							</div>
-						</div>
-						<div>
-							<h2 className="font-bold text-on-surface text-[20px] tracking-tight">
-								{String(activeChannel || "General").replace(/^#/, "")} Voice Room
-							</h2>
-							<div className="flex items-center gap-2 mt-0.5">
-								<span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-								<span className="text-[13px] font-medium text-on-surface-variant">
-									{formatDuration(callDuration)} • Connected
-								</span>
-							</div>
-						</div>
-					</div>
-					<div className="flex items-center gap-3">
-						<div className="flex -space-x-2.5 mr-2">
-							{shownParticipants.map((member, index) => {
-								const label = String(member?.label || "Member");
-								const initials = String(member?.initials || "ME");
-								const zClass = index === 0 ? "z-30" : index === 1 ? "z-20" : "z-10";
-								if (member?.avatarUrl) {
-									return (
-										<img
-											key={String(member?.user_id || label)}
-											className={`w-10 h-10 rounded-full border-2 border-surface object-cover ${zClass}`}
-											src={member.avatarUrl}
-											alt={`${label} avatar`}
-										/>
-									);
-								}
-								return (
-									<div key={String(member?.id || label)} className={`w-10 h-10 rounded-full border-2 border-surface bg-surface-container-high flex items-center justify-center text-primary font-bold ${zClass}`}>
-										{initials}
-									</div>
-								);
-							})}
-							{extraParticipants > 0 ? (
-								<div className="w-10 h-10 rounded-full border-2 border-surface bg-surface-container-high flex items-center justify-center text-on-surface-variant font-bold text-xs">+{extraParticipants}</div>
-							) : null}
-						</div>
-						<button onClick={handleInviteParticipant} className="p-2 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-colors" type="button" aria-label="Invite participant">
-							<span className="material-symbols-outlined text-[20px]">person_add</span>
-						</button>
-						<button onClick={handleMoreOptions} className="p-2 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-colors" type="button" aria-label="Call options">
-							<span className="material-symbols-outlined text-[20px]">more_vert</span>
-						</button>
-					</div>
-				</header>
-
-				{/* Main Call Area */}
-				<div className="flex-1 flex flex-col p-6 bg-surface-container-low relative">
-					<div className="mb-4 flex items-center justify-between">
-						<h3 className="text-sm font-semibold text-on-surface-variant uppercase tracking-wide">Participants</h3>
-						<p className="text-xs text-on-surface-variant">{callTiles.length} participant{callTiles.length === 1 ? "" : "s"}</p>
-					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 content-start">
-						{callTiles.map((member) => (
-							<div key={member.id} className="rounded-2xl border border-outline-variant/20 bg-surface p-4 flex items-center gap-4 relative overflow-hidden min-h-[92px]">
-								<div className="relative">
-									{member.avatarUrl ? (
-										<img src={member.avatarUrl} alt={`${member.label} avatar`} className="w-14 h-14 rounded-xl object-cover" />
-									) : (
-										<div className="w-14 h-14 rounded-xl bg-surface-container-high flex items-center justify-center text-sm font-bold text-primary">
-											{member.initials}
-										</div>
-									)}
-									<span className={`absolute -right-1 -bottom-1 w-4 h-4 rounded-full border-2 border-surface ${member.online ? "bg-green-500" : "bg-surface-container-highest"}`} />
-								</div>
-								<div className="min-w-0 flex-1">
-									<p className="text-sm font-semibold text-on-surface truncate">{member.isMe ? "You" : member.label}</p>
-									<p className="text-xs text-on-surface-variant">{member.online ? "Connected" : "Offline"}</p>
-								</div>
-								{member.online ? (
-									<div className="discord-voice-bars" aria-hidden="true">
-										<span />
-										<span />
-										<span />
-									</div>
-								) : null}
-								{member.isMe ? (
-									<div className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary">
-										{micActive ? "Mic on" : "Muted"}
-									</div>
-								) : null}
-							</div>
-						))}
-					</div>
-					<section className="mt-5 rounded-2xl border border-outline-variant/25 bg-surface px-4 py-3">
-						<div className="flex items-center justify-between gap-3 mb-2">
-							<div className="flex items-center gap-2">
-								<span className="material-symbols-outlined text-[18px] text-primary">closed_caption</span>
-								<p className="text-sm font-semibold text-on-surface">Live Captions</p>
-							</div>
-							<span className={`text-[11px] font-semibold uppercase tracking-wide ${captionStatus === "listening" ? "text-primary" : "text-on-surface-variant"}`}>
-								{captionStatus === "listening" ? "Listening" : captionStatus === "starting" ? "Starting" : captionStatus === "error" ? "Error" : "Idle"}
-							</span>
-						</div>
-						<div className="max-h-36 overflow-y-auto pr-1 space-y-1.5">
-							{captions.length === 0 ? (
-								<p className="text-xs text-on-surface-variant">Turn on captions to transcribe speech during this call.</p>
-							) : (
-								captions.map((line) => (
-									<div key={line.id} className="text-xs text-on-surface leading-relaxed">
-										<span className="font-semibold text-primary">{line.speaker}</span>
-										<span className="text-on-surface-variant"> [{line.time}]</span>
-										<span>{` ${line.text}`}</span>
-									</div>
-								))
-							)}
-							{interimCaption ? <p className="text-xs italic text-on-surface-variant">You: {interimCaption}</p> : null}
-						</div>
-						{captionError ? <p className="mt-2 text-[11px] text-error">{captionError}</p> : null}
-					</section>
 				</div>
+			) : null}
 
-				{/* Call Controls Footer */}
-				<footer className="h-[94px] flex items-center justify-center gap-5 px-8 border-t border-outline-variant/20 bg-surface/80">
-					<button
-						onClick={() => setMicActive(!micActive)}
-						className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-							micActive 
-								? "bg-surface-container-high text-on-surface hover:bg-surface-container-highest" 
-								: "bg-error-container text-error hover:brightness-95"
-						}`}
-						title={micActive ? "Mute Microphone" : "Unmute Microphone"}
-					>
-						<span className="material-symbols-outlined text-[24px]">
-							{micActive ? "mic" : "mic_off"}
-						</span>
-					</button>
+			{/* ── TOP BAR ───────────────────────────────────────────────── */}
+			<div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 pt-4 pb-2">
+				<div className="flex items-center gap-2">
+					<span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${remoteConnected ? "bg-emerald-400" : "bg-amber-400"}`} />
+					<span className="text-white/60 text-[13px] font-medium tracking-tight">
+						{String(activeChannel || "General").replace(/^#/, "")}
+					</span>
+					<span className="text-white/25 text-[13px] tabular-nums">{formatDuration(callDuration)}</span>
+				</div>
+				<button
+					type="button"
+					onClick={handleInviteParticipant}
+					aria-label="Copy invite link"
+					className="w-8 h-8 rounded-full flex items-center justify-center bg-white/8 text-white/50 hover:bg-white/14 hover:text-white/80 transition-all focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:outline-none"
+				>
+					<span className="material-symbols-outlined text-[16px]">person_add</span>
+				</button>
+			</div>
 
-					<button
-						onClick={() => setVideoActive(!videoActive)}
-						className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-							videoActive 
-								? "bg-primary/10 text-primary hover:bg-primary/20" 
-								: "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-						}`}
-						title={videoActive ? "Turn Off Camera" : "Turn On Camera"}
-					>
-						<span className="material-symbols-outlined text-[24px]">
-							{videoActive ? "videocam" : "videocam_off"}
-						</span>
-					</button>
+			{/* ── REMOTE — full canvas ───────────────────────────────────── */}
+			<div className="absolute inset-0">
+				{/* Remote video stream */}
+				<video
+					ref={remoteVideoRef}
+					autoPlay
+					playsInline
+					className={`w-full h-full object-cover transition-opacity duration-300 ${remoteConnected && remoteHasVideo ? "opacity-100" : "opacity-0"}`}
+				/>
 
-					<button
-						onClick={() => setDeafened(!deafened)}
-						className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-							deafened 
-								? "bg-tertiary-fixed text-on-tertiary-fixed-variant hover:brightness-95" 
-								: "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-						}`}
-						title={deafened ? "Undeafen" : "Deafen"}
-					>
-						<span className="material-symbols-outlined text-[24px]">
-							{deafened ? "hearing_disabled" : "hearing"}
-						</span>
-					</button>
+				{/* Avatar: waiting or audio-only */}
+				<div className={`absolute inset-0 flex flex-col items-center justify-center gap-5 transition-opacity duration-300 ${remoteConnected && remoteHasVideo ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+					<div className="relative flex items-center justify-center">
+						{remoteConnected ? (
+							<span className="absolute w-28 h-28 rounded-full bg-white/4 animate-ping" />
+						) : null}
+						<div className="w-20 h-20 rounded-full bg-white/8 flex items-center justify-center ring-1 ring-white/10">
+							<span className="material-symbols-outlined text-white/30 text-[36px]">person</span>
+						</div>
+					</div>
+					<div className="text-center space-y-1">
+						<p className="text-white/40 text-sm font-medium">
+							{remoteConnected ? "Connected — audio only" : "Waiting for others…"}
+						</p>
+						{!remoteConnected ? (
+							<p className="text-white/20 text-xs">Open the same channel in another tab</p>
+						) : null}
+					</div>
+				</div>
+			</div>
 
-					<button
-						onClick={handleToggleCaptions}
-						className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-							captionsEnabled
-								? "bg-primary/10 text-primary hover:bg-primary/20"
-								: "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"
-						}`}
-						title={captionsEnabled ? "Turn Off Captions" : "Turn On Captions"}
-					>
-						<span className="material-symbols-outlined text-[24px]">closed_caption</span>
-					</button>
+			{/* ── SCREEN SHARE BADGE ────────────────────────────────────── */}
+			{sharingScreen ? (
+				<div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+					<div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white/70 text-xs font-medium px-3 py-1.5 rounded-full">
+						<span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+						Sharing your screen
+					</div>
+				</div>
+			) : null}
 
-					<div className="w-px h-8 bg-outline-variant/60 mx-2"></div>
+			{/* ── LOCAL PIP — bottom-right corner ───────────────────────── */}
+			<div className="absolute bottom-24 right-4 z-30 w-36 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+				<div className="aspect-video relative bg-[#1a1a1e] flex items-center justify-center">
+					<video
+						ref={localVideoRef}
+						muted
+						autoPlay
+						playsInline
+						style={videoActive && !sharingScreen ? { transform: "scaleX(-1)" } : undefined}
+						className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${videoActive ? "opacity-100" : "opacity-0"}`}
+					/>
 
-					<button
-						onClick={onEndCall}
-						className="px-8 h-14 rounded-full flex items-center justify-center gap-2 bg-error text-on-error font-bold hover:brightness-95 hover:shadow-lg transition-all font-body tracking-wide"
-					>
-						<span className="material-symbols-outlined text-[22px]">call_end</span>
-						Leave Call
-					</button>
-				</footer>
+					{!videoActive ? (
+						<div className="relative z-10 flex items-center justify-center">
+							{micActive && micLevel > 10 ? (
+								<span className="absolute w-12 h-12 rounded-full bg-white/6 animate-ping" />
+							) : null}
+							<div className="w-10 h-10 rounded-full bg-white/8 flex items-center justify-center relative z-10">
+								<span className="text-white/40 text-xs font-semibold">ME</span>
+							</div>
+						</div>
+					) : null}
+
+					{/* Mic status badge */}
+					{!micActive ? (
+						<div className="absolute top-1.5 right-1.5 z-20 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
+							<span className="material-symbols-outlined text-white leading-none" style={{ fontSize: 9 }}>mic_off</span>
+						</div>
+					) : micLevel > 10 && videoActive ? (
+						<div className="absolute top-1.5 right-1.5 z-20 w-4 h-4 rounded-full bg-emerald-500/80 flex items-center justify-center">
+							<span className="material-symbols-outlined text-white leading-none" style={{ fontSize: 9 }}>graphic_eq</span>
+						</div>
+					) : null}
+				</div>
+			</div>
+
+			{/* ── CAPTIONS OVERLAY — bottom-center above control bar ─────── */}
+			{captionsEnabled ? (
+				<div className="absolute bottom-24 left-4 right-44 z-20 pointer-events-none">
+					<div className="bg-black/75 backdrop-blur-sm rounded-2xl px-4 py-2.5 text-center space-y-0.5">
+						{captions.slice(-2).map((line) => (
+							<p key={line.id} className="text-white text-[13px] leading-snug font-medium">
+								{line.text}
+							</p>
+						))}
+						{interimCaption ? (
+							<p className="text-white/40 text-[13px] italic">{interimCaption}</p>
+						) : captions.length === 0 ? (
+							<p className="text-white/30 text-xs py-0.5">
+								{captionStatus === "listening" ? "Listening…" : captionStatus === "starting" ? "Starting…" : ""}
+							</p>
+						) : null}
+					</div>
+					{captionError ? (
+						<p className="text-red-400 text-xs text-center mt-1.5">{captionError}</p>
+					) : null}
+				</div>
+			) : null}
+
+			{/* ── CONTROL BAR — floating pill ───────────────────────────── */}
+			<div
+				className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-full shadow-2xl ring-1 ring-white/8"
+				style={{ background: "rgba(22,22,26,0.92)", backdropFilter: "blur(24px)" }}
+				role="toolbar"
+				aria-label="Call controls"
+			>
+				{/* Mute */}
+				<button
+					type="button"
+					onClick={handleToggleMic}
+					aria-label={micActive ? "Mute microphone" : "Unmute microphone"}
+					aria-pressed={!micActive}
+					className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-150 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none active:scale-[0.92] ${
+						micActive
+							? "bg-white/10 text-white/80 hover:bg-white/16 hover:scale-105"
+							: "bg-red-500/85 text-white hover:bg-red-500 hover:scale-105"
+					}`}
+				>
+					<span className="material-symbols-outlined text-[19px]">{micActive ? "mic" : "mic_off"}</span>
+				</button>
+
+				{/* Camera */}
+				<button
+					type="button"
+					onClick={handleToggleVideo}
+					disabled={sharingScreen}
+					aria-label={videoActive ? "Turn camera off" : "Turn camera on"}
+					aria-pressed={videoActive}
+					className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-150 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none active:scale-[0.92] ${
+						sharingScreen
+							? "bg-white/5 text-white/20 cursor-not-allowed"
+							: videoActive
+								? "bg-white/18 text-white hover:bg-white/24 hover:scale-105"
+								: "bg-white/10 text-white/60 hover:bg-white/16 hover:text-white/90 hover:scale-105"
+					}`}
+				>
+					<span className="material-symbols-outlined text-[19px]">{videoActive ? "videocam" : "videocam_off"}</span>
+				</button>
+
+				{/* Screen share */}
+				<button
+					type="button"
+					onClick={handleScreenShare}
+					aria-label={sharingScreen ? "Stop sharing screen" : "Share screen"}
+					aria-pressed={sharingScreen}
+					className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-150 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none active:scale-[0.92] ${
+						sharingScreen
+							? "bg-white/18 text-white hover:bg-white/24 hover:scale-105"
+							: "bg-white/10 text-white/60 hover:bg-white/16 hover:text-white/90 hover:scale-105"
+					}`}
+				>
+					<span className="material-symbols-outlined text-[19px]">
+						{sharingScreen ? "stop_screen_share" : "screen_share"}
+					</span>
+				</button>
+
+				{/* Captions */}
+				<button
+					type="button"
+					onClick={handleToggleCaptions}
+					aria-label={captionsEnabled ? "Turn captions off" : "Turn captions on"}
+					aria-pressed={captionsEnabled}
+					className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-150 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none active:scale-[0.92] ${
+						captionsEnabled
+							? "bg-white/18 text-white hover:bg-white/24 hover:scale-105"
+							: "bg-white/10 text-white/60 hover:bg-white/16 hover:text-white/90 hover:scale-105"
+					}`}
+				>
+					<span className="material-symbols-outlined text-[19px]">closed_caption</span>
+				</button>
+
+				<div className="w-px h-5 bg-white/10 mx-0.5" aria-hidden />
+
+				{/* Leave */}
+				<button
+					type="button"
+					onClick={handleLeave}
+					aria-label="Leave call"
+					className="w-11 h-11 rounded-full flex items-center justify-center bg-red-500/90 text-white hover:bg-red-500 hover:scale-105 active:scale-[0.92] transition-all duration-150 focus-visible:ring-2 focus-visible:ring-red-400/60 focus-visible:outline-none"
+				>
+					<span className="material-symbols-outlined text-[19px]">call_end</span>
+				</button>
 			</div>
 		</div>
 	);
